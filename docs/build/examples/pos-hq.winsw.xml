@@ -1,0 +1,20 @@
+<!--
+  WinSW config for the HQ Next.js console.
+  Pair with pos-api.winsw.xml. HQ expects the API on PORT 3001 by default
+  (the till and HQ both call /api on the Nest process, not on Next).
+-->
+<service>
+  <id>pos-hq</id>
+  <name>POS HQ</name>
+  <description>Next.js HQ console (port 3000).</description>
+  <executable>C:\Program Files\nodejs\node.exe</executable>
+  <arguments>node_modules\next\dist\bin\next start --port 3000</arguments>
+  <workingdirectory>C:\POS\web</workingdirectory>
+  <stoptimeout>15 sec</stoptimeout>
+  <onfailure action="restart" delay="5 sec"/>
+  <log mode="roll">
+    <logpath>C:\POS\web\logs</logpath>
+  </log>
+  <env name="NODE_ENV" value="production"/>
+  <env name="PORT" value="3000"/>
+</service>

@@ -25,6 +25,8 @@ dist/
 **/dist/
 build/
 **/build/
+!docs/build/
+!docs/build/**
 out/
 **/out/
 .next/

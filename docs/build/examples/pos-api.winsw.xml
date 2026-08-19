@@ -1,0 +1,21 @@
+<!--
+  WinSW config for the Nest API.
+  1. Download WinSW-x64.exe from https://github.com/winsw/winsw/releases
+  2. Place it in C:\POS\backend as pos-api.exe next to this file renamed pos-api.xml
+  3. Administrator: pos-api.exe install && pos-api.exe start
+-->
+<service>
+  <id>pos-api</id>
+  <name>POS API</name>
+  <description>NestJS API for the till, HQ, and price check (port 3001).</description>
+  <executable>C:\Program Files\nodejs\node.exe</executable>
+  <arguments>dist\main.js</arguments>
+  <workingdirectory>C:\POS\backend</workingdirectory>
+  <stoptimeout>15 sec</stoptimeout>
+  <onfailure action="restart" delay="5 sec"/>
+  <log mode="roll">
+    <logpath>C:\POS\backend\logs</logpath>
+  </log>
+  <env name="PORT" value="3001"/>
+  <env name="NODE_ENV" value="production"/>
+</service>

@@ -1,7 +1,37 @@
-# Dependencies
+# Dependencies and caches (never push)
 node_modules/
+**/node_modules/
+.pnpm-store/
+.npm/
+.yarn/
+.pnp.*
+
+# Next.js / builds
 .next/
 out/
+dist/
+build/
+.turbo/
+.cache/
+.vercel/
+*.tsbuildinfo
+
+# Secrets
 .env
-.env.local
+.env.*
+!.env.example
+!.env.*.example
+
+# Logs and coverage
 *.log
+coverage/
+.nyc_output/
+test-results/
+playwright-report/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json

@@ -4,9 +4,10 @@ import { findTill, tillLabel } from "./tills";
 import { loadPrinterConfig, sendToPrinter } from "./printers";
 import type { ShiftRecord, StaffUser } from "./staff";
 import { DEMO_STAFF, isSellOnly, publicUser } from "./staff";
+import { apiUrl } from "./api-base";
 
 async function post<T>(path: string, body: unknown): Promise<T> {
-  const response = await fetch(path, {
+  const response = await fetch(apiUrl(path), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -47,7 +48,7 @@ export async function loginWithPassword(username: string, password: string) {
 
 export async function listStaff() {
   try {
-    const response = await fetch("/api/staff");
+    const response = await fetch(apiUrl("/api/staff"));
     if (!response.ok) throw new Error("fail");
     return (await response.json()) as StaffUser[];
   } catch {

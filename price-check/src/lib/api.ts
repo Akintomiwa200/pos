@@ -2,8 +2,8 @@ const KEY = "price-check-api";
 
 export function getApiBase() {
   const saved = localStorage.getItem(KEY)?.trim();
-  if (!saved) return "";
-  return saved.replace(/\/$/, "");
+  if (saved) return saved.replace(/\/$/, "");
+  return (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
 }
 
 export function setApiBase(value: string) {

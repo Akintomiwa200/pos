@@ -10,6 +10,9 @@ pnpm dev
 API prefix: `/api`  
 Port: `3001`
 
+Packaging this service as a Windows Service, plus till EXE/APK: see
+[docs/build](../docs/build/README.md).
+
 | Path | Purpose |
 | --- | --- |
 | `/api/health` | Liveness |

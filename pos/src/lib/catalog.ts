@@ -6,6 +6,7 @@ import {
   type StockMode,
 } from "./store-settings";
 import type { CatalogItem } from "./types";
+import { apiUrl } from "./api-base";
 
 type CatalogPayload =
   | { type: "snapshot"; items: CatalogItem[] }
@@ -48,7 +49,7 @@ export function useCatalog() {
 
     if (mode === "both") setItems(ITEMS);
 
-    fetch("/api/catalog/items")
+    fetch(apiUrl("/api/catalog/items"))
       .then((response) => response.json())
       .then((data: CatalogItem[]) => {
         if (!cancelled && Array.isArray(data) && data.length) setItems(data);
@@ -58,7 +59,7 @@ export function useCatalog() {
         if (!cancelled && mode === "online") setItems([]);
       });
 
-    source = new EventSource("/api/catalog/stream");
+    source = new EventSource(apiUrl("/api/catalog/stream"));
     source.onopen = () => setLive(true);
     source.onerror = () => setLive(false);
     source.onmessage = (event) => {
@@ -97,7 +98,7 @@ export function useCatalog() {
         ),
       );
       if (readStockMode() === "offline") return;
-      const response = await fetch(`/api/catalog/items/${id}`, {
+      const response = await fetch(apiUrl(`/api/catalog/items/${id}`), {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(patch),
@@ -121,7 +122,7 @@ export function useCatalog() {
         if (!item) return current;
         const onHand = Math.max(0, item.onHand + delta);
         if (readStockMode() !== "offline") {
-          void fetch(`/api/catalog/items/${id}`, {
+          void fetch(apiUrl(`/api/catalog/items/${id}`), {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ onHand }),
@@ -158,7 +159,7 @@ export function findCatalogItem(items: CatalogItem[], query: string) {
 export async function lookupCatalog(query: string) {
   if (readStockMode() === "offline") return null;
   const response = await fetch(
-    `/api/catalog/lookup?q=${encodeURIComponent(query.trim())}`,
+    apiUrl(`/api/catalog/lookup?q=${encodeURIComponent(query.trim())}`),
   );
   if (!response.ok) return null;
   const body = (await response.json()) as { item?: CatalogItem | null };

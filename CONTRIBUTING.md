@@ -34,6 +34,8 @@ cd pos && pnpm install && pnpm dev
 Copy `.env.example` to `backend/.env` when you need local overrides. Do not
 commit secrets.
 
+Packaged till and price-check builds: [docs/build](docs/build/README.md).
+
 ## Branch and commit style
 
 - Branch from the default branch: `feat/short-name`, `fix/short-name`, or `docs/short-name`

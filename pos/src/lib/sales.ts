@@ -1,4 +1,5 @@
 import { formatReceiptText, type SaleReceipt } from "./receipt";
+import { apiUrl } from "./api-base";
 
 const KEY = "pos.sales.v1";
 
@@ -24,7 +25,7 @@ function saveLocalSale(sale: SaleReceipt) {
 export async function archiveSale(sale: SaleReceipt) {
   saveLocalSale(sale);
   try {
-    await fetch("/api/sales", {
+    await fetch(apiUrl("/api/sales"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

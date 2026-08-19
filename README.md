@@ -42,6 +42,7 @@ committed.
 
 ## Documentation
 
+- [Build EXE, APK, and Windows services](docs/build/README.md)
 - [Contributing](CONTRIBUTING.md)
 - [Code of conduct](CODE_OF_CONDUCT.md)
 - [Security](SECURITY.md)

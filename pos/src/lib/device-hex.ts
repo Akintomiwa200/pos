@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
+import { apiUrl } from "./api-base";
 
 export async function readHardwareHex(): Promise<string> {
   try {
-    const response = await fetch("/api/hardware/device");
+    const response = await fetch(apiUrl("/api/hardware/device"));
     if (!response.ok) return "";
     const body = (await response.json()) as { hex?: string };
     return (body.hex ?? "").toUpperCase();

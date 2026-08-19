@@ -1,5 +1,6 @@
 import { SETTINGS_EVENT, loadStoreSettings, saveStoreSettings } from "./store-settings";
 import { addOneYear, isSubscriptionExpired } from "./till-code";
+import { apiUrl } from "./api-base";
 
 const KEY = "pos.tills.v1";
 const BRANCH_KEY = "pos.branches.v1";
@@ -243,7 +244,7 @@ export function expireDeviceSubscription(message?: string) {
 }
 
 export async function activateDeviceTill(code: string, hardwareHex: string) {
-  const response = await fetch("/api/console/tills/activate", {
+  const response = await fetch(apiUrl("/api/console/tills/activate"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ code, hardwareHex }),
@@ -282,7 +283,7 @@ export async function heartbeatDeviceTill(hardwareHex: string) {
   const till = loadDeviceTill();
   if (!till.paired || !till.code || tillNeedsActivation(till)) return { taken: false as const, expired: false as const };
   try {
-    const response = await fetch("/api/console/tills/heartbeat", {
+    const response = await fetch(apiUrl("/api/console/tills/heartbeat"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

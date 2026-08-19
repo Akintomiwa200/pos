@@ -1,5 +1,6 @@
+import { apiUrl } from "./api-base";
+
 const KEY = "pos.printer-config.v1";
-const API = "/api";
 
 export type PrinterRole = "unused" | "receipt" | "kitchen" | "label";
 
@@ -38,13 +39,13 @@ export function savePrinterConfig(config: PrinterConfig) {
 }
 
 export async function detectPrinters(): Promise<DetectedPrinter[]> {
-  const res = await fetch(`${API}/hardware/printers`);
+  const res = await fetch(apiUrl("/api/hardware/printers"));
   if (!res.ok) throw new Error("Could not read installed printers.");
   return res.json();
 }
 
 export async function sendToPrinter(printerName: string, content: string) {
-  const res = await fetch(`${API}/hardware/print`, {
+  const res = await fetch(apiUrl("/api/hardware/print"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ printerName, content }),

@@ -1,0 +1,9 @@
+[package]
+name = "price-check-desktop"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "price-check-desktop"
+path = "src/main.rs"

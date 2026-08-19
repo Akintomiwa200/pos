@@ -1,0 +1,42 @@
+# Normalize line endings
+* text=auto eol=lf
+
+*.{cmd,bat,ps1} text eol=crlf
+
+# Source
+*.js text
+*.cjs text
+*.mjs text
+*.ts text
+*.tsx text
+*.jsx text
+*.json text
+*.md text
+*.yml text
+*.yaml text
+*.css text
+*.html text
+*.svg text
+*.toml text
+*.rs text
+
+# Binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+*.pdf binary
+*.zip binary
+
+# GitHub Linguist
+pos/src-tauri/** linguist-vendored=false
+price-check/src-tauri/** linguist-vendored=false
+docs/** linguist-documentation
+*.lock linguist-generated
+pnpm-lock.yaml linguist-generated

@@ -1,37 +1,175 @@
-# Dependencies and caches (never push)
+# -----------------------------------------------------------------------------
+# Never commit dependencies, builds, caches, secrets, or installers.
+# Keep lockfiles (pnpm-lock.yaml, Cargo.lock) — they are not listed here.
+# -----------------------------------------------------------------------------
+
+# Node / pnpm / npm / yarn
 node_modules/
 **/node_modules/
 .pnpm-store/
+**/.pnpm-store/
 .npm/
 .yarn/
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp
 .pnp.*
+bower_components/
+jspm_packages/
+web_modules/
 
-# Next.js / builds
-.next/
-out/
+# Builds and framework output
 dist/
+**/dist/
 build/
+**/build/
+out/
+**/out/
+.next/
+**/.next/
+.nuxt/
+.output/
 .turbo/
+**/.turbo/
 .cache/
+**/.cache/
+.parcel-cache/
+.vite/
+**/.vite/
 .vercel/
+.netlify/
+.wrangler/
+.svelte-kit/
+storybook-static/
 *.tsbuildinfo
+**/*.tsbuildinfo
 
-# Secrets
+# Runtime / local data (receipts, tills, sessions)
+backend/data/
+
+# Environment and secrets
 .env
 .env.*
 !.env.example
 !.env.*.example
+*.pem
+*.p12
+*.key
+*.crt
+credentials.json
+service-account*.json
+secrets.*
 
-# Logs and coverage
+# Logs and debug
+logs/
 *.log
-coverage/
-.nyc_output/
-test-results/
-playwright-report/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
-# OS / IDE
+# Tests, coverage, e2e artifacts
+coverage/
+**/.nyc_output/
+playwright-report/
+blob-report/
+test-results/
+cypress/videos/
+cypress/screenshots/
+junit.xml
+*.lcov
+
+# OS
 .DS_Store
+.AppleDouble
+.LSOverride
 Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# Editors and IDEs
 .idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+*.sublime-workspace
+*.sublime-project
+.history/
+*.code-workspace
+
+# VS Code (keep shared recommendations)
 .vscode/*
 !.vscode/extensions.json
+!.vscode/settings.json.example
+
+# Tauri / Rust
+src-tauri/target/
+**/src-tauri/target/
+**/src-tauri/gen/
+target/
+**/target/
+**/*.rs.bk
+*.pdb
+
+# Databases and dumps
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+*.sql.gz
+dump.rdb
+
+# Heavy packages / installers / compiled binaries
+*.exe
+*.msi
+*.msix
+*.dmg
+*.pkg
+*.AppImage
+*.deb
+*.rpm
+*.apk
+*.aab
+*.ipa
+*.app
+*.dll
+*.so
+*.dylib
+*.nupkg
+*.zip
+*.7z
+*.rar
+*.tar
+*.tar.gz
+*.tgz
+*.iso
+
+# Profiling / temp
+tmp/
+temp/
+*.tmp
+*.temp
+*.pid
+*.seed
+*.pid.lock
+*.local
+*.cpuprofile
+*.heapprofile
+.eslintcache
+.stylelintcache
+.prettiercache
+.serverless/
+.fusebox/
+.dynamodb/
+.vscode-test
+*.orig
+*.bak

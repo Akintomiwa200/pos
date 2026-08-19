@@ -1,0 +1,9 @@
+[package]
+name = "pos-desktop"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "pos-desktop"
+path = "src/main.rs"

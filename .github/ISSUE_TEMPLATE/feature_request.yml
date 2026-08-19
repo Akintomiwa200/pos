@@ -1,0 +1,35 @@
+name: Feature request
+description: Propose an improvement
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      placeholder: What is hard or missing today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      placeholder: How should it work?
+    validations:
+      required: true
+  - type: dropdown
+    id: app
+    attributes:
+      label: Primary app
+      options:
+        - backend
+        - web (HQ)
+        - pos (till)
+        - price-check
+        - all / platform
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered

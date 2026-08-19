@@ -1,0 +1,33 @@
+# Dependencies and caches (never push)
+node_modules/
+**/node_modules/
+.pnpm-store/
+.npm/
+.yarn/
+.pnp.*
+
+# Nest build
+dist/
+build/
+.turbo/
+.cache/
+*.tsbuildinfo
+
+# Local runtime data (tills, sales, receipts)
+data/
+
+# Secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Logs and coverage
+*.log
+coverage/
+.nyc_output/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/

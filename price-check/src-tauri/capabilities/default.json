@@ -1,0 +1,6 @@
+{
+  "identifier": "default",
+  "description": "Default Price Check capabilities (Tauri 2).",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

@@ -1,0 +1,47 @@
+name: Bug report
+description: Unexpected behaviour in HQ, the till, the API, or price check
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: Search existing issues first. Do not include till codes, passwords, or customer data.
+  - type: dropdown
+    id: app
+    attributes:
+      label: App
+      options:
+        - backend
+        - web (HQ)
+        - pos (till)
+        - price-check
+        - multiple
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      placeholder: What you expected, and what you saw instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: Environment
+      placeholder: Windows 11, Chrome, Node 22, pnpm
+  - type: textarea
+    id: extra
+    attributes:
+      label: Logs or screenshots
+      description: Redact secrets before pasting.

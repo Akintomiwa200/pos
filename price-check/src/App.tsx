@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { toast } from "sonner";
 import {
   Camera,
   ScanBarcode,
@@ -46,6 +47,10 @@ export default function App() {
     lastPrice.current = item.priceMinor;
   }, [item]);
 
+  useEffect(() => {
+    if (error) toast.error(`${error} Open Settings to set the POS server.`);
+  }, [error]);
+
   function lookup(raw: string) {
     const value = raw.trim();
     if (!value) return;
@@ -57,6 +62,7 @@ export default function App() {
     } else {
       setSelectedId(null);
       setMissing(value);
+      toast.error(`No match for ${value}`);
     }
   }
 
@@ -68,6 +74,7 @@ export default function App() {
   function saveServer() {
     setApiBase(serverDraft);
     setSettingsOpen(false);
+    toast.success("Server saved.");
     reconnect();
   }
 

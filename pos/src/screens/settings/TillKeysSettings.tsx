@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { SETTINGS_EVENT } from "../../lib/store-settings";
 import { useHardwareHex } from "../../lib/device-hex";
 import { isCompleteTillCode, normalizeTillCode, tillProductLabel } from "../../lib/till-code";
@@ -26,8 +27,6 @@ export function TillKeysSettings() {
   const [branches, setBranches] = useState(loadBranches);
   const [till, setTill] = useState<TillRecord>(loadDeviceTill);
   const [codeDraft, setCodeDraft] = useState(() => loadDeviceTill().code);
-  const [status, setStatus] = useState("");
-  const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -54,15 +53,13 @@ export function TillKeysSettings() {
   }
 
   async function activate() {
-    setError("");
-    setStatus("");
     const code = normalizeTillCode(codeDraft);
     if (!isCompleteTillCode(code)) {
-      setError("Enter the 16-character code from HQ, grouped as XXXX-XXXX-XXXX-XXXX.");
+      toast.error("Enter the 16-character code from HQ, grouped as XXXX-XXXX-XXXX-XXXX.");
       return;
     }
     if (!hex) {
-      setError("This device’s hardware hex is not available yet.");
+      toast.error("This device’s hardware hex is not available yet.");
       return;
     }
     setBusy(true);
@@ -70,9 +67,9 @@ export function TillKeysSettings() {
       const next = await activateDeviceTill(code, hex);
       setTill(next);
       setCodeDraft(next.code);
-      setStatus(`This device is now ${next.name}.`);
+      toast.success(`This device is now ${next.name}.`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Activation failed");
+      toast.error(err instanceof Error ? err.message : "Activation failed");
     } finally {
       setBusy(false);
     }
@@ -146,16 +143,6 @@ export function TillKeysSettings() {
             {busy ? "Checking…" : till.paired ? "Activate again" : "Activate"}
           </button>
         </SetRow>
-        {error ? (
-          <SetRow label="Status">
-            <span className="set-danger">{error}</span>
-          </SetRow>
-        ) : null}
-        {status ? (
-          <SetRow label="Status">
-            <span className="set-muted">{status}</span>
-          </SetRow>
-        ) : null}
       </SetCard>
       <SetCard title="This device">
         <SetRow

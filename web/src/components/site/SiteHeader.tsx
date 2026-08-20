@@ -4,9 +4,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ChevronDown, Menu, X } from "lucide-react";
-import { AccountSwitcher, openHqItem } from "../AccountSwitcher";
 import { useAuth } from "../AuthProvider";
-import { HEADER_NAV, SITE, type SiteLink } from "../../lib/site";
+import { HEADER_NAV, type SiteLink } from "../../lib/site";
+import { BrandLogo } from "./BrandLogo";
 
 function isActive(pathname: string, href: string) {
   if (href === "/") return pathname === "/";
@@ -27,12 +27,7 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-40 border-b border-neutral-200/80 bg-white/90 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-6xl items-center gap-4 px-4 sm:px-6">
-        <Link href="/" className="flex shrink-0 items-center gap-2 font-semibold tracking-tight">
-          <span className="grid h-9 w-9 place-items-center rounded-full bg-[#6d4aff] text-sm font-extrabold text-white">
-            {SITE.short}
-          </span>
-          {SITE.name}
-        </Link>
+        <BrandLogo />
         <nav className="hidden flex-1 items-center justify-center gap-1 lg:flex">
           {HEADER_NAV.map((item) =>
             item.children ? (
@@ -81,22 +76,19 @@ export function SiteHeader() {
         </nav>
         <div className="ml-auto flex items-center gap-2">
           {!loading && session ? (
-            <AccountSwitcher session={session} extraItems={[openHqItem]} />
+            <Link
+              href="/dashboard"
+              className="rounded-full bg-[#6d4aff] px-4 py-2 text-sm font-medium text-white"
+            >
+              My dashboard
+            </Link>
           ) : !loading ? (
-            <>
-              <Link
-                href="/register"
-                className="hidden rounded-xl px-3 py-2 text-sm font-medium text-neutral-600 hover:text-[#6d4aff] sm:inline"
-              >
-                Register
-              </Link>
-              <Link
-                href="/login"
-                className="rounded-xl bg-[#6d4aff] px-4 py-2 text-sm font-semibold text-white"
-              >
-                Login
-              </Link>
-            </>
+            <Link
+              href="/register"
+              className="rounded-full bg-[#6d4aff] px-4 py-2 text-sm font-medium text-white"
+            >
+              Get started
+            </Link>
           ) : null}
           <button
             type="button"

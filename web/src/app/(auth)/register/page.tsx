@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { useAuth } from "../../../components/AuthProvider";
 import { AuthCard, AuthField, AuthLinks, AuthSubmit } from "../../../components/site/AuthCard";
 import { authErrorMessage } from "../../../lib/hq-api";
@@ -9,7 +10,6 @@ import { authErrorMessage } from "../../../lib/hq-api";
 export default function RegisterPage() {
   const router = useRouter();
   const { register, session, loading } = useAuth();
-  const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -22,11 +22,10 @@ export default function RegisterPage() {
     const password = String(form.get("password") ?? "");
     const confirm = String(form.get("confirm") ?? "");
     if (password !== confirm) {
-      setError("Passwords do not match");
+      toast.error("Passwords do not match");
       return;
     }
     setBusy(true);
-    setError("");
     try {
       await register({
         name: String(form.get("name") ?? ""),
@@ -34,9 +33,10 @@ export default function RegisterPage() {
         username: String(form.get("username") ?? ""),
         password,
       });
+      toast.success("Account created.");
       router.replace("/dashboard");
     } catch (err) {
-      setError(authErrorMessage(err, "Could not create the account"));
+      toast.error(authErrorMessage(err, "Could not create the account"));
     } finally {
       setBusy(false);
     }
@@ -65,7 +65,6 @@ export default function RegisterPage() {
           autoComplete="new-password"
           minLength={6}
         />
-        {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
         <AuthSubmit busy={busy} label="Create account" />
       </form>
       <AuthLinks items={[{ href: "/login", label: "Already have an account? Sign in" }]} />

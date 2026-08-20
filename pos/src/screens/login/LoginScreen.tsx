@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { toast } from "sonner";
 import { loginWithPassword } from "../../lib/session";
 import type { StaffUser } from "../../lib/staff";
 
@@ -10,19 +11,18 @@ type Props = {
 export function LoginScreen({ onLogin, banner }: Props) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (busy) return;
     setBusy(true);
-    setError("");
     try {
       const result = await loginWithPassword(username, password);
+      toast.success("Signed in.");
       onLogin(result.user, result.needsOpenShift);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not sign in.");
+      toast.error(err instanceof Error ? err.message : "Could not sign in.");
     } finally {
       setBusy(false);
     }
@@ -55,7 +55,6 @@ export function LoginScreen({ onLogin, banner }: Props) {
             onChange={(event) => setPassword(event.target.value)}
           />
         </label>
-        {error ? <p className="pin-error">{error}</p> : null}
         <button className="continue" type="submit" disabled={busy}>
           {busy ? "Signing in…" : "Sign in"}
         </button>

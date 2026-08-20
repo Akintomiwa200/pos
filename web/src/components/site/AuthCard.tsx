@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { SITE } from "../../lib/site";
+import { BrandLogo } from "./BrandLogo";
 
 export function AuthCard({
   title,
@@ -19,12 +19,7 @@ export function AuthCard({
     <main className="flex items-center justify-center px-4 py-16 sm:px-6">
       <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-[0_8px_30px_rgba(28,28,30,0.06)]">
         <div className="mb-8 flex items-center justify-between">
-          <Link
-            href="/"
-            className="flex h-12 w-12 items-center justify-center rounded-full bg-[#6d4aff] text-lg font-bold text-white"
-          >
-            {SITE.short}
-          </Link>
+          <BrandLogo />
           <p
             className={`text-xs font-medium ${
               live === null ? "text-neutral-400" : live ? "text-emerald-600" : "text-red-600"

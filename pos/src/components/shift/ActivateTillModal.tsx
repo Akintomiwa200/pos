@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { toast } from "sonner";
 import { useHardwareHex } from "../../lib/device-hex";
 import { isCompleteTillCode, normalizeTillCode } from "../../lib/till-code";
 import { activateDeviceTill, loadDeviceTill } from "../../lib/tills";
@@ -12,7 +13,6 @@ export function ActivateTillModal({ expired, message }: Props) {
   const { hex, live } = useHardwareHex();
   const lastCode = loadDeviceTill().code;
   const [code, setCode] = useState(lastCode);
-  const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
   async function submit(event: FormEvent) {
@@ -20,19 +20,19 @@ export function ActivateTillModal({ expired, message }: Props) {
     if (busy) return;
     const normalized = normalizeTillCode(code);
     if (!isCompleteTillCode(normalized)) {
-      setError("Enter the 16-character till code from HQ, grouped as XXXX-XXXX-XXXX-XXXX.");
+      toast.error("Enter the 16-character till code from HQ, grouped as XXXX-XXXX-XXXX-XXXX.");
       return;
     }
     if (!hex) {
-      setError("This device’s hardware hex is not available yet.");
+      toast.error("This device’s hardware hex is not available yet.");
       return;
     }
     setBusy(true);
-    setError("");
     try {
       await activateDeviceTill(normalized, hex);
+      toast.success("Till activated.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Activation failed");
+      toast.error(err instanceof Error ? err.message : "Activation failed");
     } finally {
       setBusy(false);
     }
@@ -66,7 +66,6 @@ export function ActivateTillModal({ expired, message }: Props) {
           This device · {hex || "Reading hardware…"}
           {live ? "" : hex ? " (cached)" : ""}
         </p>
-        {error ? <p className="pin-error">{error}</p> : null}
         <button className="continue" type="submit" disabled={busy || !hex}>
           {busy ? "Activating…" : expired ? "Renew and continue" : "Activate"}
         </button>

@@ -2,6 +2,7 @@
 
 import { FormEvent, Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { toast } from "sonner";
 import { authErrorMessage, resetPassword } from "../../../lib/hq-api";
 import { AuthCard, AuthField, AuthLinks, AuthSubmit } from "../../../components/site/AuthCard";
 
@@ -9,7 +10,6 @@ function ResetForm() {
   const router = useRouter();
   const params = useSearchParams();
   const preset = params.get("token") ?? "";
-  const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -19,16 +19,16 @@ function ResetForm() {
     const confirm = String(form.get("confirm") ?? "");
     const token = String(form.get("token") ?? preset);
     if (password !== confirm) {
-      setError("Passwords do not match");
+      toast.error("Passwords do not match");
       return;
     }
     setBusy(true);
-    setError("");
     try {
       await resetPassword(token, password);
+      toast.success("Password updated. Sign in with the new password.");
       router.replace("/login");
     } catch (err) {
-      setError(authErrorMessage(err, "Could not reset the password"));
+      toast.error(authErrorMessage(err, "Could not reset the password"));
     } finally {
       setBusy(false);
     }
@@ -58,7 +58,6 @@ function ResetForm() {
           autoComplete="new-password"
           minLength={6}
         />
-        {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
         <AuthSubmit busy={busy} label="Save password" />
       </form>
       <AuthLinks items={[{ href: "/login", label: "Back to login" }]} />

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import type { ConsoleAccount, ConsoleGroup } from "../lib/access";
 import { deleteAccount, listAccounts, listGroups, saveAccount } from "../lib/hq-api";
 import { useAuth } from "./AuthProvider";
@@ -23,8 +24,6 @@ export function AccountManager() {
   const [accounts, setAccounts] = useState<AccountRow[]>([]);
   const [groups, setGroups] = useState<ConsoleGroup[]>([]);
   const [draft, setDraft] = useState(blank);
-  const [error, setError] = useState("");
-  const [status, setStatus] = useState("");
   const [ready, setReady] = useState(false);
 
   async function load() {
@@ -39,7 +38,7 @@ export function AccountManager() {
 
   useEffect(() => {
     load().catch((err) => {
-      setError(err instanceof Error ? err.message : "Could not load accounts");
+      toast.error(err instanceof Error ? err.message : "Could not load accounts");
       setReady(true);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -47,13 +46,9 @@ export function AccountManager() {
 
   function edit(row: AccountRow) {
     setDraft({ ...row, password: "" });
-    setError("");
-    setStatus("");
   }
 
   async function onSave() {
-    setError("");
-    setStatus("");
     try {
       const saved = await saveAccount({
         ...draft,
@@ -76,20 +71,20 @@ export function AccountManager() {
       }
       await load();
       setDraft({ ...blank, groupId: groups[0]?.id ?? "" });
-      setStatus("Account saved. They will see menus from their group at next sign-in.");
+      toast.success("Account saved. They will see menus from their group at next sign-in.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save account");
+      toast.error(err instanceof Error ? err.message : "Could not save account");
     }
   }
 
   async function onDelete(id: string) {
-    setError("");
     try {
       await deleteAccount(id);
       await load();
       if (draft.id === id) setDraft({ ...blank, groupId: groups[0]?.id ?? "" });
+      toast.success("Account deleted.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not delete account");
+      toast.error(err instanceof Error ? err.message : "Could not delete account");
     }
   }
 
@@ -198,8 +193,6 @@ export function AccountManager() {
           />
           Active
         </label>
-        {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
-        {status ? <p className="mt-3 text-sm text-emerald-700">{status}</p> : null}
         <div className="mt-4 flex gap-2">
           <button
             type="submit"

@@ -1,10 +1,16 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --color-pos-bg: #f3f4f8;
+  --color-pos-ink: #1c1c1e;
+  --color-pos-primary: #7b61ff;
+}
 
 html,
 body {
   min-height: 100%;
   background: #f3f4f8;
   color: #1c1c1e;
+  letter-spacing: -0.011em;
 }

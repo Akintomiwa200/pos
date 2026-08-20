@@ -61,4 +61,63 @@ export class CatalogService {
       return () => sub.unsubscribe();
     });
   }
+
+  upsertMany(
+    rows: Array<{
+      name?: string;
+      category?: string;
+      sku?: string;
+      barcode?: string;
+      priceMinor?: number;
+      onHand?: number;
+    }>,
+  ) {
+    let created = 0;
+    let updated = 0;
+    for (const row of rows) {
+      const name = row.name?.trim();
+      if (!name) continue;
+      const sku = row.sku?.trim() || name.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 24);
+      const barcode = row.barcode?.trim() || sku;
+      const existing = this.items.find(
+        (item) =>
+          item.sku.toLowerCase() === sku.toLowerCase() ||
+          item.barcode.toLowerCase() === barcode.toLowerCase(),
+      );
+      const next: CatalogItem = {
+        id: existing?.id ?? sku.toLowerCase(),
+        name,
+        category: row.category?.trim() || existing?.category || "General",
+        sku,
+        barcode,
+        priceMinor:
+          typeof row.priceMinor === "number" && Number.isFinite(row.priceMinor)
+            ? Math.max(0, Math.round(row.priceMinor))
+            : existing?.priceMinor ?? 0,
+        currency: "NGN",
+        image: existing?.image ?? "",
+        onHand:
+          typeof row.onHand === "number" && Number.isFinite(row.onHand)
+            ? Math.max(0, Math.round(row.onHand))
+            : existing?.onHand ?? 0,
+        updatedAt: now(),
+        expiresAt: existing?.expiresAt,
+      };
+      if (existing) {
+        this.items = this.items.map((item) => (item.id === existing.id ? next : item));
+        updated += 1;
+      } else {
+        this.items.push(next);
+        created += 1;
+      }
+      this.events.next({ type: "updated", item: next });
+    }
+    return { created, updated, total: this.items.length };
+  }
+
+  resetToSeed() {
+    this.items = CATALOG_SEED.map((item) => ({ ...item }));
+    this.events.next({ type: "snapshot", items: this.items });
+    return { ok: true, total: this.items.length };
+  }
 }

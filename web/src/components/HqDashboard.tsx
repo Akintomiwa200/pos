@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { toast } from "sonner";
 import {
   ArrowDownRight,
   ArrowLeftRight,
@@ -1133,6 +1134,7 @@ export function HqDashboard() {
     link.download = "hq-report.csv";
     link.click();
     URL.revokeObjectURL(url);
+    toast.success("Report exported.");
   }
 
   async function shareReport() {
@@ -1140,12 +1142,18 @@ export function HqDashboard() {
     try {
       if (navigator.share) {
         await navigator.share({ title: "HQ report", url });
+        toast.success("Report shared.");
         return;
       }
     } catch {
       /* fall through to copy */
     }
-    await navigator.clipboard.writeText(url);
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success("Link copied.");
+    } catch {
+      toast.error("Could not copy the report link.");
+    }
   }
 
   const featuredName = featuredTender ?? report.tenders[0]?.name ?? "Cash";
@@ -1225,7 +1233,12 @@ export function HqDashboard() {
               type="button"
               className="grid h-9 w-9 place-items-center rounded-full bg-white text-[#111] shadow-[0_1px_2px_rgba(28,28,30,0.06)]"
               aria-label="Copy link"
-              onClick={() => void navigator.clipboard.writeText(window.location.href)}
+              onClick={() => {
+                void navigator.clipboard.writeText(window.location.href).then(
+                  () => toast.success("Link copied."),
+                  () => toast.error("Could not copy the link."),
+                );
+              }}
             >
               <Link2 size={16} strokeWidth={1.8} />
             </button>

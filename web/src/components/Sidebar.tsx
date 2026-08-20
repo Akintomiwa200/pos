@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ChevronDown, X } from "lucide-react";
+import { BrandLogo } from "./site/BrandLogo";
 import {
   isNavGroup,
   type NavItem,
@@ -150,12 +151,9 @@ export function Sidebar({
         aria-label="Console navigation"
       >
         <div className="flex items-center gap-2 px-5 py-5">
-          <Link href="/dashboard" className="flex min-w-0 flex-1 items-center gap-2 font-semibold">
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#6d4aff] text-sm text-white">
-              P
-            </span>
-            POS Console
-          </Link>
+          <div className="min-w-0 flex-1">
+            <BrandLogo href="/dashboard" size="sm" />
+          </div>
           <button
             type="button"
             className="grid h-8 w-8 place-items-center rounded-full text-neutral-500 hover:bg-[#f6f5f8] lg:hidden"

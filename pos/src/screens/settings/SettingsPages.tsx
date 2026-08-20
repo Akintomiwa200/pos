@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import { CATEGORIES } from "../../lib/demo";
 import type { CatalogItem } from "../../lib/types";
 import { computeTotals, formatMoney } from "../../lib/types";
@@ -976,12 +977,11 @@ export function PrintingSettings() {
   const [settings, patch] = useSettings();
   const [detected, setDetected] = useState<DetectedPrinter[]>([]);
   const [config, setConfig] = useState<PrinterConfig>(loadPrinterConfig);
-  const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
 
   async function scan() {
     setBusy(true);
-    setStatus("Reading installed printer drivers…");
+    const id = toast.loading("Reading installed printer drivers…");
     try {
       const list = await detectPrinters();
       setDetected(list);
@@ -992,13 +992,13 @@ export function PrintingSettings() {
         savePrinterConfig(next);
         return next;
       });
-      setStatus(
-        list.length
-          ? `${list.length} printer(s) found.`
-          : "No printers found. Install a driver, then scan again.",
-      );
+      if (list.length) {
+        toast.success(`${list.length} printer(s) found.`, { id });
+      } else {
+        toast.error("No printers found. Install a driver, then scan again.", { id });
+      }
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Scan failed.");
+      toast.error(error instanceof Error ? error.message : "Scan failed.", { id });
     } finally {
       setBusy(false);
     }
@@ -1017,19 +1017,19 @@ export function PrintingSettings() {
   async function testPrint() {
     const name = config.receiptPrinter;
     if (!name) {
-      setStatus("Choose a receipt printer first.");
+      toast.error("Choose a receipt printer first.");
       return;
     }
     setBusy(true);
-    setStatus(`Sending test slip to ${name}…`);
+    const id = toast.loading(`Sending test slip to ${name}…`);
     try {
       await sendToPrinter(
         name,
         `POS TEST PRINT\n${settings.storeName}\n${settings.storeAddress}\nPaper ${settings.receiptPaper}\nPrinter OK\n`,
       );
-      setStatus(`Printed on ${name}.`);
+      toast.success(`Printed on ${name}.`, { id });
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Test print failed.");
+      toast.error(error instanceof Error ? error.message : "Test print failed.", { id });
     } finally {
       setBusy(false);
     }
@@ -1141,7 +1141,6 @@ export function PrintingSettings() {
           </button>
         </SetRow>
       </SetCard>
-      {status ? <p className="set-status">{status}</p> : null}
     </>
   );
 }

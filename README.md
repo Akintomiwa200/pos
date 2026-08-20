@@ -19,7 +19,7 @@ licence lasts one year from activation.
 ## Requirements
 
 - Node.js 22 ([`.nvmrc`](.nvmrc))
-- [pnpm](https://pnpm.io)
+- [pnpm](https://pnpm.io) 11
 
 ## Quick start
 

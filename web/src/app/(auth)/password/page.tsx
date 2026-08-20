@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { useAuth } from "../../../components/AuthProvider";
 import { AuthCard, AuthField, AuthLinks, AuthSubmit } from "../../../components/site/AuthCard";
 import { authErrorMessage } from "../../../lib/hq-api";
@@ -9,8 +10,6 @@ import { authErrorMessage } from "../../../lib/hq-api";
 export default function ChangePasswordPage() {
   const router = useRouter();
   const { session, loading, updatePassword } = useAuth();
-  const [error, setError] = useState("");
-  const [done, setDone] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -23,19 +22,16 @@ export default function ChangePasswordPage() {
     const password = String(form.get("password") ?? "");
     const confirm = String(form.get("confirm") ?? "");
     if (password !== confirm) {
-      setError("Passwords do not match");
-      setDone("");
+      toast.error("Passwords do not match");
       return;
     }
     setBusy(true);
-    setError("");
-    setDone("");
     try {
       await updatePassword(String(form.get("current") ?? ""), password);
-      setDone("Password updated.");
+      toast.success("Password updated.");
       event.currentTarget.reset();
     } catch (err) {
-      setError(authErrorMessage(err, "Could not update the password"));
+      toast.error(authErrorMessage(err, "Could not update the password"));
     } finally {
       setBusy(false);
     }
@@ -68,8 +64,6 @@ export default function ChangePasswordPage() {
           autoComplete="new-password"
           minLength={6}
         />
-        {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
-        {done ? <p className="mt-3 text-sm text-emerald-600">{done}</p> : null}
         <AuthSubmit busy={busy} label="Update password" />
       </form>
       <AuthLinks

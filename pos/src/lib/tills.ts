@@ -1,4 +1,5 @@
 import { SETTINGS_EVENT, loadStoreSettings, saveStoreSettings } from "./store-settings";
+import { applyHqOrg, type HqOrgSnapshot } from "./hq-org";
 import { addOneYear, isSubscriptionExpired, normalizeTillProduct, type TillProduct } from "./till-code";
 import { apiUrl } from "./api-base";
 
@@ -259,11 +260,29 @@ export async function activateDeviceTill(code: string, hardwareHex: string) {
     product?: string;
     sessionToken?: string;
     subscriptionExpiresAt?: string | null;
+    org?: HqOrgSnapshot;
     message?: string | string[];
   };
   if (!response.ok) {
     const message = Array.isArray(body.message) ? body.message[0] : body.message;
     throw new Error(message || "Till code was rejected");
+  }
+  if (body.org) {
+    applyHqOrg(body.org);
+    if (body.org.branches?.length) {
+      saveBranches(
+        body.org.branches.map((row) => ({
+          id: row.id,
+          name: row.name,
+          address: row.address,
+          city: row.city,
+          state: row.state,
+          phone: row.phone,
+          manager: row.manager,
+          active: row.active,
+        })),
+      );
+    }
   }
   const current = loadDeviceTill();
   const branch = loadBranches().find(
@@ -302,6 +321,7 @@ export async function heartbeatDeviceTill(hardwareHex: string) {
       subscriptionExpiresAt?: string | null;
       product?: string;
       code?: string;
+      org?: HqOrgSnapshot;
       message?: string | string[];
     };
     if (response.status === 409 || body.code === "TILL_TAKEN") {
@@ -314,6 +334,23 @@ export async function heartbeatDeviceTill(hardwareHex: string) {
       return { taken: false as const, expired: true as const };
     }
     if (!response.ok) return { taken: false as const, expired: false as const };
+    if (body.org) {
+      applyHqOrg(body.org);
+      if (body.org.branches?.length) {
+        saveBranches(
+          body.org.branches.map((row) => ({
+            id: row.id,
+            name: row.name,
+            address: row.address,
+            city: row.city,
+            state: row.state,
+            phone: row.phone,
+            manager: row.manager,
+            active: row.active,
+          })),
+        );
+      }
+    }
     const nextExpires = body.subscriptionExpiresAt ?? till.subscriptionExpiresAt;
     const nextProduct = body.product ? normalizeTillProduct(body.product) : till.product;
     if (

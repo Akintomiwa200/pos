@@ -1,6 +1,5 @@
 export const SITE = {
   name: "POS",
-  short: "P",
   tagline: "Till, HQ, and price check for supermarket, hotel, and restaurant.",
 };
 
@@ -13,19 +12,6 @@ export type SiteLink = {
 export const HEADER_NAV: SiteLink[] = [
   { href: "/", label: "Home" },
   { href: "/product", label: "Product" },
-  {
-    href: "/solutions",
-    label: "Solutions",
-    children: [
-      { href: "/solutions/supermarket", label: "Supermarket" },
-      { href: "/solutions/hotel", label: "Hotel" },
-      { href: "/solutions/restaurant", label: "Restaurant" },
-      { href: "/solutions/dark-kitchen", label: "Dark kitchen" },
-    ],
-  },
-  { href: "/pricing", label: "Pricing" },
-  { href: "/download", label: "Download" },
-  { href: "/support", label: "Support" },
   { href: "/about", label: "About" },
   { href: "/contact", label: "Contact" },
 ];

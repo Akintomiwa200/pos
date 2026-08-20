@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import {
   DEPARTMENTS,
   compressPrivileges,
@@ -74,8 +75,6 @@ export function GroupManager() {
   const [groups, setGroups] = useState<ConsoleGroup[]>([]);
   const [selectedId, setSelectedId] = useState<string>("");
   const [draft, setDraft] = useState<ConsoleGroup>(emptyGroup());
-  const [error, setError] = useState("");
-  const [status, setStatus] = useState("");
   const [ready, setReady] = useState(false);
 
   async function load() {
@@ -91,7 +90,7 @@ export function GroupManager() {
 
   useEffect(() => {
     load().catch((err) => {
-      setError(err instanceof Error ? err.message : "Could not load groups");
+      toast.error(err instanceof Error ? err.message : "Could not load groups");
       setReady(true);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -104,8 +103,6 @@ export function GroupManager() {
   function select(group: ConsoleGroup) {
     setSelectedId(group.id);
     setDraft(group);
-    setError("");
-    setStatus("");
   }
 
   function toggleDepartment(heading: DepartmentName) {
@@ -121,8 +118,6 @@ export function GroupManager() {
   }
 
   async function onSave() {
-    setError("");
-    setStatus("");
     try {
       const saved = await saveGroup({
         ...draft,
@@ -133,15 +128,14 @@ export function GroupManager() {
       setSelectedId(saved.id);
       setDraft(saved);
       if (session) setSession(refreshSessionFromGroup(session, saved));
-      setStatus("Group saved. Sidebar updates for accounts in this group.");
+      toast.success("Group saved. Sidebar updates for accounts in this group.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save group");
+      toast.error(err instanceof Error ? err.message : "Could not save group");
     }
   }
 
   async function onDelete() {
     if (!draft.id) return;
-    setError("");
     try {
       await deleteGroup(draft.id);
       const rows = await listGroups();
@@ -149,8 +143,9 @@ export function GroupManager() {
       const next = rows[0] ?? emptyGroup();
       setSelectedId(next.id);
       setDraft(next);
+      toast.success("Group deleted.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not delete group");
+      toast.error(err instanceof Error ? err.message : "Could not delete group");
     }
   }
 
@@ -166,8 +161,6 @@ export function GroupManager() {
             const next = emptyGroup();
             setSelectedId("");
             setDraft(next);
-            setStatus("");
-            setError("");
           }}
         >
           New group
@@ -256,9 +249,6 @@ export function GroupManager() {
             );
           })}
         </div>
-
-        {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
-        {status ? <p className="mt-4 text-sm text-emerald-700">{status}</p> : null}
 
         <div className="mt-6 flex gap-3">
           <button

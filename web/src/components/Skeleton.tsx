@@ -73,7 +73,24 @@ export function DashboardSkeleton() {
   );
 }
 
-export function ManagerSkeleton({ variant = "table" }: { variant?: "table" | "groups" }) {
+export function ManagerSkeleton({ variant = "table" }: { variant?: "table" | "groups" | "list" }) {
+  if (variant === "list") {
+    return (
+      <div aria-busy="true" aria-live="polite">
+        <span className="sr-only">Loading</span>
+        <div className="overflow-hidden rounded-2xl bg-white shadow-[0_8px_30px_rgba(28,28,30,0.06)]">
+          <div className="border-b border-neutral-100 px-4 py-3">
+            <Bone className="h-4 w-full rounded-md" />
+          </div>
+          {Array.from({ length: 7 }, (_, index) => (
+            <div key={index} className="border-b border-neutral-50 px-4 py-3">
+              <Bone className="h-4 w-full rounded-md" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
   if (variant === "groups") {
     return (
       <div className="grid gap-6 lg:grid-cols-[240px_1fr]" aria-busy="true" aria-live="polite">

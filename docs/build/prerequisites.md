@@ -8,7 +8,7 @@ price-check users do not need them.
 | Tool | Version | Why |
 | --- | --- | --- |
 | Node.js | **22** (see [`.nvmrc`](../../.nvmrc)) | Vite, Next.js, NestJS |
-| pnpm | 9 or 10 | Package manager used in this repo |
+| pnpm | **11** | Package manager used in this repo |
 | Git | any recent | Clone and tags |
 
 Confirm:

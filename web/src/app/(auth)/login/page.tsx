@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { useAuth } from "../../../components/AuthProvider";
 import { AuthCard, AuthField, AuthLinks, AuthSubmit } from "../../../components/site/AuthCard";
 import { authErrorMessage } from "../../../lib/hq-api";
@@ -9,7 +10,6 @@ import { authErrorMessage } from "../../../lib/hq-api";
 export default function LoginPage() {
   const router = useRouter();
   const { login, session, loading } = useAuth();
-  const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -20,12 +20,12 @@ export default function LoginPage() {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     setBusy(true);
-    setError("");
     try {
       await login(String(form.get("email") ?? ""), String(form.get("password") ?? ""));
+      toast.success("Signed in.");
       router.replace("/dashboard");
     } catch (err) {
-      setError(authErrorMessage(err, "Could not sign in"));
+      toast.error(authErrorMessage(err, "Could not sign in"));
     } finally {
       setBusy(false);
     }
@@ -41,7 +41,6 @@ export default function LoginPage() {
           type="password"
           autoComplete="current-password"
         />
-        {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
         <AuthSubmit busy={busy} label="Sign in" />
       </form>
       <AuthLinks

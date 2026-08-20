@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { listBranches, type HqBranch } from "../lib/hq-setup";
 import {
   TILL_PRODUCTS,
   deleteTill,
@@ -13,6 +15,8 @@ import {
   type TillProduct,
 } from "../lib/hq-api";
 import { ManagerSkeleton } from "./Skeleton";
+import { SlideOver } from "./SlideOver";
+import { Field, PrimaryButton, ToggleField, fieldClass } from "./setup/SetupChrome";
 
 const blank = {
   id: "",
@@ -41,20 +45,22 @@ function statusLabel(row: HqTill) {
 
 export function TillManager() {
   const [tills, setTills] = useState<HqTill[]>([]);
+  const [branches, setBranches] = useState<HqBranch[]>([]);
   const [draft, setDraft] = useState(blank);
-  const [error, setError] = useState("");
-  const [status, setStatus] = useState("");
+  const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
 
   async function load() {
-    setTills(await listTills());
+    const [tillRows, branchRows] = await Promise.all([listTills(), listBranches().catch(() => [])]);
+    setTills(tillRows);
+    setBranches(branchRows);
     setReady(true);
   }
 
   useEffect(() => {
     load().catch((err) => {
-      setError(err instanceof Error ? err.message : "Could not load tills");
+      toast.error(err instanceof Error ? err.message : "Could not load tills");
       setReady(true);
     });
     const timer = window.setInterval(() => {
@@ -71,51 +77,47 @@ export function TillManager() {
       product: row.product ?? "supermarket",
       active: row.active,
     });
-    setError("");
-    setStatus("");
+    setOpen(true);
   }
 
   async function onSave() {
-    setError("");
-    setStatus("");
     setBusy(true);
     try {
       const saved = await saveTill(draft);
       await load();
       setDraft(blank);
-      setStatus(
+      setOpen(false);
+      toast.success(
         draft.id
           ? "Till updated."
           : `Till issued. Code ${saved.code} — enter it on that device only.`,
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save till");
+      toast.error(err instanceof Error ? err.message : "Could not save till");
     } finally {
       setBusy(false);
     }
   }
 
   async function onRegenerate(id: string) {
-    setError("");
     setBusy(true);
     try {
       const next = await regenerateTillCode(id);
       await load();
-      setStatus(`New code issued: ${next.code}. The previous device must activate again.`);
+      toast.success(`New code issued: ${next.code}. The previous device must activate again.`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not regenerate code");
+      toast.error(err instanceof Error ? err.message : "Could not regenerate code");
     } finally {
       setBusy(false);
     }
   }
 
   async function onRenew(id: string) {
-    setError("");
     setBusy(true);
     try {
       const next = await renewTill(id);
       await load();
-      setStatus(
+      toast.success(
         `Subscription extended to ${
           next.subscriptionExpiresAt
             ? new Date(next.subscriptionExpiresAt).toLocaleDateString("en-NG", {
@@ -127,37 +129,50 @@ export function TillManager() {
         }.`,
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not renew till");
+      toast.error(err instanceof Error ? err.message : "Could not renew till");
     } finally {
       setBusy(false);
     }
   }
 
   async function onDelete(id: string) {
-    setError("");
     try {
       await deleteTill(id);
       await load();
-      if (draft.id === id) setDraft(blank);
+      if (draft.id === id) {
+        setDraft(blank);
+        setOpen(false);
+      }
+      toast.success("Till deleted.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not delete till");
+      toast.error(err instanceof Error ? err.message : "Could not delete till");
     }
   }
 
   async function copyCode(code: string) {
     try {
       await navigator.clipboard.writeText(code);
-      setStatus("Till code copied.");
+      toast.success("Till code copied.");
     } catch {
-      setStatus(code);
+      toast.error(`Could not copy. Code: ${code}`);
     }
   }
 
-  if (!ready) return <ManagerSkeleton />;
+  if (!ready) return <ManagerSkeleton variant="list" />;
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
-      <section className="overflow-hidden rounded-2xl bg-white shadow-[0_8px_30px_rgba(28,28,30,0.06)]">
+    <div>
+      <div className="mb-4 flex justify-end">
+        <PrimaryButton
+          onClick={() => {
+            setDraft({ ...blank, branchName: branches[0]?.name ?? "Victoria Island" });
+            setOpen(true);
+          }}
+        >
+          Issue till
+        </PrimaryButton>
+      </div>
+      <div className="overflow-hidden rounded-2xl bg-white shadow-[0_8px_30px_rgba(28,28,30,0.06)]">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-neutral-100 text-neutral-500">
             <tr>
@@ -242,80 +257,62 @@ export function TillManager() {
             )}
           </tbody>
         </table>
-      </section>
-
-      <form
-        className="rounded-2xl bg-white p-5 shadow-[0_8px_30px_rgba(28,28,30,0.06)]"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void onSave();
-        }}
+      </div>
+      <SlideOver
+        open={open}
+        title={draft.id ? "Edit till" : "Issue a till"}
+        subtitle="The 16-character code is generated here and entered on that one device."
+        onClose={() => setOpen(false)}
+        footer={
+          <PrimaryButton className="w-full" disabled={busy} onClick={() => void onSave()}>
+            {draft.id ? "Save till" : "Issue till and generate code"}
+          </PrimaryButton>
+        }
       >
-        <h2 className="font-semibold">{draft.id ? "Edit till" : "Issue a till"}</h2>
-        <p className="mt-1 text-sm text-neutral-500">
-          The till name is what the register shows (for example TILL-VI-01). The
-          product decides which till UI that device opens after activation —
-          supermarket is the current barcode grid. The 16-character code is
-          generated here and entered on that one device. First activation starts
-          a one-year subscription.
-        </p>
-        <label className="mt-4 block text-sm font-medium">Till name</label>
-        <input
-          value={draft.name}
-          onChange={(event) =>
-            setDraft({ ...draft, name: event.target.value.toUpperCase() })
-          }
-          className="mt-1 w-full rounded-xl border border-neutral-200 px-3 py-2 font-mono outline-none focus:border-[#7B61FF]"
-          placeholder="TILL-VI-01"
-          required
-        />
-        <label className="mt-3 block text-sm font-medium">Software product</label>
-        <select
-          value={draft.product}
-          onChange={(event) =>
-            setDraft({ ...draft, product: event.target.value as TillProduct })
-          }
-          className="mt-1 w-full rounded-xl border border-neutral-200 bg-white px-3 py-2 outline-none focus:border-[#7B61FF]"
-        >
-          {TILL_PRODUCTS.map((row) => (
-            <option key={row.id} value={row.id}>
-              {row.label}
-            </option>
-          ))}
-        </select>
-        <label className="mt-3 block text-sm font-medium">Branch</label>
-        <input
-          value={draft.branchName}
-          onChange={(event) => setDraft({ ...draft, branchName: event.target.value })}
-          className="mt-1 w-full rounded-xl border border-neutral-200 px-3 py-2 outline-none focus:border-[#7B61FF]"
-        />
-        <label className="mt-4 flex items-center gap-2 text-sm">
+        <Field label="Till name">
           <input
-            type="checkbox"
-            checked={draft.active}
-            onChange={(event) => setDraft({ ...draft, active: event.target.checked })}
+            className={`${fieldClass} font-mono`}
+            value={draft.name}
+            placeholder="TILL-VI-01"
+            onChange={(event) => setDraft({ ...draft, name: event.target.value.toUpperCase() })}
           />
-          Active
-        </label>
-        {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
-        {status ? <p className="mt-3 text-sm text-[#6d4aff]">{status}</p> : null}
-        <button
-          type="submit"
-          disabled={busy}
-          className="mt-5 w-full rounded-xl bg-[#6d4aff] py-2.5 font-semibold text-white disabled:opacity-60"
-        >
-          {draft.id ? "Save till" : "Issue till and generate code"}
-        </button>
-        {draft.id ? (
-          <button
-            type="button"
-            className="mt-2 w-full py-2 text-sm text-neutral-500"
-            onClick={() => setDraft(blank)}
+        </Field>
+        <Field label="Software product">
+          <select
+            className={fieldClass}
+            value={draft.product}
+            onChange={(event) => setDraft({ ...draft, product: event.target.value as TillProduct })}
           >
-            Cancel
-          </button>
-        ) : null}
-      </form>
+            {TILL_PRODUCTS.map((row) => (
+              <option key={row.id} value={row.id}>
+                {row.label}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Branch">
+          {branches.length ? (
+            <select
+              className={fieldClass}
+              value={draft.branchName}
+              onChange={(event) => setDraft({ ...draft, branchName: event.target.value })}
+            >
+              {branches.map((row) => (
+                <option key={row.id} value={row.name}>
+                  {row.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              className={fieldClass}
+              value={draft.branchName}
+              onChange={(event) => setDraft({ ...draft, branchName: event.target.value })}
+            />
+          )}
+        </Field>
+        <ToggleField label="Active" checked={draft.active} onChange={(active) => setDraft({ ...draft, active })} />
+      </SlideOver>
     </div>
   );
 }

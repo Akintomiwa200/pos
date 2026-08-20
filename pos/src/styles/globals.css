@@ -496,7 +496,122 @@ button {
 }
 
 .header .nav-btn {
+  position: relative;
   flex-shrink: 0;
+}
+
+.filter-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.header .nav-btn.filter-on {
+  background: #f4f0ff;
+  color: #6d4aff;
+}
+
+.filter-count {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #6d4aff;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+
+.filter-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  width: min(420px, calc(100vw - 120px));
+  max-height: min(70vh, 560px);
+  overflow: auto;
+  background: #fff;
+  border-radius: 20px;
+  padding: 18px 18px 16px;
+  box-shadow: 0 16px 40px rgba(28, 28, 30, 0.16);
+}
+
+.filter-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.filter-panel-head h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.filter-panel-head p {
+  margin: 2px 0 0;
+  color: #8e8e93;
+  font-size: 13px;
+}
+
+.filter-label {
+  margin: 14px 0 8px;
+  color: #8e8e93;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.filter-apply {
+  margin-top: 18px;
+}
+
+.filter-text-btn {
+  border: 0;
+  background: transparent;
+  color: #6d4aff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+
+.filter-applied {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: -8px 0 16px;
+}
+
+.filter-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 999px;
+  padding: 7px 10px 7px 12px;
+  background: #f4f0ff;
+  color: #6d4aff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
 }
 
 .crumb {
@@ -532,10 +647,15 @@ button {
   align-items: center;
   gap: 8px;
   background: #fff;
+  border: 1px solid transparent;
   border-radius: 999px;
   padding: 10px 16px;
   color: #8e8e93;
   flex-shrink: 0;
+}
+
+.search:focus-within {
+  border-color: #6d4aff;
 }
 
 .search input {
@@ -2167,4 +2287,112 @@ button {
   margin: 0;
   width: 64px;
   font-size: 22px;
+}
+
+.room-floors {
+  display: grid;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.room-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 10px;
+}
+
+.room-card,
+.ticket-card {
+  border: 0;
+  border-radius: 18px;
+  min-height: 92px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+  cursor: pointer;
+  color: #1c1c1e;
+  box-shadow: 0 6px 16px rgba(28, 28, 30, 0.08);
+  text-align: left;
+}
+
+.room-card.selected,
+.ticket-card.selected {
+  outline: 2px solid #1c1c1e;
+  outline-offset: 3px;
+}
+
+.room-card strong,
+.ticket-card strong {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+.room-card small,
+.room-card em,
+.ticket-card small,
+.ticket-card em {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 600;
+  color: #3f3f46;
+}
+
+.room-guest-input {
+  width: 100%;
+  margin-top: 10px;
+  height: 48px;
+  border-radius: 14px;
+  border: 1px solid #e5e7eb;
+  padding: 0 14px;
+  font: inherit;
+  font-size: 16px;
+  outline: none;
+}
+
+.room-guest-input:focus {
+  border-color: #6d4aff;
+}
+
+.ticket-board {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+
+.ticket-new {
+  border: 1px dashed #d1d5db;
+  background: #fff;
+  border-radius: 14px;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 10px;
+}
+
+.ticket-list {
+  display: grid;
+  gap: 8px;
+  overflow: auto;
+}
+
+.ticket-empty {
+  margin: 8px 0 0;
+  color: #9ca3af;
+  font-size: 13px;
+}
+
+@media (max-width: 1100px) {
+  .ticket-board {
+    grid-template-columns: 1fr 1fr;
+  }
 }

@@ -1,6 +1,7 @@
 import { Injectable, OnModuleInit } from "@nestjs/common";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { ConsoleService } from "../console/console.service";
 
 export type StoredSale = {
   ticketId: string;
@@ -26,6 +27,8 @@ export class SalesService implements OnModuleInit {
   private readonly dir = join(process.cwd(), "data");
   private readonly file = join(this.dir, "sales.json");
   private readonly receiptsDir = join(this.dir, "receipts");
+
+  constructor(private readonly consoleService: ConsoleService) {}
 
   async onModuleInit() {
     await mkdir(this.receiptsDir, { recursive: true });
@@ -61,6 +64,7 @@ export class SalesService implements OnModuleInit {
         "utf8",
       );
     }
+    await this.consoleService.notifySale(next);
     return next;
   }
 }

@@ -14,6 +14,7 @@ import {
 import { accessTree, type AccessNode, type DepartmentName } from "../lib/nav";
 import { deleteGroup, listGroups, refreshSessionFromGroup, saveGroup } from "../lib/hq-api";
 import { useAuth } from "./AuthProvider";
+import { ManagerSkeleton } from "./Skeleton";
 
 function PrivilegeNodeRow({
   node,
@@ -75,6 +76,7 @@ export function GroupManager() {
   const [draft, setDraft] = useState<ConsoleGroup>(emptyGroup());
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
+  const [ready, setReady] = useState(false);
 
   async function load() {
     const rows = await listGroups();
@@ -84,10 +86,14 @@ export function GroupManager() {
       setSelectedId(current.id);
       setDraft(current);
     }
+    setReady(true);
   }
 
   useEffect(() => {
-    load().catch((err) => setError(err instanceof Error ? err.message : "Could not load groups"));
+    load().catch((err) => {
+      setError(err instanceof Error ? err.message : "Could not load groups");
+      setReady(true);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -147,6 +153,8 @@ export function GroupManager() {
       setError(err instanceof Error ? err.message : "Could not delete group");
     }
   }
+
+  if (!ready) return <ManagerSkeleton variant="groups" />;
 
   return (
     <div className="grid gap-6 lg:grid-cols-[240px_1fr]">

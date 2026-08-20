@@ -20,3 +20,24 @@ export function isSubscriptionExpired(expiresAt: string | null | undefined) {
   const at = Date.parse(expiresAt);
   return !Number.isFinite(at) || at <= Date.now();
 }
+
+export type TillProduct = "supermarket" | "hotel" | "restaurant" | "dark-kitchen";
+
+export const TILL_PRODUCTS: { id: TillProduct; label: string }[] = [
+  { id: "supermarket", label: "Supermarket" },
+  { id: "hotel", label: "Hotel" },
+  { id: "restaurant", label: "Restaurant" },
+  { id: "dark-kitchen", label: "Dark kitchen" },
+];
+
+export function normalizeTillProduct(value?: string | null): TillProduct {
+  if (value === "hotel" || value === "restaurant" || value === "dark-kitchen") {
+    return value;
+  }
+  return "supermarket";
+}
+
+export function tillProductLabel(value?: string | null) {
+  const id = normalizeTillProduct(value);
+  return TILL_PRODUCTS.find((row) => row.id === id)?.label ?? "Supermarket";
+}

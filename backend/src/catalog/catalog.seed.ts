@@ -9,9 +9,11 @@ export type CatalogItem = {
   image: string;
   onHand: number;
   updatedAt: string;
+  expiresAt?: string;
 };
 
 const now = () => new Date().toISOString();
+const daysOut = (days: number) => new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
 
 export const CATALOG_SEED: CatalogItem[] = [
   {
@@ -26,6 +28,7 @@ export const CATALOG_SEED: CatalogItem[] = [
       "https://images.unsplash.com/photo-1464305795204-6f5bbfc7fb81?auto=format&fit=crop&w=600&q=80",
     onHand: 24,
     updatedAt: now(),
+    expiresAt: daysOut(-4),
   },
   {
     id: "chocolate-cake",
@@ -52,6 +55,7 @@ export const CATALOG_SEED: CatalogItem[] = [
       "https://images.unsplash.com/photo-1519915028121-7d3463d20b13?auto=format&fit=crop&w=600&q=80",
     onHand: 8,
     updatedAt: now(),
+    expiresAt: daysOut(-1),
   },
   {
     id: "lemon-tart",
@@ -65,6 +69,7 @@ export const CATALOG_SEED: CatalogItem[] = [
       "https://images.unsplash.com/photo-1519915308083-83c9c7c5e3c6?auto=format&fit=crop&w=600&q=80",
     onHand: 30,
     updatedAt: now(),
+    expiresAt: daysOut(6),
   },
   {
     id: "berry-cheesecake",
@@ -104,6 +109,7 @@ export const CATALOG_SEED: CatalogItem[] = [
       "https://images.unsplash.com/photo-1555507036-ab1f4038808a?auto=format&fit=crop&w=600&q=80",
     onHand: 40,
     updatedAt: now(),
+    expiresAt: daysOut(2),
   },
   {
     id: "cinnamon-roll",
@@ -130,6 +136,7 @@ export const CATALOG_SEED: CatalogItem[] = [
       "https://images.unsplash.com/photo-1570197788417-0e82375c9371?auto=format&fit=crop&w=600&q=80",
     onHand: 50,
     updatedAt: now(),
+    expiresAt: daysOut(-10),
   },
   {
     id: "chocolate-scoop",
@@ -143,6 +150,7 @@ export const CATALOG_SEED: CatalogItem[] = [
       "https://images.unsplash.com/photo-1563805042-7684c019e1cb?auto=format&fit=crop&w=600&q=80",
     onHand: 44,
     updatedAt: now(),
+    expiresAt: daysOut(-2),
   },
   {
     id: "classic-pancakes",

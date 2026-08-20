@@ -19,6 +19,7 @@ export type CatalogItem = {
   image: string;
   onHand: number;
   updatedAt?: string;
+  expiresAt?: string;
 };
 
 export type CartLine = {

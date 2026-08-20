@@ -17,6 +17,18 @@ export type ConsoleAccount = {
   active: boolean;
 };
 
+export type HqNotice = {
+  id: string;
+  key: string;
+  type: string;
+  title: string;
+  body: string;
+  href: string;
+  createdAt: string;
+  readAt: string | null;
+  derived?: boolean;
+};
+
 export const SEED_GROUPS: ConsoleGroup[] = [
   {
     id: "g-admin",

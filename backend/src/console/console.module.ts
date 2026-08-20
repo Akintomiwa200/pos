@@ -5,5 +5,6 @@ import { ConsoleService } from "./console.service";
 @Module({
   controllers: [ConsoleController],
   providers: [ConsoleService],
+  exports: [ConsoleService],
 })
 export class ConsoleModule {}

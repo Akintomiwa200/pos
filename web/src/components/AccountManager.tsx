@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { ConsoleAccount, ConsoleGroup } from "../lib/access";
 import { deleteAccount, listAccounts, listGroups, saveAccount } from "../lib/hq-api";
 import { useAuth } from "./AuthProvider";
+import { ManagerSkeleton } from "./Skeleton";
 
 type AccountRow = Omit<ConsoleAccount, "password">;
 
@@ -24,6 +25,7 @@ export function AccountManager() {
   const [draft, setDraft] = useState(blank);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
+  const [ready, setReady] = useState(false);
 
   async function load() {
     const [rows, groupRows] = await Promise.all([listAccounts(), listGroups()]);
@@ -32,10 +34,14 @@ export function AccountManager() {
     if (!draft.groupId && groupRows[0]) {
       setDraft((current) => ({ ...current, groupId: current.groupId || groupRows[0].id }));
     }
+    setReady(true);
   }
 
   useEffect(() => {
-    load().catch((err) => setError(err instanceof Error ? err.message : "Could not load accounts"));
+    load().catch((err) => {
+      setError(err instanceof Error ? err.message : "Could not load accounts");
+      setReady(true);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -86,6 +92,8 @@ export function AccountManager() {
       setError(err instanceof Error ? err.message : "Could not delete account");
     }
   }
+
+  if (!ready) return <ManagerSkeleton />;
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_340px]">

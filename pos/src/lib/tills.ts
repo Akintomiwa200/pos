@@ -1,5 +1,5 @@
 import { SETTINGS_EVENT, loadStoreSettings, saveStoreSettings } from "./store-settings";
-import { addOneYear, isSubscriptionExpired } from "./till-code";
+import { addOneYear, isSubscriptionExpired, normalizeTillProduct, type TillProduct } from "./till-code";
 import { apiUrl } from "./api-base";
 
 const KEY = "pos.tills.v1";
@@ -33,6 +33,7 @@ export type TillRecord = {
   notes: string;
   lastOpenedAt: string | null;
   subscriptionExpiresAt: string | null;
+  product: TillProduct;
 };
 
 export function defaultBranches(): BranchRecord[] {
@@ -73,6 +74,7 @@ export function defaultDeviceTill(): TillRecord {
     notes: "",
     lastOpenedAt: null,
     subscriptionExpiresAt: null,
+    product: "supermarket",
   };
 }
 
@@ -121,6 +123,7 @@ function migrateTill(row: Partial<TillRecord> & { id: string } & { key?: string 
     notes: row.notes ?? "",
     lastOpenedAt: row.lastOpenedAt ?? null,
     subscriptionExpiresAt: row.subscriptionExpiresAt ?? null,
+    product: normalizeTillProduct(row.product),
   };
 }
 
@@ -253,6 +256,7 @@ export async function activateDeviceTill(code: string, hardwareHex: string) {
     name?: string;
     code?: string;
     branchName?: string;
+    product?: string;
     sessionToken?: string;
     subscriptionExpiresAt?: string | null;
     message?: string | string[];
@@ -273,6 +277,7 @@ export async function activateDeviceTill(code: string, hardwareHex: string) {
     paired: Boolean(body.sessionToken),
     branchId: branch?.id ?? current.branchId,
     active: true,
+    product: normalizeTillProduct(body.product),
     subscriptionExpiresAt: body.subscriptionExpiresAt ?? addOneYear().toISOString(),
   };
   saveDeviceTill(next);
@@ -295,6 +300,7 @@ export async function heartbeatDeviceTill(hardwareHex: string) {
     const body = (await response.json().catch(() => ({}))) as {
       sessionToken?: string;
       subscriptionExpiresAt?: string | null;
+      product?: string;
       code?: string;
       message?: string | string[];
     };
@@ -309,15 +315,18 @@ export async function heartbeatDeviceTill(hardwareHex: string) {
     }
     if (!response.ok) return { taken: false as const, expired: false as const };
     const nextExpires = body.subscriptionExpiresAt ?? till.subscriptionExpiresAt;
+    const nextProduct = body.product ? normalizeTillProduct(body.product) : till.product;
     if (
       (body.sessionToken && body.sessionToken !== till.sessionToken) ||
-      nextExpires !== till.subscriptionExpiresAt
+      nextExpires !== till.subscriptionExpiresAt ||
+      nextProduct !== till.product
     ) {
       saveDeviceTill({
         ...till,
         sessionToken: body.sessionToken ?? till.sessionToken,
         paired: true,
         subscriptionExpiresAt: nextExpires,
+        product: nextProduct,
       });
     }
   } catch {

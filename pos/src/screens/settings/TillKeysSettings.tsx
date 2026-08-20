@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { SETTINGS_EVENT } from "../../lib/store-settings";
 import { useHardwareHex } from "../../lib/device-hex";
-import { isCompleteTillCode, normalizeTillCode } from "../../lib/till-code";
+import { isCompleteTillCode, normalizeTillCode, tillProductLabel } from "../../lib/till-code";
 import {
   TILLS_EVENT,
   activateDeviceTill,
@@ -91,8 +91,8 @@ export function TillKeysSettings() {
       <LiveNote>
         {till.paired ? (
           <>
-            This device is <strong>{tillLabel(till)}</strong> · {branchName} ·
-            licensed
+            This device is <strong>{tillLabel(till)}</strong> · {branchName} ·{" "}
+            {tillProductLabel(till.product)} · licensed
             {till.subscriptionExpiresAt
               ? ` until ${new Date(till.subscriptionExpiresAt).toLocaleDateString("en-NG", {
                   day: "numeric",
@@ -118,6 +118,12 @@ export function TillKeysSettings() {
           <span className="set-muted" style={{ fontFamily: "ui-monospace, monospace" }}>
             {till.name || "Waiting for activation"}
           </span>
+        </SetRow>
+        <SetRow
+          label="Software product"
+          hint="Set when this till is issued in HQ. It chooses supermarket, hotel, restaurant, or dark kitchen UI."
+        >
+          <span className="set-muted">{tillProductLabel(till.product)}</span>
         </SetRow>
         <SetRow
           label="Till code"

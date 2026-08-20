@@ -9,10 +9,18 @@ import { SEED_ACCOUNTS, SEED_GROUPS } from "./hq-seed";
 const GROUPS_KEY = "hq.groups.v1";
 const ACCOUNTS_KEY = "hq.accounts.v1";
 
-class NetworkError extends Error {
+export class NetworkError extends Error {
   constructor() {
     super("Console API unavailable");
   }
+}
+
+export function authErrorMessage(err: unknown, fallback: string) {
+  if (err instanceof NetworkError || (err instanceof Error && err.message === "Console API unavailable")) {
+    return "HQ API is not running. Start the backend on port 3001.";
+  }
+  if (err instanceof Error && err.message) return err.message;
+  return fallback;
 }
 
 function readLocal<T>(key: string, fallback: T): T {
@@ -34,6 +42,7 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
     response = await fetch(path, {
+      cache: "no-store",
       ...init,
       headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
     });
@@ -51,18 +60,14 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return data;
 }
 
-function sessionFrom(account: ConsoleAccount, group: ConsoleGroup): ConsoleSession {
-  return {
-    token: `hq-${account.id}`,
-    id: account.id,
-    name: account.name,
-    email: account.email,
-    username: account.username,
-    groupId: group.id,
-    groupName: group.name,
-    departments: group.departments,
-    privileges: group.privileges,
-  };
+function authHeaders(token: string): HeadersInit {
+  return { Authorization: `Bearer ${token}` };
+}
+
+function asSession(data: { token: string; user: Omit<ConsoleSession, "token"> }): ConsoleSession {
+  const session: ConsoleSession = { token: data.token, ...data.user };
+  writeSession(session);
+  return session;
 }
 
 export function readSession(): ConsoleSession | null {
@@ -75,30 +80,137 @@ export function writeSession(session: ConsoleSession | null) {
 }
 
 export async function loginConsole(email: string, password: string): Promise<ConsoleSession> {
+  const data = await api<{ token: string; user: Omit<ConsoleSession, "token"> }>(
+    "/api/console/login",
+    { method: "POST", body: JSON.stringify({ email, password }) },
+  );
+  return asSession(data);
+}
+
+export async function registerConsole(input: {
+  name: string;
+  email: string;
+  username: string;
+  password: string;
+}): Promise<ConsoleSession> {
+  const data = await api<{ token: string; user: Omit<ConsoleSession, "token"> }>(
+    "/api/console/register",
+    { method: "POST", body: JSON.stringify(input) },
+  );
+  return asSession(data);
+}
+
+export async function forgotPassword(email: string) {
+  return api<{ ok: true; resetToken?: string }>("/api/console/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+}
+
+export async function resetPassword(token: string, password: string) {
+  return api<{ ok: true }>("/api/console/reset-password", {
+    method: "POST",
+    body: JSON.stringify({ token, password }),
+  });
+}
+
+export async function fetchConsoleSession(token: string): Promise<ConsoleSession> {
+  const data = await api<{ token: string; user: Omit<ConsoleSession, "token"> }>(
+    "/api/console/me",
+    { headers: authHeaders(token) },
+  );
+  return asSession(data);
+}
+
+export async function logoutConsole(token?: string | null) {
+  if (token) {
+    await api("/api/console/logout", {
+      method: "POST",
+      headers: authHeaders(token),
+    }).catch(() => undefined);
+  }
+  writeSession(null);
+}
+
+export async function changePassword(token: string, current: string, password: string) {
+  return api<{ ok: true }>("/api/console/password", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ current, password }),
+  });
+}
+
+export type HqNotice = {
+  id: string;
+  key: string;
+  type: string;
+  title: string;
+  body: string;
+  href: string;
+  createdAt: string;
+  readAt: string | null;
+  derived?: boolean;
+};
+
+export async function listNotifications(token: string) {
+  return api<{ unread: number; items: HqNotice[] }>("/api/console/notifications", {
+    headers: authHeaders(token),
+  });
+}
+
+export async function markNotificationRead(token: string, id: string) {
+  return api<HqNotice>(`/api/console/notifications/${id}/read`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+}
+
+export async function markAllNotificationsRead(token: string) {
+  return api<{ ok: true }>("/api/console/notifications/read-all", {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+}
+
+export type HqSale = {
+  ticketId: string;
+  paidAt: string;
+  tender: string;
+  cashierName: string;
+  totalMinor: number;
+  lines?: Array<{
+    id?: string;
+    itemId?: string;
+    name: string;
+    quantity: number;
+    unitPriceMinor: number;
+  }>;
+};
+
+export async function listSales(): Promise<HqSale[]> {
   try {
-    const data = await api<{ token: string; user: Omit<ConsoleSession, "token"> }>(
-      "/api/console/login",
-      { method: "POST", body: JSON.stringify({ email, password }) },
-    );
-    const session: ConsoleSession = { token: data.token, ...data.user };
-    writeSession(session);
-    return session;
-  } catch (error) {
-    if (!(error instanceof NetworkError)) throw error;
-    const groups = readLocal(GROUPS_KEY, SEED_GROUPS);
-    const accounts = readLocal(ACCOUNTS_KEY, SEED_ACCOUNTS);
-    const key = email.trim().toLowerCase();
-    const account = accounts.find(
-      (row) =>
-        row.active &&
-        (row.email.toLowerCase() === key || row.username.toLowerCase() === key) &&
-        row.password === password,
-    );
-    const group = account ? groups.find((row) => row.id === account.groupId) : undefined;
-    if (!account || !group) throw new Error("Invalid email or password");
-    const session = sessionFrom(account, group);
-    writeSession(session);
-    return session;
+    return await api<HqSale[]>("/api/sales");
+  } catch {
+    return [];
+  }
+}
+
+export type HqCatalogItem = {
+  id: string;
+  name: string;
+  category: string;
+  sku: string;
+  barcode: string;
+  priceMinor: number;
+  onHand: number;
+  expiresAt?: string;
+};
+
+export async function listCatalog(): Promise<HqCatalogItem[]> {
+  try {
+    return await api<HqCatalogItem[]>("/api/catalog/items");
+  } catch {
+    return [];
   }
 }
 
@@ -224,11 +336,29 @@ export function refreshSessionFromGroup(
   return next;
 }
 
+export type TillProduct = "supermarket" | "hotel" | "restaurant" | "dark-kitchen";
+
+export const TILL_PRODUCTS: { id: TillProduct; label: string }[] = [
+  { id: "supermarket", label: "Supermarket" },
+  { id: "hotel", label: "Hotel" },
+  { id: "restaurant", label: "Restaurant" },
+  { id: "dark-kitchen", label: "Dark kitchen" },
+];
+
+export function tillProductLabel(value?: string | null) {
+  const id =
+    value === "hotel" || value === "restaurant" || value === "dark-kitchen"
+      ? value
+      : "supermarket";
+  return TILL_PRODUCTS.find((row) => row.id === id)?.label ?? "Supermarket";
+}
+
 export type HqTill = {
   id: string;
   name: string;
   code: string;
   branchName: string;
+  product: TillProduct;
   active: boolean;
   hardwareHex: string | null;
   pairedAt: string | null;

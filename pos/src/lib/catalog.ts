@@ -156,6 +156,19 @@ export function findCatalogItem(items: CatalogItem[], query: string) {
   );
 }
 
+export function findCatalogByCode(items: CatalogItem[], query: string) {
+  const q = query.trim().toLowerCase();
+  if (!q) return null;
+  return (
+    items.find(
+      (item) =>
+        item.barcode.toLowerCase() === q ||
+        item.sku.toLowerCase() === q ||
+        item.id.toLowerCase() === q,
+    ) ?? null
+  );
+}
+
 export async function lookupCatalog(query: string) {
   if (readStockMode() === "offline") return null;
   const response = await fetch(

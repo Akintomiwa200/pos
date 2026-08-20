@@ -2,18 +2,23 @@
 
 import { useEffect, useState } from "react";
 import {
+  TILL_PRODUCTS,
   deleteTill,
   listTills,
   regenerateTillCode,
   renewTill,
   saveTill,
+  tillProductLabel,
   type HqTill,
+  type TillProduct,
 } from "../lib/hq-api";
+import { ManagerSkeleton } from "./Skeleton";
 
 const blank = {
   id: "",
   name: "",
   branchName: "Victoria Island",
+  product: "supermarket" as TillProduct,
   active: true,
 };
 
@@ -40,15 +45,18 @@ export function TillManager() {
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
+  const [ready, setReady] = useState(false);
 
   async function load() {
     setTills(await listTills());
+    setReady(true);
   }
 
   useEffect(() => {
-    load().catch((err) =>
-      setError(err instanceof Error ? err.message : "Could not load tills"),
-    );
+    load().catch((err) => {
+      setError(err instanceof Error ? err.message : "Could not load tills");
+      setReady(true);
+    });
     const timer = window.setInterval(() => {
       load().catch(() => undefined);
     }, 4000);
@@ -60,6 +68,7 @@ export function TillManager() {
       id: row.id,
       name: row.name,
       branchName: row.branchName,
+      product: row.product ?? "supermarket",
       active: row.active,
     });
     setError("");
@@ -144,6 +153,8 @@ export function TillManager() {
     }
   }
 
+  if (!ready) return <ManagerSkeleton />;
+
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
       <section className="overflow-hidden rounded-2xl bg-white shadow-[0_8px_30px_rgba(28,28,30,0.06)]">
@@ -153,6 +164,7 @@ export function TillManager() {
               <th className="px-4 py-3 font-medium">Till name</th>
               <th className="px-4 py-3 font-medium">Provider code</th>
               <th className="px-4 py-3 font-medium">Hardware hex</th>
+              <th className="px-4 py-3 font-medium">Product</th>
               <th className="px-4 py-3 font-medium">Branch</th>
               <th className="px-4 py-3 font-medium">Expires</th>
               <th className="px-4 py-3 font-medium">Status</th>
@@ -162,7 +174,7 @@ export function TillManager() {
           <tbody>
             {tills.length === 0 ? (
               <tr>
-                <td className="px-4 py-6 text-neutral-400" colSpan={7}>
+                <td className="px-4 py-6 text-neutral-400" colSpan={8}>
                   No tills issued yet. Create one and give the code to that device.
                 </td>
               </tr>
@@ -193,6 +205,7 @@ export function TillManager() {
                       </span>
                     ) : null}
                   </td>
+                  <td className="px-4 py-3 text-neutral-600">{tillProductLabel(row.product)}</td>
                   <td className="px-4 py-3 text-neutral-600">{row.branchName || "—"}</td>
                   <td className="px-4 py-3 text-neutral-600">{expiryLabel(row)}</td>
                   <td className="px-4 py-3">{statusLabel(row)}</td>
@@ -241,8 +254,10 @@ export function TillManager() {
         <h2 className="font-semibold">{draft.id ? "Edit till" : "Issue a till"}</h2>
         <p className="mt-1 text-sm text-neutral-500">
           The till name is what the register shows (for example TILL-VI-01). The
-          16-character code is generated here and entered on that one device.
-          First activation starts a one-year subscription.
+          product decides which till UI that device opens after activation —
+          supermarket is the current barcode grid. The 16-character code is
+          generated here and entered on that one device. First activation starts
+          a one-year subscription.
         </p>
         <label className="mt-4 block text-sm font-medium">Till name</label>
         <input
@@ -254,6 +269,20 @@ export function TillManager() {
           placeholder="TILL-VI-01"
           required
         />
+        <label className="mt-3 block text-sm font-medium">Software product</label>
+        <select
+          value={draft.product}
+          onChange={(event) =>
+            setDraft({ ...draft, product: event.target.value as TillProduct })
+          }
+          className="mt-1 w-full rounded-xl border border-neutral-200 bg-white px-3 py-2 outline-none focus:border-[#7B61FF]"
+        >
+          {TILL_PRODUCTS.map((row) => (
+            <option key={row.id} value={row.id}>
+              {row.label}
+            </option>
+          ))}
+        </select>
         <label className="mt-3 block text-sm font-medium">Branch</label>
         <input
           value={draft.branchName}

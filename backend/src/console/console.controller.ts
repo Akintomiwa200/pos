@@ -1,6 +1,10 @@
-import { Body, Controller, Delete, Get, Param, Post } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Headers, Param, Post } from "@nestjs/common";
 import { ConsoleService } from "./console.service";
 import type { ConsoleAccount, ConsoleGroup } from "./console.types";
+
+function bearer(header?: string) {
+  return header?.replace(/^Bearer\s+/i, "").trim() ?? "";
+}
 
 @Controller("console")
 export class ConsoleController {
@@ -9,6 +13,66 @@ export class ConsoleController {
   @Post("login")
   login(@Body() body: { email?: string; username?: string; password?: string }) {
     return this.consoleService.login(body.email ?? body.username ?? "", body.password ?? "");
+  }
+
+  @Post("register")
+  register(
+    @Body() body: { name?: string; email?: string; username?: string; password?: string },
+  ) {
+    return this.consoleService.register(body);
+  }
+
+  @Post("forgot-password")
+  forgotPassword(@Body() body: { email?: string; username?: string }) {
+    return this.consoleService.forgotPassword(body.email ?? body.username ?? "");
+  }
+
+  @Post("reset-password")
+  resetPassword(@Body() body: { token?: string; password?: string }) {
+    return this.consoleService.resetPassword(body.token ?? "", body.password ?? "");
+  }
+
+  @Get("me")
+  me(@Headers("authorization") authorization?: string) {
+    return this.consoleService.me(bearer(authorization));
+  }
+
+  @Post("logout")
+  logout(@Headers("authorization") authorization?: string) {
+    return this.consoleService.logout(bearer(authorization));
+  }
+
+  @Get("notifications")
+  notifications(@Headers("authorization") authorization?: string) {
+    this.consoleService.me(bearer(authorization));
+    return this.consoleService.listNotifications();
+  }
+
+  @Post("notifications/read-all")
+  readAllNotifications(@Headers("authorization") authorization?: string) {
+    this.consoleService.me(bearer(authorization));
+    return this.consoleService.markAllNoticesRead();
+  }
+
+  @Post("notifications/:id/read")
+  readNotification(
+    @Headers("authorization") authorization?: string,
+    @Param("id") id?: string,
+  ) {
+    this.consoleService.me(bearer(authorization));
+    return this.consoleService.markNoticeRead(id ?? "");
+  }
+
+  @Post("password")
+  changePassword(
+    @Headers("authorization") authorization?: string,
+    @Body() body?: { current?: string; password?: string },
+  ) {
+    return this.consoleService.changePassword(
+      bearer(authorization),
+      body?.current ?? "",
+      body?.password ?? "",
+    );
   }
 
   @Get("groups")
@@ -53,6 +117,7 @@ export class ConsoleController {
       id?: string;
       name?: string;
       branchName?: string;
+      product?: string;
       active?: boolean;
     },
   ) {

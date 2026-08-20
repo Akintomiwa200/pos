@@ -17,7 +17,15 @@ import { OpenShiftModal } from "./components/shift/OpenShiftModal";
 import { PinModal } from "./components/shift/PinModal";
 import { ActivateTillModal } from "./components/shift/ActivateTillModal";
 import { createFloor, type FloorTable } from "./lib/tables";
-import { findCatalogItem, lookupCatalog, useCatalog } from "./lib/catalog";
+import { createRooms, type HotelRoom } from "./lib/rooms";
+import {
+  channelLabel,
+  createKitchenBoard,
+  nextOrderNo,
+  type KitchenChannel,
+  type KitchenTicket,
+} from "./lib/tickets";
+import { findCatalogByCode, lookupCatalog, useCatalog } from "./lib/catalog";
 import { TENDER_LABEL, type SaleReceipt } from "./lib/receipt";
 import { archiveSale } from "./lib/sales";
 import {
@@ -27,6 +35,10 @@ import {
 } from "./lib/store-settings";
 import { useStoreSettings, useTills } from "./lib/use-store-settings";
 import { findTill, heartbeatDeviceTill, TILL_EXPIRED_EVENT, TILL_TAKEN_EVENT, tillLabel, tillNeedsActivation } from "./lib/tills";
+import { normalizeTillProduct } from "./lib/till-code";
+import { TablesScreen } from "./screens/tables/TablesScreen";
+import { RoomsScreen } from "./screens/rooms/RoomsScreen";
+import { KitchenHome } from "./screens/kitchen/KitchenHome";
 import { useHardwareHex } from "./lib/device-hex";
 import {
   canAccessSettings,
@@ -120,11 +132,14 @@ export default function App() {
   const [pinBusy, setPinBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [activeTableId, setActiveTableId] = useState<string | null>(null);
+  const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
+  const [activeTicketId, setActiveTicketId] = useState<string | null>(null);
   const [floor, setFloor] = useState(createFloor);
+  const [rooms, setRooms] = useState(createRooms);
+  const [tickets, setTickets] = useState(createKitchenBoard);
   const [screen, setScreen] = useState<Screen>("home");
   const [category, setCategory] = useState("Cakes");
   const [query, setQuery] = useState("");
-  const [barcode, setBarcode] = useState("");
   const [lookupNotice, setLookupNotice] = useState("");
   const [cart, setCart] = useState<CartLine[]>([]);
   const [tender, setTender] = useState<TenderType>("cash");
@@ -143,7 +158,6 @@ export default function App() {
   const awaitingActivation = useRef(false);
 
   const items = catalog.filter((item) => {
-    if (screen === "items" && item.category !== category) return false;
     const q = query.trim().toLowerCase();
     if (!q) return true;
     return (
@@ -154,11 +168,14 @@ export default function App() {
   });
   const totals = computeTotals(cartSubtotal(cart), settings);
   const activeTill = tills[0] ?? findTill();
+  const product = normalizeTillProduct(activeTill.product);
   const needsActivation = tillNeedsActivation(activeTill);
   const tillClosed = needsActivation || !activeTill.paired || !activeTill.active;
   const shiftLocked = Boolean(needsShift && settings.requireOpenShift) || tillClosed;
   const empty = cart.length === 0;
   const activeTable = floor.find((table) => table.id === activeTableId) ?? null;
+  const activeRoom = rooms.find((room) => room.id === activeRoomId) ?? null;
+  const activeTicket = tickets.find((ticket) => ticket.id === activeTicketId) ?? null;
 
   useEffect(() => {
     if (!activeTill.paired || !hardwareHex || needsActivation) return;
@@ -260,6 +277,24 @@ export default function App() {
     );
   }, [cart, activeTableId]);
 
+  useEffect(() => {
+    if (!activeRoomId) return;
+    setRooms((current) =>
+      current.map((room) =>
+        room.id === activeRoomId ? { ...room, lines: cart } : room,
+      ),
+    );
+  }, [cart, activeRoomId]);
+
+  useEffect(() => {
+    if (!activeTicketId) return;
+    setTickets((current) =>
+      current.map((ticket) =>
+        ticket.id === activeTicketId ? { ...ticket, lines: cart } : ticket,
+      ),
+    );
+  }, [cart, activeTicketId]);
+
   const splitParts = useMemo(() => {
     const n = Math.max(1, splitCount);
     const base = Math.floor(totals.totalMinor / n);
@@ -284,9 +319,10 @@ export default function App() {
     setScreen("home");
     setCategory("Cakes");
     setQuery("");
-    setBarcode("");
     setLookupNotice("");
     setActiveTableId(null);
+    setActiveRoomId(null);
+    setActiveTicketId(null);
   }
 
   function signOut() {
@@ -297,6 +333,8 @@ export default function App() {
     setPinError("");
     setNotice("");
     setFloor(createFloor());
+    setRooms(createRooms());
+    setTickets(createKitchenBoard());
     resetTill();
   }
 
@@ -310,6 +348,8 @@ export default function App() {
     setLockoutMessage("");
     setSession(user);
     setFloor(createFloor());
+    setRooms(createRooms());
+    setTickets(createKitchenBoard());
     resetTill();
     if (mustOpenShift && loadStoreSettings().requireOpenShift) {
       setNeedsShift(true);
@@ -326,6 +366,18 @@ export default function App() {
     );
   }
 
+  function patchRoom(id: string, patch: Partial<HotelRoom>) {
+    setRooms((current) =>
+      current.map((room) => (room.id === id ? { ...room, ...patch } : room)),
+    );
+  }
+
+  function patchTicket(id: string, patch: Partial<KitchenTicket>) {
+    setTickets((current) =>
+      current.map((ticket) => (ticket.id === id ? { ...ticket, ...patch } : ticket)),
+    );
+  }
+
   function openTable(table: FloorTable, guests: number) {
     patchTable(table.id, {
       status: "occupied",
@@ -334,6 +386,8 @@ export default function App() {
       lines: [],
     });
     setActiveTableId(table.id);
+    setActiveRoomId(null);
+    setActiveTicketId(null);
     setCart([]);
     setReceipt(null);
     setScreen("items");
@@ -341,6 +395,8 @@ export default function App() {
 
   function selectTable(table: FloorTable) {
     setActiveTableId(table.id);
+    setActiveRoomId(null);
+    setActiveTicketId(null);
     setCart(table.lines);
     setReceipt(null);
     setScreen("items");
@@ -348,7 +404,62 @@ export default function App() {
 
   function walkIn() {
     setActiveTableId(null);
+    setActiveRoomId(null);
+    setActiveTicketId(null);
     setCart([]);
+    setReceipt(null);
+    setScreen("items");
+  }
+
+  function openRoom(room: HotelRoom, guests: number, guestName: string) {
+    patchRoom(room.id, {
+      status: "occupied",
+      guests,
+      guestName,
+      openedAt: new Date().toISOString(),
+      lines: [],
+    });
+    setActiveRoomId(room.id);
+    setActiveTableId(null);
+    setActiveTicketId(null);
+    setCart([]);
+    setReceipt(null);
+    setScreen("items");
+  }
+
+  function selectRoom(room: HotelRoom) {
+    setActiveRoomId(room.id);
+    setActiveTableId(null);
+    setActiveTicketId(null);
+    setCart(room.lines);
+    setReceipt(null);
+    setScreen("items");
+  }
+
+  function newKitchenTicket(channel: KitchenChannel) {
+    const ticket: KitchenTicket = {
+      id: crypto.randomUUID(),
+      channel,
+      orderNo: nextOrderNo(channel, tickets),
+      guestName: channel === "walk-in" ? "Counter" : "",
+      status: "new",
+      openedAt: new Date().toISOString(),
+      lines: [],
+    };
+    setTickets((current) => [ticket, ...current]);
+    setActiveTicketId(ticket.id);
+    setActiveTableId(null);
+    setActiveRoomId(null);
+    setCart([]);
+    setReceipt(null);
+    setScreen("items");
+  }
+
+  function selectTicket(ticket: KitchenTicket) {
+    setActiveTicketId(ticket.id);
+    setActiveTableId(null);
+    setActiveRoomId(null);
+    setCart(ticket.lines);
     setReceipt(null);
     setScreen("items");
   }
@@ -510,13 +621,12 @@ export default function App() {
       );
       return;
     }
-    const local = findCatalogItem(catalog, code);
+    const local = findCatalogByCode(catalog, code);
     if (local) {
       addItem(local);
       if (settings.barcodeBeep) beep();
       setLookupNotice(`Added ${local.name}`);
       setQuery("");
-      setBarcode("");
       return;
     }
     try {
@@ -526,7 +636,6 @@ export default function App() {
         if (settings.barcodeBeep) beep();
         setLookupNotice(`Added ${remote.name}`);
         setQuery("");
-        setBarcode("");
         return;
       }
     } catch {
@@ -617,6 +726,12 @@ export default function App() {
     if (activeTableId) {
       patchTable(activeTableId, { status: "billed", lines: cart });
     }
+    if (activeRoomId) {
+      patchRoom(activeRoomId, { status: "checkout", lines: cart });
+    }
+    if (activeTicketId) {
+      patchTicket(activeTicketId, { status: "dispatched", lines: cart });
+    }
     setPaying(false);
     setScreen("paid");
   }
@@ -675,6 +790,20 @@ export default function App() {
         lines: [],
       });
       setActiveTableId(null);
+    }
+    if (activeRoomId) {
+      patchRoom(activeRoomId, {
+        status: "dirty",
+        guests: 0,
+        guestName: "",
+        openedAt: null,
+        lines: [],
+      });
+      setActiveRoomId(null);
+    }
+    if (activeTicketId) {
+      setTickets((current) => current.filter((ticket) => ticket.id !== activeTicketId));
+      setActiveTicketId(null);
     }
     setCart([]);
     setTender("cash");
@@ -753,10 +882,11 @@ export default function App() {
         />
       )}
       <main className={fullscreen ? "stage-full" : "stage"}>
-        {(screen === "home" || screen === "items") && (
+        {(screen === "home" || screen === "items") && product === "supermarket" && (
           <ItemsScreen
             mode={screen === "home" ? "home" : "items"}
             items={items}
+            catalog={catalog}
             category={category}
             onCategory={setCategory}
             onAdd={addItem}
@@ -765,13 +895,50 @@ export default function App() {
               setQuery(value);
               setLookupNotice("");
             }}
-            onCommitQuery={(value) => void addByCode(value, false)}
-            barcode={barcode}
-            onBarcode={(value) => {
-              setBarcode(value);
+            onCommitQuery={(value) => void addByCode(value, true)}
+            notice={lookupNotice}
+          />
+        )}
+        {screen === "home" && product === "restaurant" && (
+          <TablesScreen
+            tables={floor}
+            activeTableId={activeTableId}
+            onSelect={selectTable}
+            onOpen={openTable}
+            onWalkIn={walkIn}
+          />
+        )}
+        {screen === "home" && product === "hotel" && (
+          <RoomsScreen
+            rooms={rooms}
+            activeRoomId={activeRoomId}
+            onSelect={selectRoom}
+            onOpen={openRoom}
+            onFrontDesk={walkIn}
+          />
+        )}
+        {screen === "home" && product === "dark-kitchen" && (
+          <KitchenHome
+            tickets={tickets}
+            activeTicketId={activeTicketId}
+            onSelect={selectTicket}
+            onNew={newKitchenTicket}
+          />
+        )}
+        {screen === "items" && product !== "supermarket" && (
+          <ItemsScreen
+            mode="items"
+            items={items}
+            catalog={catalog}
+            category={category}
+            onCategory={setCategory}
+            onAdd={addItem}
+            query={query}
+            onQuery={(value) => {
+              setQuery(value);
               setLookupNotice("");
             }}
-            onCommitBarcode={(value) => void addByCode(value, true)}
+            onCommitQuery={(value) => void addByCode(value, true)}
             notice={lookupNotice}
           />
         )}
@@ -823,7 +990,15 @@ export default function App() {
           tableLabel={
             activeTable
               ? `Table ${activeTable.name} · ${activeTable.guests} guests`
-              : "Walk-in"
+              : activeRoom
+                ? `Room ${activeRoom.name}${activeRoom.guestName ? ` · ${activeRoom.guestName}` : ""}`
+                : activeTicket
+                  ? `${channelLabel(activeTicket.channel)} · ${activeTicket.orderNo}`
+                  : product === "hotel"
+                    ? "Front desk"
+                    : product === "dark-kitchen"
+                      ? "New ticket"
+                      : "Walk-in"
           }
           lines={screen === "paid" && receipt ? receipt.lines : cart}
           onQty={changeQty}

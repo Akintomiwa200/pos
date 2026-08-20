@@ -15,11 +15,33 @@ export function generateTillCode() {
   return normalizeTillCode(randomBytes(8).toString("hex"));
 }
 
+export type TillProduct = "supermarket" | "hotel" | "restaurant" | "dark-kitchen";
+
+export const TILL_PRODUCTS: { id: TillProduct; label: string }[] = [
+  { id: "supermarket", label: "Supermarket" },
+  { id: "hotel", label: "Hotel" },
+  { id: "restaurant", label: "Restaurant" },
+  { id: "dark-kitchen", label: "Dark kitchen" },
+];
+
+export function normalizeTillProduct(value?: string | null): TillProduct {
+  if (value === "hotel" || value === "restaurant" || value === "dark-kitchen") {
+    return value;
+  }
+  return "supermarket";
+}
+
+export function tillProductLabel(value?: string | null) {
+  const id = normalizeTillProduct(value);
+  return TILL_PRODUCTS.find((row) => row.id === id)?.label ?? "Supermarket";
+}
+
 export type HqTill = {
   id: string;
   name: string;
   code: string;
   branchName: string;
+  product: TillProduct;
   active: boolean;
   hardwareHex: string | null;
   sessionToken: string | null;
@@ -49,6 +71,7 @@ export const DEMO_TILL: HqTill = {
   name: "TILL-DEMO-01",
   code: "1111-2222-3333-4444",
   branchName: "Victoria Island",
+  product: "supermarket",
   active: true,
   hardwareHex: null,
   sessionToken: null,
@@ -64,6 +87,7 @@ export const SEED_TILLS: HqTill[] = [
     name: "TILL-VI-01",
     code: "A7F3-19C0-B4E2-8D61",
     branchName: "Victoria Island",
+    product: "supermarket",
     active: true,
     hardwareHex: null,
     sessionToken: null,

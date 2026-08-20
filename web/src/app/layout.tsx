@@ -3,8 +3,11 @@ import { AuthProvider } from "../components/AuthProvider";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "POS Console",
-  description: "HQ back office for supermarket, hotel, and restaurant POS",
+  title: {
+    default: "POS",
+    template: "%s · POS",
+  },
+  description: "Till, HQ, and price check for supermarket, hotel, and restaurant POS",
 };
 
 export default function RootLayout({

@@ -1,52 +1,57 @@
 import Link from "next/link";
-import { FOOTER_COLUMNS, SITE } from "../../lib/site";
 import { BrandLogo } from "./BrandLogo";
+
+function DribbbleIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.7">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M5.2 8.6c3.2 0 7.4.4 11.6 3.6" />
+      <path d="M6.4 18.2c2-3.6 4.4-6.2 8.8-8.8" />
+      <path d="M16.8 4.8c-1.6 2.4-3.8 6.6-4.2 12.4" />
+    </svg>
+  );
+}
+
+function XIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="currentColor">
+      <path d="M18.244 2H21.5l-7.5 8.57L22.5 22h-6.59l-5.16-6.75L4.8 22H1.54l8.02-9.16L1.5 2h6.76l4.66 6.18L18.244 2Zm-1.16 18.04h1.8L7 3.86H5.07l12.014 16.18Z" />
+    </svg>
+  );
+}
 
 export function SiteFooter() {
   return (
-    <footer className="border-t border-neutral-200 bg-white">
-      <div className="mx-auto grid max-w-6xl gap-10 px-4 py-14 sm:px-6 md:grid-cols-5">
-        <div className="md:col-span-1">
-          <BrandLogo />
-          <p className="mt-3 text-sm leading-relaxed text-neutral-500">{SITE.tagline}</p>
-          <div className="mt-4 flex flex-wrap gap-3 text-sm text-neutral-500">
-            <Link href="/contact" className="hover:text-[#6d4aff]">
-              Contact
-            </Link>
-            <Link href="/support" className="hover:text-[#6d4aff]">
-              Support
-            </Link>
-            <a href="mailto:hello@localhost" className="hover:text-[#6d4aff]">
-              Email
-            </a>
-          </div>
-        </div>
-        {FOOTER_COLUMNS.map((column) => (
-          <div key={column.heading}>
-            <p className="text-[13px] font-medium text-[#6d4aff]">{column.heading}</p>
-            <ul className="mt-3 space-y-2">
-              {column.links.map((link) => (
-                <li key={link.href}>
-                  <Link href={link.href} className="text-sm text-neutral-600 hover:text-[#6d4aff]">
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
-      </div>
-      <div className="border-t border-neutral-100">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 px-4 py-4 text-xs text-neutral-400 sm:px-6">
-          <p>
-            © {new Date().getFullYear()} {SITE.name}
-          </p>
-          <div className="flex gap-4">
-            <Link href="/privacy">Privacy</Link>
-            <Link href="/terms">Terms</Link>
-            <Link href="/pricing">Pricing</Link>
-            <Link href="/login">Login</Link>
-          </div>
+    <footer className="px-4 pb-8 pt-2 sm:px-6">
+      <div className="mx-auto flex max-w-5xl flex-col items-center gap-4 rounded-[28px] bg-white px-5 py-4 shadow-[0_8px_28px_rgba(28,28,30,0.06)] md:flex-row md:justify-between md:rounded-full md:py-3">
+        <BrandLogo size="sm" />
+        <nav className="flex items-center gap-6 text-sm font-medium text-[#1c1c1e]">
+          <Link href="/privacy" className="hover:text-[#6d4aff]">
+            Privacy Policy
+          </Link>
+          <Link href="/terms" className="hover:text-[#6d4aff]">
+            Terms & Conditions
+          </Link>
+        </nav>
+        <div className="flex items-center gap-2">
+          <a
+            href="https://dribbble.com"
+            target="_blank"
+            rel="noreferrer"
+            aria-label="Dribbble"
+            className="grid h-9 w-9 place-items-center rounded-full text-[#1c1c1e] ring-1 ring-neutral-200 hover:text-[#6d4aff]"
+          >
+            <DribbbleIcon className="h-[15px] w-[15px]" />
+          </a>
+          <a
+            href="https://x.com"
+            target="_blank"
+            rel="noreferrer"
+            aria-label="X"
+            className="grid h-9 w-9 place-items-center rounded-full text-[#1c1c1e] ring-1 ring-neutral-200 hover:text-[#6d4aff]"
+          >
+            <XIcon className="h-3.5 w-3.5" />
+          </a>
         </div>
       </div>
     </footer>

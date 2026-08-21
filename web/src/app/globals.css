@@ -14,3 +14,40 @@ body {
   color: #1c1c1e;
   letter-spacing: -0.011em;
 }
+
+.hero-matrix {
+  background-image:
+    linear-gradient(to right, rgb(255 255 255 / 0.07) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(255 255 255 / 0.07) 1px, transparent 1px);
+  background-size: min(24vw, 17rem) min(24vw, 17rem);
+  mask-image: linear-gradient(to bottom, #000 62%, transparent 96%);
+}
+
+.partner-mask {
+  mask-image: linear-gradient(to right, transparent, #000 8%, #000 92%, transparent);
+}
+
+.partner-marquee {
+  display: flex;
+  width: max-content;
+  animation: partner-marquee 64s linear infinite;
+}
+
+.partner-marquee:hover {
+  animation-play-state: paused;
+}
+
+@keyframes partner-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .partner-marquee {
+    animation: none;
+  }
+}

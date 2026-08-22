@@ -172,6 +172,15 @@ input {
   letter-spacing: -0.03em;
 }
 
+.pc-price-unit {
+  display: block;
+  margin-top: 4px;
+  font-size: 18px;
+  font-weight: 600;
+  color: #6b7280;
+  letter-spacing: 0;
+}
+
 .pc-price.flash {
   animation: priceflash 0.9s ease;
 }

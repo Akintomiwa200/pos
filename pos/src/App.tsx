@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CartLine, CatalogItem, TenderType } from "./lib/types";
 import { computeTotals, formatMoney } from "./lib/types";
+import { formatStock, formatUnitLabel } from "./lib/units";
 import { Sidebar } from "./components/layout/Sidebar";
 import { ProfileMenu, type MenuAction } from "./components/layout/ProfileMenu";
 import { CurrentOrder } from "./components/order/CurrentOrder";
@@ -571,16 +572,17 @@ export default function App() {
     const already =
       cart.find((line) => line.itemId === item.id)?.quantity ?? 0;
     if (settings.blockNegativeStock && already + 1 > item.onHand) {
+      const stockLabel = formatUnitLabel(item.unit ?? "each", item.unitLabel);
       setLookupNotice(
         item.onHand <= 0
           ? `${item.name} is out of stock.`
-          : `Only ${item.onHand} ${item.name} on hand.`,
+          : `Only ${item.onHand} ${stockLabel} on hand.`,
       );
       return;
     }
     if (settings.lowStockAlert && item.onHand <= settings.lowStockQty) {
       setLookupNotice(
-        `${item.name} is low — ${item.onHand} left (alert at ${settings.lowStockQty}).`,
+        `${item.name} is low — ${formatStock(item.onHand, item.unit ?? "each", item.packSize ?? 1, item.unitLabel)} (alert at ${settings.lowStockQty}).`,
       );
     } else {
       setLookupNotice("");
@@ -603,6 +605,9 @@ export default function App() {
           quantity: 1,
           unitPriceMinor: item.priceMinor,
           image: item.image,
+          unit: item.unit,
+          unitLabel: item.unitLabel,
+          packSize: item.packSize,
         },
       ];
     });

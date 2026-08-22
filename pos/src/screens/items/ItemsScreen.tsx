@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { ChevronRight, Filter, Plus, Search, X } from "lucide-react";
 import type { CatalogItem } from "../../lib/types";
 import { formatMoney } from "../../lib/types";
+import { formatPricePer, formatStock } from "../../lib/units";
 import { CATEGORIES } from "../../lib/demo";
 import { findCatalogByCode } from "../../lib/catalog";
 import { normalizeBarcode } from "../../lib/store-settings";
@@ -487,7 +488,23 @@ export function ItemsScreen({
               <div className="card-foot">
                 <div className="card-body">
                   <strong className="card-name">{item.name}</strong>
-                  <div className="price">{formatMoney(item.priceMinor)}</div>
+                  <div className="price">
+                    {formatMoney(item.priceMinor)}
+                    <span className="price-unit">
+                      {" "}
+                      {formatPricePer(item.unit ?? "each", item.unitLabel)}
+                    </span>
+                  </div>
+                  {item.onHand <= settings.lowStockQty && item.onHand > 0 ? (
+                    <div className="card-stock low">
+                      {formatStock(
+                        item.onHand,
+                        item.unit ?? "each",
+                        item.packSize ?? 1,
+                        item.unitLabel,
+                      )}
+                    </div>
+                  ) : null}
                 </div>
                 <button
                   className="add"

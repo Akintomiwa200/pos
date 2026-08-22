@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { getSetupData, purgeCatalogSeed } from "../../lib/hq-setup";
 import { ManagerSkeleton } from "../Skeleton";
 import { SlideOver } from "../SlideOver";
@@ -20,7 +20,7 @@ export function DataManager() {
 
   useEffect(() => {
     load().catch((err) => {
-      toast.error(err instanceof Error ? err.message : "Could not load data");
+      toast.error(err, "Could not load data");
       setReady(true);
     });
   }, []);
@@ -66,7 +66,7 @@ export function DataManager() {
                 setOpen(false);
                 toast.success(`Catalog reset. ${result.total} items.`);
               } catch (err) {
-                toast.error(err instanceof Error ? err.message : "Could not reset catalog");
+                toast.error(err, "Could not reset catalog");
               } finally {
                 setBusy(false);
               }

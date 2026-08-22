@@ -2,10 +2,9 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { useAuth } from "../../../components/AuthProvider";
 import { AuthCard, AuthField, AuthLinks, AuthSubmit } from "../../../components/site/AuthCard";
-import { authErrorMessage } from "../../../lib/hq-api";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -25,7 +24,7 @@ export default function LoginPage() {
       toast.success("Signed in.");
       router.replace("/dashboard");
     } catch (err) {
-      toast.error(authErrorMessage(err, "Could not sign in"));
+      toast.error(err, "Could not sign in");
     } finally {
       setBusy(false);
     }

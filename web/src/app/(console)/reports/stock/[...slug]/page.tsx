@@ -1,12 +1,13 @@
 import { DepartmentPage } from "@/components/DepartmentPage";
+import { StockReports, type StockVariant } from "@/components/reports/StockReports";
 
-const TITLES: Record<string, { kicker: string; title: string }> = {
-  balance: { kicker: "Report · Stock", title: "Balance" },
-  sheet: { kicker: "Report · Stock", title: "Sheet" },
-  movement: { kicker: "Report · Stock", title: "Movement" },
-  "bin-card": { kicker: "Report · Stock", title: "Bin Card" },
-  expiry: { kicker: "Report · Stock", title: "Expiry" },
-  count: { kicker: "Report · Stock", title: "Count" },
+const VARIANTS: Record<string, StockVariant> = {
+  balance: "balance",
+  sheet: "sheet",
+  movement: "movement",
+  "bin-card": "bin-card",
+  expiry: "expiry",
+  count: "count",
 };
 
 export default async function StockReportPage({
@@ -16,10 +17,9 @@ export default async function StockReportPage({
 }) {
   const { slug = [] } = await params;
   const key = slug.join("/");
-  const page = TITLES[key] ?? {
-    kicker: "Report · Stock",
-    title: slug.length ? slug.join(" / ") : "Stock",
-  };
-
-  return <DepartmentPage kicker={page.kicker} title={page.title} />;
+  const variant = VARIANTS[key];
+  if (!variant) {
+    return <DepartmentPage kicker="Report · Stock" title={slug.length ? slug.join(" / ") : "Stock"} />;
+  }
+  return <StockReports variant={variant} />;
 }

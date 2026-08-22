@@ -1,19 +1,25 @@
 import { DepartmentPage } from "@/components/DepartmentPage";
+import { GrossProfitReport, type GrossProfitVariant } from "@/components/reports/GrossProfitReport";
+import { SalesReports, type SalesReportVariant } from "@/components/reports/SalesReports";
+import {
+  DocManager,
+  SALES_QUOTE_CONFIG,
+  SALES_RETURN_CONFIG,
+} from "@/components/transactions/DocManager";
 
-const TITLES: Record<string, { kicker: string; title: string }> = {
-  analytics: { kicker: "Report · Sales", title: "Analytics" },
-  "invoice/list": { kicker: "Report · Sales · Invoice", title: "Invoice list" },
-  "invoice/summary": { kicker: "Report · Sales · Invoice", title: "Invoice summary" },
-  "invoice/balance": { kicker: "Report · Sales · Invoice", title: "Invoice balance" },
-  "invoice/history": { kicker: "Report · Sales · Invoice", title: "Invoice history" },
-  "invoice/shift": { kicker: "Report · Sales · Invoice", title: "Invoice shift" },
-  "gross-profit/by-group": { kicker: "Report · Sales · Gross Profit", title: "By group" },
-  "gross-profit/by-subgroup": { kicker: "Report · Sales · Gross Profit", title: "By subgroup" },
-  "gross-profit/by-item": { kicker: "Report · Sales · Gross Profit", title: "By item" },
-  "quote/list": { kicker: "Report · Sales · Quote", title: "Quote list" },
-  "quote/summary": { kicker: "Report · Sales · Quote", title: "Quote summary" },
-  "return/list": { kicker: "Report · Sales · Return", title: "Return list" },
-  "return/summary": { kicker: "Report · Sales · Return", title: "Return summary" },
+const VARIANTS: Record<string, SalesReportVariant> = {
+  analytics: "analytics",
+  "invoice/list": "invoice-list",
+  "invoice/summary": "invoice-summary",
+  "invoice/balance": "invoice-balance",
+  "invoice/history": "invoice-history",
+  "invoice/shift": "invoice-shift",
+};
+
+const GP_VARIANTS: Record<string, GrossProfitVariant> = {
+  "gross-profit/by-group": "by-group",
+  "gross-profit/by-subgroup": "by-subgroup",
+  "gross-profit/by-item": "by-item",
 };
 
 export default async function SalesReportPage({
@@ -23,10 +29,17 @@ export default async function SalesReportPage({
 }) {
   const { slug = [] } = await params;
   const key = slug.join("/");
-  const page = TITLES[key] ?? {
-    kicker: "Report · Sales",
-    title: slug.length ? slug.join(" / ") : "Sales",
-  };
 
-  return <DepartmentPage kicker={page.kicker} title={page.title} />;
+  const variant = VARIANTS[key];
+  if (variant) return <SalesReports variant={variant} />;
+
+  const gp = GP_VARIANTS[key];
+  if (gp) return <GrossProfitReport variant={gp} />;
+
+  if (key === "quote/list") return <DocManager config={SALES_QUOTE_CONFIG} mode="list" />;
+  if (key === "quote/summary") return <DocManager config={SALES_QUOTE_CONFIG} mode="summary" />;
+  if (key === "return/list") return <DocManager config={SALES_RETURN_CONFIG} mode="list" />;
+  if (key === "return/summary") return <DocManager config={SALES_RETURN_CONFIG} mode="summary" />;
+
+  return <DepartmentPage kicker="Report · Sales" title={slug.length ? slug.join(" / ") : "Sales"} />;
 }

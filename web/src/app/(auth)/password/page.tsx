@@ -2,11 +2,9 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { useAuth } from "../../../components/AuthProvider";
 import { AuthCard, AuthField, AuthLinks, AuthSubmit } from "../../../components/site/AuthCard";
-import { authErrorMessage } from "../../../lib/hq-api";
-
 export default function ChangePasswordPage() {
   const router = useRouter();
   const { session, loading, updatePassword } = useAuth();
@@ -31,7 +29,7 @@ export default function ChangePasswordPage() {
       toast.success("Password updated.");
       event.currentTarget.reset();
     } catch (err) {
-      toast.error(authErrorMessage(err, "Could not update the password"));
+      toast.error(err, "Could not update the password");
     } finally {
       setBusy(false);
     }

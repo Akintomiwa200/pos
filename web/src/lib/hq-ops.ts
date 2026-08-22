@@ -61,6 +61,9 @@ export type StockLevel = {
   onHand: number;
   reorderPoint: number;
   valueMinor: number;
+  unit: string;
+  unitLabel?: string;
+  packSize: number;
 };
 
 export type StockMovement = {
@@ -105,7 +108,12 @@ export function recordMovement(input: MovementInput): Promise<StockMovement> {
 
 /* ---------------- Trade documents (purchase + quotes) ---------------- */
 
-export type DocKind = "purchase-order" | "purchase-invoice" | "purchase-return" | "sales-quote";
+export type DocKind =
+  | "purchase-order"
+  | "purchase-invoice"
+  | "purchase-return"
+  | "sales-quote"
+  | "sales-return";
 export type DocStatus = "draft" | "open" | "received" | "closed" | "cancelled";
 
 export type DocLine = {

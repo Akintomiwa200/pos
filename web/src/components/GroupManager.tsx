@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import {
   DEPARTMENTS,
   compressPrivileges,
@@ -90,7 +90,7 @@ export function GroupManager() {
 
   useEffect(() => {
     load().catch((err) => {
-      toast.error(err instanceof Error ? err.message : "Could not load groups");
+      toast.error(err, "Could not load groups");
       setReady(true);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -130,7 +130,7 @@ export function GroupManager() {
       if (session) setSession(refreshSessionFromGroup(session, saved));
       toast.success("Group saved. Sidebar updates for accounts in this group.");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not save group");
+      toast.error(err, "Could not save group");
     }
   }
 
@@ -145,7 +145,7 @@ export function GroupManager() {
       setDraft(next);
       toast.success("Group deleted.");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not delete group");
+      toast.error(err, "Could not delete group");
     }
   }
 

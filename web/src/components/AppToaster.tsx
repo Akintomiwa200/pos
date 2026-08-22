@@ -11,9 +11,18 @@ export function AppToaster() {
       position="top-right"
       richColors
       closeButton
+      expand
+      visibleToasts={4}
+      duration={4500}
       theme={resolved}
       toastOptions={{
-        className: "font-sans",
+        classNames: {
+          toast: "font-sans shadow-pos-md border border-pos-border",
+          title: "text-sm font-semibold",
+          description: "text-xs text-pos-ink-muted",
+          actionButton: "bg-pos-primary text-white",
+          cancelButton: "bg-pos-surface-muted text-pos-ink",
+        },
       }}
     />
   );

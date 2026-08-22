@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Check, Printer } from "lucide-react";
 import { formatMoney } from "../../lib/types";
+import { formatLineQty } from "../../lib/units";
 import { printReceipt, TENDER_LABEL, type SaleReceipt } from "../../lib/receipt";
 import { loadPrinterConfig } from "../../lib/printers";
 import { useStoreSettings } from "../../lib/use-store-settings";
@@ -59,7 +60,7 @@ export function PaidScreen({ sale, onNewOrder }: Props) {
         {sale.lines.map((line) => (
           <li key={line.id}>
             <span>
-              {line.name} × {line.quantity}
+              {line.name} · {formatLineQty(line.quantity, line.unit, line.unitLabel)}
             </span>
             <strong>{formatMoney(line.unitPriceMinor * line.quantity)}</strong>
           </li>

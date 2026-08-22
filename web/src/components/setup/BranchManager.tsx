@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import {
   deleteBranch,
   listBranches,
@@ -36,7 +36,7 @@ export function BranchManager() {
 
   useEffect(() => {
     load().catch((err) => {
-      toast.error(err instanceof Error ? err.message : "Could not load branches");
+      toast.error(err, "Could not load branches");
       setReady(true);
     });
   }, []);
@@ -102,7 +102,7 @@ export function BranchManager() {
                     setOpen(false);
                     toast.success("Branch deleted.");
                   } catch (err) {
-                    toast.error(err instanceof Error ? err.message : "Could not delete branch");
+                    toast.error(err, "Could not delete branch");
                   }
                 }}
               >
@@ -120,7 +120,7 @@ export function BranchManager() {
                   setOpen(false);
                   toast.success("Branch saved.");
                 } catch (err) {
-                  toast.error(err instanceof Error ? err.message : "Could not save branch");
+                  toast.error(err, "Could not save branch");
                 } finally {
                   setBusy(false);
                 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { getCompany, saveCompany, type HqCompany } from "../../lib/hq-setup";
 import { ManagerSkeleton } from "../Skeleton";
 import { SlideOver } from "../SlideOver";
@@ -17,7 +17,7 @@ export function CompanyManager() {
   useEffect(() => {
     getCompany()
       .then(setCompany)
-      .catch((err) => toast.error(err instanceof Error ? err.message : "Could not load company"))
+      .catch((err) => toast.error(err, "Could not load company"))
       .finally(() => setReady(true));
   }, []);
 
@@ -74,7 +74,7 @@ export function CompanyManager() {
                 setOpen(false);
                 toast.success("Company saved.");
               } catch (err) {
-                toast.error(err instanceof Error ? err.message : "Could not save company");
+                toast.error(err, "Could not save company");
               } finally {
                 setBusy(false);
               }

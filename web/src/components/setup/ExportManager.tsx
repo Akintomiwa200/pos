@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { exportSetup } from "../../lib/hq-setup";
 import { SlideOver } from "../SlideOver";
 import { Field, PrimaryButton, SetupHeader, fieldClass } from "./SetupChrome";
@@ -47,7 +47,7 @@ export function ExportManager() {
                 setOpen(false);
                 toast.success("Export downloaded.");
               } catch (err) {
-                toast.error(err instanceof Error ? err.message : "Export failed");
+                toast.error(err, "Export failed");
               } finally {
                 setBusy(false);
               }

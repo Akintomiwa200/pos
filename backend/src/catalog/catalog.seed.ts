@@ -2,12 +2,21 @@ export type CatalogItem = {
   id: string;
   name: string;
   category: string;
+  subcategory?: string;
   sku: string;
   barcode: string;
+  batchNumber?: string;
+  costMinor: number;
   priceMinor: number;
   currency: "NGN";
   image: string;
   onHand: number;
+  reorderLevel: number;
+  unit: string;
+  unitLabel?: string;
+  packSize: number;
+  description?: string;
+  active: boolean;
   updatedAt: string;
   expiresAt?: string;
 };
@@ -15,8 +24,27 @@ export type CatalogItem = {
 const now = () => new Date().toISOString();
 const daysOut = (days: number) => new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
 
+function seed(partial: Omit<CatalogItem, "costMinor" | "reorderLevel" | "unit" | "unitLabel" | "packSize" | "active" | "updatedAt"> & {
+  costMinor?: number;
+  reorderLevel?: number;
+  unit?: string;
+  unitLabel?: string;
+  packSize?: number;
+}): CatalogItem {
+  return {
+    ...partial,
+    costMinor: partial.costMinor ?? Math.round(partial.priceMinor * 0.65),
+    reorderLevel: partial.reorderLevel ?? 5,
+    unit: partial.unit ?? "each",
+    unitLabel: partial.unitLabel ?? "Each",
+    packSize: Math.max(1, partial.packSize ?? 1),
+    active: true,
+    updatedAt: now(),
+  };
+}
+
 export const CATALOG_SEED: CatalogItem[] = [
-  {
+  seed({
     id: "raspberry-tart",
     name: "Raspberry Tart",
     category: "Cakes",
@@ -27,10 +55,9 @@ export const CATALOG_SEED: CatalogItem[] = [
     image:
       "https://images.unsplash.com/photo-1464305795204-6f5bbfc7fb81?auto=format&fit=crop&w=600&q=80",
     onHand: 24,
-    updatedAt: now(),
     expiresAt: daysOut(-4),
-  },
-  {
+  }),
+  seed({
     id: "chocolate-cake",
     name: "Chocolate Cake",
     category: "Cakes",
@@ -41,9 +68,8 @@ export const CATALOG_SEED: CatalogItem[] = [
     image:
       "https://images.unsplash.com/photo-1578985545062-69928b1d9587?auto=format&fit=crop&w=600&q=80",
     onHand: 12,
-    updatedAt: now(),
-  },
-  {
+  }),
+  seed({
     id: "fruit-tart",
     name: "Fruit Tart",
     category: "Cakes",
@@ -54,10 +80,9 @@ export const CATALOG_SEED: CatalogItem[] = [
     image:
       "https://images.unsplash.com/photo-1519915028121-7d3463d20b13?auto=format&fit=crop&w=600&q=80",
     onHand: 8,
-    updatedAt: now(),
     expiresAt: daysOut(-1),
-  },
-  {
+  }),
+  seed({
     id: "lemon-tart",
     name: "Lemon Tart",
     category: "Cakes",
@@ -68,10 +93,9 @@ export const CATALOG_SEED: CatalogItem[] = [
     image:
       "https://images.unsplash.com/photo-1519915308083-83c9c7c5e3c6?auto=format&fit=crop&w=600&q=80",
     onHand: 30,
-    updatedAt: now(),
     expiresAt: daysOut(6),
-  },
-  {
+  }),
+  seed({
     id: "berry-cheesecake",
     name: "Berry Cheesecake",
     category: "Cakes",
@@ -82,9 +106,8 @@ export const CATALOG_SEED: CatalogItem[] = [
     image:
       "https://images.unsplash.com/photo-1533134242443-d4fd215305ad?auto=format&fit=crop&w=600&q=80",
     onHand: 6,
-    updatedAt: now(),
-  },
-  {
+  }),
+  seed({
     id: "vanilla-slice",
     name: "Vanilla Slice",
     category: "Pastry",
@@ -95,9 +118,8 @@ export const CATALOG_SEED: CatalogItem[] = [
     image:
       "https://images.unsplash.com/photo-1486427944299-d1955d23e34d?auto=format&fit=crop&w=600&q=80",
     onHand: 18,
-    updatedAt: now(),
-  },
-  {
+  }),
+  seed({
     id: "butter-croissant",
     name: "Butter Croissant",
     category: "Pastry",
@@ -108,10 +130,9 @@ export const CATALOG_SEED: CatalogItem[] = [
     image:
       "https://images.unsplash.com/photo-1555507036-ab1f4038808a?auto=format&fit=crop&w=600&q=80",
     onHand: 40,
-    updatedAt: now(),
     expiresAt: daysOut(2),
-  },
-  {
+  }),
+  seed({
     id: "cinnamon-roll",
     name: "Cinnamon Roll",
     category: "Pastry",
@@ -122,9 +143,8 @@ export const CATALOG_SEED: CatalogItem[] = [
     image:
       "https://images.unsplash.com/photo-1509365465985-1138a7d3746e?auto=format&fit=crop&w=600&q=80",
     onHand: 22,
-    updatedAt: now(),
-  },
-  {
+  }),
+  seed({
     id: "vanilla-scoop",
     name: "Vanilla Scoop",
     category: "Ice Cream",
@@ -135,10 +155,9 @@ export const CATALOG_SEED: CatalogItem[] = [
     image:
       "https://images.unsplash.com/photo-1570197788417-0e82375c9371?auto=format&fit=crop&w=600&q=80",
     onHand: 50,
-    updatedAt: now(),
     expiresAt: daysOut(-10),
-  },
-  {
+  }),
+  seed({
     id: "chocolate-scoop",
     name: "Chocolate Scoop",
     category: "Ice Cream",
@@ -149,10 +168,9 @@ export const CATALOG_SEED: CatalogItem[] = [
     image:
       "https://images.unsplash.com/photo-1563805042-7684c019e1cb?auto=format&fit=crop&w=600&q=80",
     onHand: 44,
-    updatedAt: now(),
     expiresAt: daysOut(-2),
-  },
-  {
+  }),
+  seed({
     id: "classic-pancakes",
     name: "Classic Pancakes",
     category: "Pancakes",
@@ -163,9 +181,8 @@ export const CATALOG_SEED: CatalogItem[] = [
     image:
       "https://images.unsplash.com/photo-1528207776546-365bb710ee93?auto=format&fit=crop&w=600&q=80",
     onHand: 16,
-    updatedAt: now(),
-  },
-  {
+  }),
+  seed({
     id: "berry-pancakes",
     name: "Berry Pancakes",
     category: "Pancakes",
@@ -176,9 +193,8 @@ export const CATALOG_SEED: CatalogItem[] = [
     image:
       "https://images.unsplash.com/photo-1506084868230-bb9d95c24759?auto=format&fit=crop&w=600&q=80",
     onHand: 14,
-    updatedAt: now(),
-  },
-  {
+  }),
+  seed({
     id: "vegan-brownie",
     name: "Vegan Brownie",
     category: "Vegan",
@@ -189,9 +205,8 @@ export const CATALOG_SEED: CatalogItem[] = [
     image:
       "https://images.unsplash.com/photo-1606313564200-e75d5e30476c?auto=format&fit=crop&w=600&q=80",
     onHand: 20,
-    updatedAt: now(),
-  },
-  {
+  }),
+  seed({
     id: "coconut-tart",
     name: "Coconut Tart",
     category: "Vegan",
@@ -202,6 +217,53 @@ export const CATALOG_SEED: CatalogItem[] = [
     image:
       "https://images.unsplash.com/photo-1519915308083-83c9c7c5e3c6?auto=format&fit=crop&w=600&q=80",
     onHand: 11,
-    updatedAt: now(),
-  },
+  }),
+  seed({
+    id: "biscuit-carton",
+    name: "Assorted Biscuits",
+    category: "Pastry",
+    subcategory: "Packaged",
+    sku: "PS-BC-015",
+    barcode: "8901234560015",
+    priceMinor: 450000,
+    currency: "NGN",
+    unit: "ctn",
+    unitLabel: "Carton",
+    packSize: 24,
+    onHand: 18,
+    image:
+      "https://images.unsplash.com/photo-1558961363-fa8aad7a81e4?auto=format&fit=crop&w=600&q=80",
+  }),
+  seed({
+    id: "flour-bag",
+    name: "Premium Flour",
+    category: "Pastry",
+    subcategory: "Ingredients",
+    sku: "PS-FL-016",
+    barcode: "8901234560016",
+    priceMinor: 820000,
+    currency: "NGN",
+    unit: "bag",
+    unitLabel: "Bag",
+    packSize: 10,
+    onHand: 6,
+    image:
+      "https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=600&q=80",
+  }),
+  seed({
+    id: "water-pack",
+    name: "Bottled Water",
+    category: "Pastry",
+    subcategory: "Beverages",
+    sku: "PS-WT-017",
+    barcode: "8901234560017",
+    priceMinor: 180000,
+    currency: "NGN",
+    unit: "pack",
+    unitLabel: "Pack",
+    packSize: 12,
+    onHand: 40,
+    image:
+      "https://images.unsplash.com/photo-1548839140-29a7492991bd?auto=format&fit=crop&w=600&q=80",
+  }),
 ];

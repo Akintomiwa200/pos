@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { deleteTax, listTaxes, saveTax, type HqTax } from "../../lib/hq-setup";
 import { ManagerSkeleton } from "../Skeleton";
 import { SlideOver } from "../SlideOver";
@@ -30,7 +30,7 @@ export function TaxManager() {
 
   useEffect(() => {
     load().catch((err) => {
-      toast.error(err instanceof Error ? err.message : "Could not load tax");
+      toast.error(err, "Could not load tax");
       setReady(true);
     });
   }, []);
@@ -88,7 +88,7 @@ export function TaxManager() {
                     setOpen(false);
                     toast.success("Tax deleted.");
                   } catch (err) {
-                    toast.error(err instanceof Error ? err.message : "Could not delete tax");
+                    toast.error(err, "Could not delete tax");
                   }
                 }}
               >
@@ -106,7 +106,7 @@ export function TaxManager() {
                   setOpen(false);
                   toast.success("Tax saved.");
                 } catch (err) {
-                  toast.error(err instanceof Error ? err.message : "Could not save tax");
+                  toast.error(err, "Could not save tax");
                 } finally {
                   setBusy(false);
                 }

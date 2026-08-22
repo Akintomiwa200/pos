@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import {
   deleteStore,
   listBranches,
@@ -39,7 +39,7 @@ export function StoreManager() {
 
   useEffect(() => {
     load().catch((err) => {
-      toast.error(err instanceof Error ? err.message : "Could not load stores");
+      toast.error(err, "Could not load stores");
       setReady(true);
     });
   }, []);
@@ -98,7 +98,7 @@ export function StoreManager() {
                     setOpen(false);
                     toast.success("Store deleted.");
                   } catch (err) {
-                    toast.error(err instanceof Error ? err.message : "Could not delete store");
+                    toast.error(err, "Could not delete store");
                   }
                 }}
               >
@@ -116,7 +116,7 @@ export function StoreManager() {
                   setOpen(false);
                   toast.success("Store saved.");
                 } catch (err) {
-                  toast.error(err instanceof Error ? err.message : "Could not save store");
+                  toast.error(err, "Could not save store");
                 } finally {
                   setBusy(false);
                 }

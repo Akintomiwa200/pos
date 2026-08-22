@@ -8,6 +8,7 @@ export type DirectoryRecord = {
   address?: string;
   note?: string;
   active: boolean;
+  extra?: Record<string, string | number | boolean | null>;
 };
 
 export type DirectoryName =
@@ -20,6 +21,7 @@ export type DirectoryName =
   | "promotions"
   | "expense-accounts"
   | "item-groups"
+  | "item-subgroups"
   | "units";
 
 export async function listDirectory(name: DirectoryName): Promise<DirectoryRecord[]> {

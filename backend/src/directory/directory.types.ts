@@ -8,6 +8,7 @@ export const DIRECTORY_NAMES = [
   "promotions",
   "expense-accounts",
   "item-groups",
+  "item-subgroups",
   "units",
 ] as const;
 

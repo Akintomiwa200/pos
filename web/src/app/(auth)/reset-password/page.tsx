@@ -2,8 +2,8 @@
 
 import { FormEvent, Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { toast } from "sonner";
-import { authErrorMessage, resetPassword } from "../../../lib/hq-api";
+import { toast } from "@/lib/toast";
+import { resetPassword } from "../../../lib/hq-api";
 import { AuthCard, AuthField, AuthLinks, AuthSubmit } from "../../../components/site/AuthCard";
 
 function ResetForm() {
@@ -28,7 +28,7 @@ function ResetForm() {
       toast.success("Password updated. Sign in with the new password.");
       router.replace("/login");
     } catch (err) {
-      toast.error(authErrorMessage(err, "Could not reset the password"));
+      toast.error(err, "Could not reset the password");
     } finally {
       setBusy(false);
     }

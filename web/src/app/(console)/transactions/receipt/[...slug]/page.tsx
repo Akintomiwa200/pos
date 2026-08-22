@@ -1,9 +1,6 @@
 import { DepartmentPage } from "@/components/DepartmentPage";
-
-const TITLES: Record<string, string> = {
-  list: "List",
-  analysis: "Analysis",
-};
+import { SalesReports } from "@/components/reports/SalesReports";
+import { ReceiptAnalysis } from "@/components/transactions/ReceiptAnalysis";
 
 export default async function ReceiptTransactionPage({
   params,
@@ -13,10 +10,13 @@ export default async function ReceiptTransactionPage({
   const { slug = [] } = await params;
   const key = slug.join("/");
 
+  if (key === "" || key === "list") return <SalesReports variant="invoice-list" />;
+  if (key === "analysis") return <ReceiptAnalysis />;
+
   return (
     <DepartmentPage
       kicker="Transaction · Receipt"
-      title={TITLES[key] ?? (slug.length ? slug.join(" / ") : "Receipt")}
+      title={slug.length ? slug.join(" / ") : "Receipt"}
     />
   );
 }

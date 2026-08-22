@@ -4,23 +4,16 @@ import {
   type ConsoleGroup,
   type ConsoleSession,
 } from "./access";
+import { NetworkError, resolveUserMessage } from "./errors";
 import { SEED_ACCOUNTS, SEED_GROUPS } from "./hq-seed";
+
+export { NetworkError } from "./errors";
 
 const GROUPS_KEY = "hq.groups.v1";
 const ACCOUNTS_KEY = "hq.accounts.v1";
 
-export class NetworkError extends Error {
-  constructor() {
-    super("Console API unavailable");
-  }
-}
-
 export function authErrorMessage(err: unknown, fallback: string) {
-  if (err instanceof NetworkError || (err instanceof Error && err.message === "Console API unavailable")) {
-    return "HQ API is not running. Start the backend on port 3001.";
-  }
-  if (err instanceof Error && err.message) return err.message;
-  return fallback;
+  return resolveUserMessage(err, fallback);
 }
 
 function readLocal<T>(key: string, fallback: T): T {
@@ -199,10 +192,20 @@ export type HqCatalogItem = {
   id: string;
   name: string;
   category: string;
+  subcategory?: string;
   sku: string;
   barcode: string;
+  batchNumber?: string;
+  costMinor: number;
   priceMinor: number;
   onHand: number;
+  reorderLevel: number;
+  unit: string;
+  unitLabel?: string;
+  packSize: number;
+  description?: string;
+  active: boolean;
+  image?: string;
   expiresAt?: string;
 };
 
@@ -212,6 +215,30 @@ export async function listCatalog(): Promise<HqCatalogItem[]> {
   } catch {
     return [];
   }
+}
+
+export async function uploadProductImage(itemId: string, file: File): Promise<HqCatalogItem> {
+  const form = new FormData();
+  form.append("file", file);
+  let response: Response;
+  try {
+    response = await fetch(`/api/console/setup/catalog/items/${encodeURIComponent(itemId)}/image`, {
+      method: "POST",
+      body: form,
+      cache: "no-store",
+    });
+  } catch {
+    throw new NetworkError();
+  }
+  const data = (await response.json().catch(() => ({}))) as HqCatalogItem & {
+    message?: string | string[];
+  };
+  if (!response.ok) {
+    if (response.status >= 500) throw new NetworkError();
+    const message = Array.isArray(data.message) ? data.message[0] : data.message;
+    throw new Error(message || "Image upload failed");
+  }
+  return data;
 }
 
 export async function listGroups(): Promise<ConsoleGroup[]> {

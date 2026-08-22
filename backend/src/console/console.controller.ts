@@ -1,5 +1,19 @@
-import { Body, Controller, Delete, Get, Headers, Param, Post, Query } from "@nestjs/common";
-import { CatalogService } from "../catalog/catalog.service";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Headers,
+  Param,
+  Post,
+  Query,
+  UploadedFile,
+  UseInterceptors,
+} from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
+import { memoryStorage } from "multer";
+import { CatalogService, type CatalogRow } from "../catalog/catalog.service";
+import { MAX_PRODUCT_IMAGE_BYTES } from "../catalog/cloudinary.service";
 import { ConsoleService } from "./console.service";
 import { SetupService } from "./setup.service";
 import type { ConsoleAccount, ConsoleGroup } from "./console.types";
@@ -288,20 +302,19 @@ export class ConsoleController {
   }
 
   @Post("setup/import/catalog")
-  importCatalog(
-    @Body()
-    body: {
-      rows?: Array<{
-        name?: string;
-        category?: string;
-        sku?: string;
-        barcode?: string;
-        priceMinor?: number;
-        onHand?: number;
-      }>;
-    },
-  ) {
+  importCatalog(@Body() body: { rows?: CatalogRow[] }) {
     return this.catalog.upsertMany(body.rows ?? []);
+  }
+
+  @Post("setup/catalog/items/:id/image")
+  @UseInterceptors(
+    FileInterceptor("file", {
+      storage: memoryStorage(),
+      limits: { fileSize: MAX_PRODUCT_IMAGE_BYTES, files: 1 },
+    }),
+  )
+  uploadCatalogImage(@Param("id") id: string, @UploadedFile() file: Express.Multer.File) {
+    return this.catalog.uploadImage(id, file);
   }
 
   @Get("setup/export")

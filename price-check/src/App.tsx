@@ -13,6 +13,8 @@ import { getApiBase, setApiBase } from "./lib/api";
 import { findItem, useLiveCatalog } from "./lib/catalog";
 import { canScanCamera, startCameraScan } from "./lib/scan";
 import { formatMoney } from "./lib/types";
+import { formatPricePer, formatStock } from "./lib/units";
+import { productImageSrc } from "./lib/product-image";
 
 export default function App() {
   const { items, live, error, reconnect } = useLiveCatalog();
@@ -129,7 +131,7 @@ export default function App() {
 
       {item ? (
         <article className="pc-card">
-          <img src={item.image} alt="" />
+          <img src={productImageSrc(item.id, item.image)} alt="" />
           <div className="pc-card-body">
             <p className="pc-cat">{item.category}</p>
             <h2>{item.name}</h2>
@@ -138,9 +140,15 @@ export default function App() {
             </p>
             <p className={`pc-price ${flash ? "flash" : ""}`}>
               {formatMoney(item.priceMinor, item.currency)}
+              <span className="pc-price-unit">
+                {" "}
+                {formatPricePer(item.unit ?? "each", item.unitLabel)}
+              </span>
             </p>
             <p className={`pc-stock ${item.onHand > 0 ? "in" : "out"}`}>
-              {item.onHand > 0 ? `${item.onHand} in stock` : "Out of stock"}
+              {item.onHand > 0
+                ? `${formatStock(item.onHand, item.unit ?? "each", item.packSize ?? 1, item.unitLabel)} in stock`
+                : "Out of stock"}
             </p>
           </div>
         </article>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import {
   deleteGateway,
   listGateways,
@@ -37,7 +37,7 @@ export function GatewayManager() {
 
   useEffect(() => {
     load().catch((err) => {
-      toast.error(err instanceof Error ? err.message : "Could not load gateways");
+      toast.error(err, "Could not load gateways");
       setReady(true);
     });
   }, []);
@@ -94,7 +94,7 @@ export function GatewayManager() {
                     setOpen(false);
                     toast.success("Gateway deleted.");
                   } catch (err) {
-                    toast.error(err instanceof Error ? err.message : "Could not delete gateway");
+                    toast.error(err, "Could not delete gateway");
                   }
                 }}
               >
@@ -112,7 +112,7 @@ export function GatewayManager() {
                   setOpen(false);
                   toast.success("Gateway saved.");
                 } catch (err) {
-                  toast.error(err instanceof Error ? err.message : "Could not save gateway");
+                  toast.error(err, "Could not save gateway");
                 } finally {
                   setBusy(false);
                 }

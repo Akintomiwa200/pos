@@ -1,15 +1,5 @@
 import { DepartmentPage } from "@/components/DepartmentPage";
-
-const TITLES: Record<string, string> = {
-  customer: "Customer",
-  vendor: "Vendor",
-  "sales-representative": "Sales Representative",
-  staff: "Staff",
-  manufacturer: "Manufacturer",
-  "payment-method": "Payment Method",
-  "sales-promotion": "Sales Promotion",
-  "expense-account": "Expense Account",
-};
+import { DIRECTORY_CONFIGS, DirectoryManager } from "@/components/setup/DirectoryManager";
 
 export default async function SetupPage({
   params,
@@ -17,10 +7,9 @@ export default async function SetupPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  return (
-    <DepartmentPage
-      kicker="Setup"
-      title={TITLES[slug] ?? slug.replace(/-/g, " ")}
-    />
-  );
+  const config = DIRECTORY_CONFIGS[slug];
+  if (!config) {
+    return <DepartmentPage kicker="Setup" title={slug.replace(/-/g, " ")} />;
+  }
+  return <DirectoryManager config={config} />;
 }

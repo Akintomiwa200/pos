@@ -14,10 +14,19 @@ export type CatalogItem = {
   category: string;
   sku: string;
   barcode: string;
+  batchNumber?: string;
+  subcategory?: string;
+  costMinor?: number;
   priceMinor: number;
   currency: string;
   image: string;
   onHand: number;
+  reorderLevel?: number;
+  unit?: string;
+  unitLabel?: string;
+  packSize?: number;
+  description?: string;
+  active?: boolean;
   updatedAt?: string;
   expiresAt?: string;
 };
@@ -29,6 +38,9 @@ export type CartLine = {
   quantity: number;
   unitPriceMinor: number;
   image: string;
+  unit?: string;
+  unitLabel?: string;
+  packSize?: number;
 };
 
 export const VAT_BPS = 750;

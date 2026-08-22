@@ -1,5 +1,6 @@
 import type { CartLine, TenderType } from "./types";
 import { computeTotals, formatMoney } from "./types";
+import { formatLineQty } from "./units";
 import { loadPrinterConfig, sendToPrinter } from "./printers";
 import {
   loadStoreSettings,
@@ -60,7 +61,7 @@ export function formatReceiptText(
     "--------------------------------",
     ...sale.lines.map(
       (line) =>
-        `${line.name} x${line.quantity}  ${formatMoney(line.unitPriceMinor * line.quantity)}`,
+        `${line.name} ${formatLineQty(line.quantity, line.unit, line.unitLabel)}  ${formatMoney(line.unitPriceMinor * line.quantity)}`,
     ),
     "--------------------------------",
     `Subtotal     ${formatMoney(totals.subtotalMinor)}`,

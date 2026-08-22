@@ -10,6 +10,9 @@ export type StockLevel = {
   onHand: number;
   reorderPoint: number;
   valueMinor: number;
+  unit: string;
+  unitLabel?: string;
+  packSize: number;
 };
 
 export type StockMovement = {
@@ -38,9 +41,23 @@ export type MovementInput = {
 };
 
 export function levelFromItem(
-  item: { id: string; name: string; category: string; sku: string; barcode: string; onHand: number; priceMinor: number },
+  item: {
+    id: string;
+    name: string;
+    category: string;
+    sku: string;
+    barcode: string;
+    onHand: number;
+    priceMinor: number;
+    costMinor?: number;
+    reorderLevel?: number;
+    unit?: string;
+    unitLabel?: string;
+    packSize?: number;
+  },
   defaultReorderPoint: number,
 ): StockLevel {
+  const unitCost = item.costMinor && item.costMinor > 0 ? item.costMinor : item.priceMinor;
   return {
     itemId: item.id,
     name: item.name,
@@ -48,8 +65,11 @@ export function levelFromItem(
     sku: item.sku,
     barcode: item.barcode,
     onHand: item.onHand,
-    reorderPoint: defaultReorderPoint,
-    valueMinor: item.onHand * item.priceMinor,
+    reorderPoint: item.reorderLevel ?? defaultReorderPoint,
+    valueMinor: item.onHand * unitCost,
+    unit: item.unit ?? "each",
+    unitLabel: item.unitLabel,
+    packSize: Math.max(1, item.packSize ?? 1),
   };
 }
 

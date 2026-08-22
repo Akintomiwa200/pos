@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { listBranches, type HqBranch } from "../lib/hq-setup";
 import {
   TILL_PRODUCTS,
@@ -60,7 +60,7 @@ export function TillManager() {
 
   useEffect(() => {
     load().catch((err) => {
-      toast.error(err instanceof Error ? err.message : "Could not load tills");
+      toast.error(err, "Could not load tills");
       setReady(true);
     });
     const timer = window.setInterval(() => {
@@ -93,7 +93,7 @@ export function TillManager() {
           : `Till issued. Code ${saved.code} — enter it on that device only.`,
       );
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not save till");
+      toast.error(err, "Could not save till");
     } finally {
       setBusy(false);
     }
@@ -106,7 +106,7 @@ export function TillManager() {
       await load();
       toast.success(`New code issued: ${next.code}. The previous device must activate again.`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not regenerate code");
+      toast.error(err, "Could not regenerate code");
     } finally {
       setBusy(false);
     }
@@ -129,7 +129,7 @@ export function TillManager() {
         }.`,
       );
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not renew till");
+      toast.error(err, "Could not renew till");
     } finally {
       setBusy(false);
     }
@@ -145,7 +145,7 @@ export function TillManager() {
       }
       toast.success("Till deleted.");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not delete till");
+      toast.error(err, "Could not delete till");
     }
   }
 

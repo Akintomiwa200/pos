@@ -34,6 +34,9 @@ function line(itemId: string, qty: number): CartLine {
     quantity: qty,
     unitPriceMinor: item.priceMinor,
     image: item.image,
+    unit: item.unit,
+    unitLabel: item.unitLabel,
+    packSize: item.packSize,
   };
 }
 

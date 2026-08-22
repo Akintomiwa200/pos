@@ -1,5 +1,6 @@
 import type { CartLine } from "../../lib/types";
 import { computeTotals, formatMoney } from "../../lib/types";
+import { formatPricePer } from "../../lib/units";
 import { useStoreSettings } from "../../lib/use-store-settings";
 import type { StaffUser } from "../../lib/staff";
 import { Minus, Plus, ShoppingBag, Trash2 } from "lucide-react";
@@ -84,7 +85,10 @@ export function CurrentOrder({
                         }}
                       />
                     ) : (
-                      <>{formatMoney(line.unitPriceMinor)} each</>
+                      <>
+                        {formatMoney(line.unitPriceMinor)}{" "}
+                        {formatPricePer(line.unit ?? "each", line.unitLabel)}
+                      </>
                     )}
                   </div>
                   <div className="line-bottom">

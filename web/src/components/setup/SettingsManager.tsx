@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { getOrgSettings, saveOrgSettings, type HqOrgSettings } from "../../lib/hq-setup";
 import { ManagerSkeleton } from "../Skeleton";
 import { SlideOver } from "../SlideOver";
@@ -17,7 +17,7 @@ export function SettingsManager() {
   useEffect(() => {
     getOrgSettings()
       .then(setSettings)
-      .catch((err) => toast.error(err instanceof Error ? err.message : "Could not load settings"))
+      .catch((err) => toast.error(err, "Could not load settings"))
       .finally(() => setReady(true));
   }, []);
 
@@ -82,7 +82,7 @@ export function SettingsManager() {
                 setOpen(false);
                 toast.success("Settings saved.");
               } catch (err) {
-                toast.error(err instanceof Error ? err.message : "Could not save settings");
+                toast.error(err, "Could not save settings");
               } finally {
                 setBusy(false);
               }

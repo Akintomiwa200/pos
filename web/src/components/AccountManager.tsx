@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import type { ConsoleAccount, ConsoleGroup } from "../lib/access";
 import { deleteAccount, listAccounts, listGroups, saveAccount } from "../lib/hq-api";
 import { useAuth } from "./AuthProvider";
@@ -38,7 +38,7 @@ export function AccountManager() {
 
   useEffect(() => {
     load().catch((err) => {
-      toast.error(err instanceof Error ? err.message : "Could not load accounts");
+      toast.error(err, "Could not load accounts");
       setReady(true);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -73,7 +73,7 @@ export function AccountManager() {
       setDraft({ ...blank, groupId: groups[0]?.id ?? "" });
       toast.success("Account saved. They will see menus from their group at next sign-in.");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not save account");
+      toast.error(err, "Could not save account");
     }
   }
 
@@ -84,7 +84,7 @@ export function AccountManager() {
       if (draft.id === id) setDraft({ ...blank, groupId: groups[0]?.id ?? "" });
       toast.success("Account deleted.");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not delete account");
+      toast.error(err, "Could not delete account");
     }
   }
 

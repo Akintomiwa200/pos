@@ -184,12 +184,24 @@ export async function purgeCatalogSeed() {
 
 export async function importCatalogRows(
   rows: Array<{
+    id?: string;
     name?: string;
     category?: string;
+    subcategory?: string;
     sku?: string;
     barcode?: string;
+    batchNumber?: string;
+    costMinor?: number;
     priceMinor?: number;
     onHand?: number;
+    reorderLevel?: number;
+    unit?: string;
+    unitLabel?: string;
+    packSize?: number;
+    description?: string;
+    active?: boolean;
+    image?: string;
+    expiresAt?: string;
   }>,
 ) {
   return api<{ created: number; updated: number; total: number }>("/api/console/setup/import/catalog", {

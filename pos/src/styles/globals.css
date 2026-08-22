@@ -856,6 +856,23 @@ button {
   letter-spacing: -0.02em;
 }
 
+.price-unit {
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+}
+
+.card-stock {
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+}
+
+.card-stock.low {
+  color: #b45309;
+}
+
 .add {
   flex-shrink: 0;
   width: 32px;

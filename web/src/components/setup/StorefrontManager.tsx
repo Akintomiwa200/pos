@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import {
   deleteStorefront,
   listStorefronts,
@@ -41,7 +41,7 @@ export function StorefrontManager() {
 
   useEffect(() => {
     load().catch((err) => {
-      toast.error(err instanceof Error ? err.message : "Could not load storefronts");
+      toast.error(err, "Could not load storefronts");
       setReady(true);
     });
   }, []);
@@ -99,7 +99,7 @@ export function StorefrontManager() {
                     setOpen(false);
                     toast.success("Storefront deleted.");
                   } catch (err) {
-                    toast.error(err instanceof Error ? err.message : "Could not delete storefront");
+                    toast.error(err, "Could not delete storefront");
                   }
                 }}
               >
@@ -117,7 +117,7 @@ export function StorefrontManager() {
                   setOpen(false);
                   toast.success("Storefront saved.");
                 } catch (err) {
-                  toast.error(err instanceof Error ? err.message : "Could not save storefront");
+                  toast.error(err, "Could not save storefront");
                 } finally {
                   setBusy(false);
                 }

@@ -1,4 +1,4 @@
-import { PageHero } from "../../../../components/site/PageHero";
+import { PageHero } from "@/components/site/PageHero";
 
 export default function VerticalPage({
   kicker,

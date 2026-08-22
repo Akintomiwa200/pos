@@ -2,8 +2,8 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
-import { authErrorMessage, forgotPassword } from "../../../lib/hq-api";
+import { toast } from "@/lib/toast";
+import { forgotPassword } from "../../../lib/hq-api";
 import { AuthCard, AuthField, AuthLinks, AuthSubmit } from "../../../components/site/AuthCard";
 
 export default function ForgotPasswordPage() {
@@ -23,7 +23,7 @@ export default function ForgotPasswordPage() {
       }
       toast.error("No matching HQ account for that email or username.");
     } catch (err) {
-      toast.error(authErrorMessage(err, "Could not start a reset"));
+      toast.error(err, "Could not start a reset");
     } finally {
       setBusy(false);
     }

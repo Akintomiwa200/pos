@@ -3,6 +3,7 @@ export const DOC_KINDS = [
   "purchase-invoice",
   "purchase-return",
   "sales-quote",
+  "sales-return",
 ] as const;
 
 export type DocKind = (typeof DOC_KINDS)[number];
@@ -42,6 +43,7 @@ export const KIND_LABELS: Record<DocKind, string> = {
   "purchase-invoice": "PINV",
   "purchase-return": "PRET",
   "sales-quote": "QUO",
+  "sales-return": "SRET",
 };
 
 export function nextNumber(kind: DocKind, existing: TradeDoc[]): string {

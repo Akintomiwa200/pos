@@ -1,10 +1,15 @@
 import { DepartmentPage } from "@/components/DepartmentPage";
+import { ItemsManager } from "@/components/setup/ItemsManager";
+import { CategoriesManager } from "@/components/setup/CategoriesManager";
+import { SubcategoriesManager } from "@/components/setup/SubcategoriesManager";
+import { UnitsManager } from "@/components/setup/UnitsManager";
 
 const TITLES: Record<string, string> = {
   items: "All Products",
-  subgroups: "Sub Category",
   groups: "Categories",
-  units: "Units",
+  subgroups: "Subcategories",
+  units: "Units of Measure",
+  packs: "Pack & Cartons",
 };
 
 export default async function SetupItemsPage({
@@ -15,10 +20,16 @@ export default async function SetupItemsPage({
   const { slug = [] } = await params;
   const key = slug.join("/");
 
+  if (key === "" || key === "items") return <ItemsManager />;
+  if (key === "groups") return <CategoriesManager />;
+  if (key === "subgroups") return <SubcategoriesManager />;
+  if (key === "units") return <UnitsManager />;
+  if (key === "packs") return <UnitsManager kindFilter="composite" />;
+
   return (
     <DepartmentPage
-      kicker="Products"
-      title={TITLES[key] ?? (slug.length ? slug.join(" / ") : "All Products")}
+      kicker="Setup · Products"
+      title={TITLES[key] ?? (slug.length ? slug.join(" / ") : "Products")}
     />
   );
 }

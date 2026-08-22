@@ -1,22 +1,19 @@
-import { DepartmentPage } from "@/components/DepartmentPage";
+﻿import { DepartmentPage } from "@/components/DepartmentPage";
+import { ExpensesManager } from "@/components/transactions/ExpensesManager";
 
-const TITLES: Record<string, string> = {
-  list: "List",
-  summary: "Summary",
-};
-
-export default async function ExpensesTransactionPage({
+export default async function ExpensesPage({
   params,
 }: {
   params: Promise<{ slug?: string[] }>;
 }) {
   const { slug = [] } = await params;
   const key = slug.join("/");
-
+  if (key === "summary") return <ExpensesManager summaryOnly />;
+  if (key === "" || key === "list") return <ExpensesManager />;
   return (
     <DepartmentPage
       kicker="Transaction · Expenses"
-      title={TITLES[key] ?? (slug.length ? slug.join(" / ") : "Expenses")}
+      title={slug.length ? slug.join(" / ") : "Expenses"}
     />
   );
 }

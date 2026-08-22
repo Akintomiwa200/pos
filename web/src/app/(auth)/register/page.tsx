@@ -2,11 +2,9 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { useAuth } from "../../../components/AuthProvider";
 import { AuthCard, AuthField, AuthLinks, AuthSubmit } from "../../../components/site/AuthCard";
-import { authErrorMessage } from "../../../lib/hq-api";
-
 export default function RegisterPage() {
   const router = useRouter();
   const { register, session, loading } = useAuth();
@@ -36,7 +34,7 @@ export default function RegisterPage() {
       toast.success("Account created.");
       router.replace("/dashboard");
     } catch (err) {
-      toast.error(authErrorMessage(err, "Could not create the account"));
+      toast.error(err, "Could not create the account");
     } finally {
       setBusy(false);
     }

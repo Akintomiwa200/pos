@@ -1,8 +1,5 @@
 import { DepartmentPage } from "@/components/DepartmentPage";
-
-const TITLES: Record<string, string> = {
-  payments: "Payments",
-};
+import { SalesReports } from "@/components/reports/SalesReports";
 
 export default async function TransactionsPage({
   params,
@@ -10,10 +7,6 @@ export default async function TransactionsPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  return (
-    <DepartmentPage
-      kicker="Transaction"
-      title={TITLES[slug] ?? slug.replace(/-/g, " ")}
-    />
-  );
+  if (slug === "receipt-list") return <SalesReports variant="invoice-list" />;
+  return <DepartmentPage kicker="Transaction" title={slug.replace(/-/g, " ")} />;
 }

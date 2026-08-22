@@ -23,13 +23,13 @@ function XIcon({ className }: { className?: string }) {
 export function SiteFooter() {
   return (
     <footer className="px-4 pb-8 pt-2 sm:px-6">
-      <div className="mx-auto flex max-w-5xl flex-col items-center gap-4 rounded-[28px] bg-white px-5 py-4 shadow-[0_8px_28px_rgba(28,28,30,0.06)] md:flex-row md:justify-between md:rounded-full md:py-3">
+      <div className="mx-auto flex max-w-5xl flex-col items-center gap-4 rounded-[28px] bg-pos-surface px-5 py-4 shadow-[0_8px_28px_rgba(28,28,30,0.06)] md:flex-row md:justify-between md:rounded-full md:py-3">
         <BrandLogo size="sm" />
-        <nav className="flex items-center gap-6 text-sm font-medium text-[#1c1c1e]">
-          <Link href="/privacy" className="hover:text-[#6d4aff]">
+        <nav className="flex items-center gap-6 text-sm font-medium text-pos-ink">
+          <Link href="/privacy" className="hover:text-pos-primary">
             Privacy Policy
           </Link>
-          <Link href="/terms" className="hover:text-[#6d4aff]">
+          <Link href="/terms" className="hover:text-pos-primary">
             Terms & Conditions
           </Link>
         </nav>
@@ -39,7 +39,7 @@ export function SiteFooter() {
             target="_blank"
             rel="noreferrer"
             aria-label="Dribbble"
-            className="grid h-9 w-9 place-items-center rounded-full text-[#1c1c1e] ring-1 ring-neutral-200 hover:text-[#6d4aff]"
+            className="grid h-9 w-9 place-items-center rounded-full text-pos-ink ring-1 ring-pos-border hover:text-pos-primary"
           >
             <DribbbleIcon className="h-[15px] w-[15px]" />
           </a>
@@ -48,7 +48,7 @@ export function SiteFooter() {
             target="_blank"
             rel="noreferrer"
             aria-label="X"
-            className="grid h-9 w-9 place-items-center rounded-full text-[#1c1c1e] ring-1 ring-neutral-200 hover:text-[#6d4aff]"
+            className="grid h-9 w-9 place-items-center rounded-full text-pos-ink ring-1 ring-pos-border hover:text-pos-primary"
           >
             <XIcon className="h-3.5 w-3.5" />
           </a>

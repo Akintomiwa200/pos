@@ -92,9 +92,9 @@ export function AccountManager() {
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
-      <section className="overflow-hidden rounded-2xl bg-white shadow-[0_8px_30px_rgba(28,28,30,0.06)]">
+      <section className="overflow-hidden rounded-2xl bg-pos-surface shadow-pos-md">
         <table className="w-full text-left text-sm">
-          <thead className="border-b border-neutral-100 text-neutral-500">
+          <thead className="border-b border-pos-border text-pos-ink-muted">
             <tr>
               <th className="px-4 py-3 font-medium">Name</th>
               <th className="px-4 py-3 font-medium">Email</th>
@@ -105,20 +105,20 @@ export function AccountManager() {
           </thead>
           <tbody>
             {accounts.map((row) => (
-              <tr key={row.id} className="border-b border-neutral-50">
+              <tr key={row.id} className="border-b border-pos-border/60">
                 <td className="px-4 py-3 font-medium">{row.name}</td>
-                <td className="px-4 py-3 text-neutral-600">{row.email}</td>
+                <td className="px-4 py-3 text-pos-ink-muted">{row.email}</td>
                 <td className="px-4 py-3">
                   {groups.find((group) => group.id === row.groupId)?.name ?? row.groupId}
                 </td>
                 <td className="px-4 py-3">{row.active ? "Active" : "Disabled"}</td>
                 <td className="px-4 py-3 text-right">
-                  <button type="button" className="text-[#6d4aff]" onClick={() => edit(row)}>
+                  <button type="button" className="text-pos-primary" onClick={() => edit(row)}>
                     Edit
                   </button>
                   <button
                     type="button"
-                    className="ml-3 text-neutral-400"
+                    className="ml-3 text-pos-ink-faint"
                     onClick={() => onDelete(row.id)}
                   >
                     Delete
@@ -131,40 +131,40 @@ export function AccountManager() {
       </section>
 
       <form
-        className="rounded-2xl bg-white p-5 shadow-[0_8px_30px_rgba(28,28,30,0.06)]"
+        className="rounded-2xl bg-pos-surface p-5 shadow-pos-md"
         onSubmit={(event) => {
           event.preventDefault();
           onSave();
         }}
       >
-        <h2 className="font-semibold">{draft.id ? "Edit account" : "New account"}</h2>
-        <label className="mt-4 block text-sm font-medium">Name</label>
+        <h2 className="font-semibold text-pos-ink">{draft.id ? "Edit account" : "New account"}</h2>
+        <label className="mt-4 block text-sm font-medium text-pos-ink">Name</label>
         <input
           value={draft.name}
           onChange={(event) => setDraft({ ...draft, name: event.target.value })}
-          className="mt-1 w-full rounded-xl border border-neutral-200 px-3 py-2 outline-none focus:border-[#7B61FF]"
+          className="mt-1 w-full rounded-xl border border-pos-border bg-pos-surface px-3 py-2 text-sm text-pos-ink outline-none focus:border-pos-primary"
           required
         />
-        <label className="mt-3 block text-sm font-medium">Email</label>
+        <label className="mt-3 block text-sm font-medium text-pos-ink">Email</label>
         <input
           type="email"
           value={draft.email}
           onChange={(event) => setDraft({ ...draft, email: event.target.value })}
-          className="mt-1 w-full rounded-xl border border-neutral-200 px-3 py-2 outline-none focus:border-[#7B61FF]"
+          className="mt-1 w-full rounded-xl border border-pos-border bg-pos-surface px-3 py-2 text-sm text-pos-ink outline-none focus:border-pos-primary"
           required
         />
-        <label className="mt-3 block text-sm font-medium">Username</label>
+        <label className="mt-3 block text-sm font-medium text-pos-ink">Username</label>
         <input
           value={draft.username}
           onChange={(event) => setDraft({ ...draft, username: event.target.value })}
-          className="mt-1 w-full rounded-xl border border-neutral-200 px-3 py-2 outline-none focus:border-[#7B61FF]"
+          className="mt-1 w-full rounded-xl border border-pos-border bg-pos-surface px-3 py-2 text-sm text-pos-ink outline-none focus:border-pos-primary"
           required
         />
-        <label className="mt-3 block text-sm font-medium">Group</label>
+        <label className="mt-3 block text-sm font-medium text-pos-ink">Group</label>
         <select
           value={draft.groupId}
           onChange={(event) => setDraft({ ...draft, groupId: event.target.value })}
-          className="mt-1 w-full rounded-xl border border-neutral-200 px-3 py-2 outline-none focus:border-[#7B61FF]"
+          className="mt-1 w-full rounded-xl border border-pos-border bg-pos-surface px-3 py-2 text-sm text-pos-ink outline-none focus:border-pos-primary"
           required
         >
           <option value="">Select group</option>
@@ -174,20 +174,20 @@ export function AccountManager() {
             </option>
           ))}
         </select>
-        <label className="mt-3 block text-sm font-medium">
+        <label className="mt-3 block text-sm font-medium text-pos-ink">
           Password {draft.id ? "(leave blank to keep)" : ""}
         </label>
         <input
           type="password"
           value={draft.password}
           onChange={(event) => setDraft({ ...draft, password: event.target.value })}
-          className="mt-1 w-full rounded-xl border border-neutral-200 px-3 py-2 outline-none focus:border-[#7B61FF]"
+          className="mt-1 w-full rounded-xl border border-pos-border bg-pos-surface px-3 py-2 text-sm text-pos-ink outline-none focus:border-pos-primary"
           required={!draft.id}
         />
-        <label className="mt-3 flex items-center gap-2 text-sm">
+        <label className="mt-3 flex items-center gap-2 text-sm text-pos-ink">
           <input
             type="checkbox"
-            className="accent-[#6d4aff]"
+            className="accent-pos-primary"
             checked={draft.active}
             onChange={(event) => setDraft({ ...draft, active: event.target.checked })}
           />
@@ -196,14 +196,14 @@ export function AccountManager() {
         <div className="mt-4 flex gap-2">
           <button
             type="submit"
-            className="rounded-xl bg-[#6d4aff] px-4 py-2.5 text-sm font-semibold text-white"
+            className="rounded-xl bg-pos-primary px-4 py-2.5 text-sm font-semibold text-white"
           >
             Save account
           </button>
           {draft.id ? (
             <button
               type="button"
-              className="rounded-xl border border-neutral-200 px-4 py-2.5 text-sm"
+              className="rounded-xl border border-pos-border px-4 py-2.5 text-sm text-pos-ink hover:bg-pos-surface-muted"
               onClick={() => setDraft({ ...blank, groupId: groups[0]?.id ?? "" })}
             >
               Cancel

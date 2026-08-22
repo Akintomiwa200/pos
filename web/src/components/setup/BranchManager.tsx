@@ -62,7 +62,7 @@ export function BranchManager() {
       <DataTable columns={["Name", "City", "Phone", "Manager", "Status"]}>
         {rows.length === 0 ? (
           <tr>
-            <td className="px-4 py-6 text-neutral-400" colSpan={5}>
+            <td className="px-4 py-6 text-pos-ink-faint" colSpan={5}>
               No branches yet.
             </td>
           </tr>
@@ -70,7 +70,7 @@ export function BranchManager() {
           rows.map((row) => (
             <tr
               key={row.id}
-              className="cursor-pointer border-b border-neutral-50 hover:bg-[#f6f5f8]"
+              className="cursor-pointer border-b border-pos-border/60 hover:bg-pos-surface-muted"
               onClick={() => {
                 setDraft(row);
                 setOpen(true);
@@ -94,7 +94,7 @@ export function BranchManager() {
             {draft.id ? (
               <button
                 type="button"
-                className="rounded-xl border border-neutral-200 px-4 py-2.5 text-sm"
+                className="rounded-xl border border-pos-border px-4 py-2.5 text-sm text-pos-ink hover:bg-pos-surface-muted"
                 onClick={async () => {
                   try {
                     await deleteBranch(draft.id!);

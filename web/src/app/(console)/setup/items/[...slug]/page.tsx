@@ -1,9 +1,9 @@
 import { DepartmentPage } from "@/components/DepartmentPage";
 
 const TITLES: Record<string, string> = {
-  items: "Items",
-  subgroups: "Subgroups",
-  groups: "Groups",
+  items: "All Products",
+  subgroups: "Sub Category",
+  groups: "Categories",
   units: "Units",
 };
 
@@ -17,8 +17,8 @@ export default async function SetupItemsPage({
 
   return (
     <DepartmentPage
-      kicker="Setup · Items"
-      title={TITLES[key] ?? (slug.length ? slug.join(" / ") : "Items")}
+      kicker="Products"
+      title={TITLES[key] ?? (slug.length ? slug.join(" / ") : "All Products")}
     />
   );
 }

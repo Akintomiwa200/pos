@@ -1,14 +1,22 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Query } from "@nestjs/common";
+import { ReportsService } from "./reports.service";
 
-@Controller('reports')
+@Controller("reports")
 export class ReportsController {
-  @Get('x')
-  xReport() {
-    return { kind: 'X', netMinor: 948, cashExpectedMinor: 948 };
+  constructor(private readonly reports: ReportsService) {}
+
+  @Get("x")
+  xReport(@Query("day") day?: string) {
+    return this.reports.xReport(day);
   }
 
-  @Get('z')
-  zReport() {
-    return { kind: 'Z', netMinor: 948, closed: true };
+  @Get("z")
+  zReport(@Query("day") day?: string) {
+    return this.reports.zReport(day);
+  }
+
+  @Get("tax")
+  taxSummary(@Query("day") day?: string) {
+    return this.reports.taxSummary(day);
   }
 }

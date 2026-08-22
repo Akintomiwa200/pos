@@ -1,21 +1,29 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  Activity,
   ArrowLeftRight,
+  Award,
   Banknote,
   Boxes,
   Building2,
   Calculator,
   CircleDollarSign,
+  ClipboardList,
   CreditCard,
   Factory,
   FileText,
+  Flag,
   History,
   IdCard,
   Megaphone,
+  Package,
+  RotateCcw,
   Scale,
+  ScanBarcode,
   Settings,
+  ShoppingBasket,
   ShoppingCart,
-  Tag,
+  TrendingUp,
   Truck,
   User,
   UserRound,
@@ -46,6 +54,7 @@ export type NavItem = {
 
 export type NavSection = {
   heading: string;
+  department: DepartmentName;
   items: NavItem[];
 };
 
@@ -74,21 +83,20 @@ function nodeToAccess(node: NavNode): AccessNode {
   return { id: node.id, label: node.label, href: node.href };
 }
 
-export function accessTree(): { heading: DepartmentName; items: AccessNode[] }[] {
-  return NAV.map((section) => ({
-    heading: section.heading as DepartmentName,
-    items: section.items.map((item) => ({
-      id: item.id,
-      label: item.label,
-      href: item.href,
-      children: item.children?.map(nodeToAccess),
-    })),
-  }));
+function itemToAccess(item: NavItem): AccessNode {
+  return {
+    id: item.id,
+    label: item.label,
+    href: item.href,
+    children: item.children?.map(nodeToAccess),
+  };
 }
 
-export const NAV: NavSection[] = [
+/** Full tree for group privileges and route access — not shown in the sidebar. */
+export const ACCESS_NAV: NavSection[] = [
   {
     heading: "Report",
+    department: "Report",
     items: [
       {
         id: "sales",
@@ -100,7 +108,7 @@ export const NAV: NavSection[] = [
             id: "sales-invoice",
             label: "Invoice",
             children: [
-              { id: "sales-invoice-list", label: "List", href: "/reports/sales/invoice/list" },
+              { id: "sales-invoice-list", label: "Invoice List", href: "/reports/sales/invoice/list" },
               {
                 id: "sales-invoice-summary",
                 label: "Summary",
@@ -239,6 +247,7 @@ export const NAV: NavSection[] = [
   },
   {
     heading: "Transaction",
+    department: "Transaction",
     items: [
       {
         id: "purchase",
@@ -341,16 +350,20 @@ export const NAV: NavSection[] = [
   },
   {
     heading: "Setup",
+    department: "Setup",
     items: [
       {
         id: "items",
-        label: "Items",
-        icon: Tag,
+        label: "Products",
+        icon: Package,
         children: [
-          { id: "items-items", label: "Items", href: "/setup/items/items" },
-          { id: "items-subgroups", label: "Subgroups", href: "/setup/items/subgroups" },
-          { id: "items-groups", label: "Groups", href: "/setup/items/groups" },
+          { id: "items-items", label: "All Products", href: "/setup/items/items" },
+          { id: "items-groups", label: "Categories", href: "/setup/items/groups" },
+          { id: "items-subgroups", label: "Sub Category", href: "/setup/items/subgroups" },
           { id: "items-units", label: "Units", href: "/setup/items/units" },
+          { id: "manufacturer", label: "Brands", href: "/setup/manufacturer" },
+          { id: "scan-barcode", label: "Scan Barcode", href: "/catalog" },
+          { id: "others-import", label: "Import Products", href: "/setup/others/import" },
         ],
       },
       { id: "customer", label: "Customer", icon: User, href: "/setup/customer" },
@@ -398,8 +411,8 @@ export const NAV: NavSection[] = [
         label: "Users",
         icon: Users,
         children: [
-          { id: "users-account", label: "Account", href: "/setup/users/account" },
-          { id: "users-group", label: "Group", href: "/setup/users/group" },
+          { id: "users-account", label: "Accounts", href: "/setup/users/account" },
+          { id: "users-group", label: "Groups", href: "/setup/users/group" },
         ],
       },
       {
@@ -427,3 +440,170 @@ export const NAV: NavSection[] = [
     ],
   },
 ];
+
+/** Sidebar — merged from both reference designs, no duplicate routes or ids. */
+export const NAV: NavSection[] = [
+  {
+    heading: "Main Menu",
+    department: "Setup",
+    items: [
+      {
+        id: "items",
+        label: "Products",
+        icon: ShoppingCart,
+        children: [
+          { id: "items-items", label: "All Products", href: "/setup/items/items" },
+          { id: "items-groups", label: "Categories", href: "/setup/items/groups" },
+          { id: "items-subgroups", label: "Sub Category", href: "/setup/items/subgroups" },
+          { id: "items-units", label: "Units", href: "/setup/items/units" },
+          { id: "manufacturer", label: "Brands", href: "/setup/manufacturer" },
+          { id: "scan-barcode", label: "Scan Barcode", href: "/catalog" },
+          { id: "others-import", label: "Import Products", href: "/setup/others/import" },
+        ],
+      },
+    ],
+  },
+  {
+    heading: "Analytics",
+    department: "Report",
+    items: [
+      {
+        id: "sales",
+        label: "Sales",
+        icon: TrendingUp,
+        children: [
+          { id: "sales-analytics", label: "Sales Summary", href: "/reports/sales/analytics" },
+          {
+            id: "sales-invoice-summary",
+            label: "Sales Trends",
+            href: "/reports/sales/invoice/summary",
+          },
+          {
+            id: "sales-gp-item",
+            label: "Item Sales",
+            href: "/reports/sales/gross-profit/by-item",
+          },
+          {
+            id: "sales-gp-group",
+            label: "Employee Sales",
+            href: "/reports/sales/gross-profit/by-group",
+          },
+        ],
+      },
+      {
+        id: "pos-hub",
+        label: "Point of Sales",
+        icon: ShoppingBasket,
+        children: [
+          { id: "others-till", label: "Till", href: "/setup/others/till" },
+          { id: "others-store", label: "Store", href: "/setup/others/store" },
+        ],
+      },
+      {
+        id: "sales-gp-subgroup",
+        label: "Leaderboards",
+        icon: Flag,
+        href: "/reports/sales/gross-profit/by-subgroup",
+      },
+      {
+        id: "purchase-order",
+        label: "Orders",
+        icon: ShoppingCart,
+        children: [
+          { id: "purchase-order-list", label: "Order List", href: "/transactions/purchase/order/list" },
+          {
+            id: "purchase-order-summary",
+            label: "Order Summary",
+            href: "/transactions/purchase/order/summary",
+          },
+        ],
+      },
+      {
+        id: "sales-return-list",
+        label: "Refund",
+        icon: RotateCcw,
+        href: "/reports/sales/return/list",
+      },
+      {
+        id: "tax",
+        label: "Taxes",
+        icon: CircleDollarSign,
+        children: [
+          { id: "tax-output", label: "Output Tax", href: "/reports/tax/output-tax" },
+          { id: "tax-input", label: "Input Tax", href: "/reports/tax/input-tax" },
+        ],
+      },
+      {
+        id: "stock-report",
+        label: "Stock",
+        icon: ClipboardList,
+        children: [
+          { id: "stock-balance", label: "Balance", href: "/reports/stock/balance" },
+          { id: "stock-movement", label: "Movement", href: "/reports/stock/movement" },
+        ],
+      },
+      {
+        id: "sales-invoice-list",
+        label: "Invoices",
+        icon: FileText,
+        href: "/reports/sales/invoice/list",
+      },
+      { id: "payments", label: "Transactions", icon: Activity, href: "/transactions/payments" },
+    ],
+  },
+  {
+    heading: "Settings",
+    department: "Setup",
+    items: [
+      {
+        id: "users",
+        label: "Users",
+        icon: Users,
+        children: [
+          { id: "users-account", label: "Accounts", href: "/setup/users/account" },
+          { id: "users-group", label: "Groups", href: "/setup/users/group" },
+        ],
+      },
+      {
+        id: "others-org",
+        label: "Organization",
+        icon: Building2,
+        children: [
+          { id: "others-company", label: "Company", href: "/setup/others/company" },
+          { id: "others-branch", label: "Branch", href: "/setup/others/branch" },
+          { id: "others-till", label: "Till", href: "/setup/others/till" },
+          { id: "others-store", label: "Store", href: "/setup/others/store" },
+          { id: "others-storefront", label: "Storefront", href: "/setup/others/storefront" },
+          {
+            id: "others-payment-gateway",
+            label: "Payment Gateway",
+            href: "/setup/others/payment-gateway",
+          },
+          { id: "others-tax", label: "Tax", href: "/setup/others/tax" },
+        ],
+      },
+      {
+        id: "others-settings",
+        label: "Settings",
+        icon: Settings,
+        href: "/setup/others/settings",
+      },
+    ],
+  },
+];
+
+export function accessTree(): { heading: DepartmentName; items: AccessNode[] }[] {
+  const buckets: Record<DepartmentName, AccessNode[]> = {
+    Report: [],
+    Transaction: [],
+    Setup: [],
+  };
+
+  for (const section of ACCESS_NAV) {
+    for (const item of section.items) {
+      buckets[section.department].push(itemToAccess(item));
+    }
+  }
+
+  return DEPARTMENTS.map((heading) => ({ heading, items: buckets[heading] }));
+}

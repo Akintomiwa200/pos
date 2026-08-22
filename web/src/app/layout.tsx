@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { AppToaster } from "../components/AppToaster";
 import { AuthProvider } from "../components/AuthProvider";
+import { ScrollbarEnhancer } from "../components/ScrollbarEnhancer";
+import { ThemeProvider } from "../components/ThemeProvider";
+import { ThemeScript } from "../components/ThemeScript";
 import "./globals.css";
 
 const inter = Inter({
@@ -24,12 +27,18 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={inter.variable}>
-      <body className="font-sans antialiased">
-        <AuthProvider>
-          <AppToaster />
-          {children}
-        </AuthProvider>
+    <html lang="en" className={inter.variable} suppressHydrationWarning>
+      <head>
+        <ThemeScript />
+      </head>
+      <body className="bg-pos-bg font-sans text-pos-ink antialiased">
+        <ThemeProvider>
+          <AuthProvider>
+            <ScrollbarEnhancer />
+            <AppToaster />
+            {children}
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

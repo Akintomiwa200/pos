@@ -33,7 +33,7 @@ export function BrandLogo({
   return (
     <Link href={href} className="flex min-w-0 shrink-0 items-center gap-2.5">
       <span
-        className={`grid place-items-center bg-[#6d4aff] text-white shadow-[0_6px_16px_rgba(109,74,255,0.28)] ${tile}`}
+        className={`grid place-items-center bg-pos-primary text-white shadow-pos-primary ${tile}`}
       >
         <BrandMark className={mark} />
       </span>

@@ -1,4 +1,5 @@
 import {
+  ACCESS_NAV,
   DEPARTMENTS,
   NAV,
   accessTree,
@@ -51,7 +52,7 @@ function itemIds(item: NavItem): string[] {
 }
 
 export function allNavIds(): string[] {
-  return NAV.flatMap((section) => section.items.flatMap(itemIds));
+  return ACCESS_NAV.flatMap((section) => section.items.flatMap(itemIds));
 }
 
 function accessIds(node: AccessNode): string[] {
@@ -103,17 +104,33 @@ export function hasDepartment(
   return departments.includes("*") || departments.includes(heading as DepartmentName);
 }
 
+function filterSections(
+  sections: NavSection[],
+  departments: Array<DepartmentName | "*">,
+  granted: Set<string>,
+) {
+  return sections.flatMap((section) => {
+    if (!hasDepartment(departments, section.department)) return [];
+    const items = section.items.flatMap((item) => filterItem(item, granted));
+    if (!items.length) return [];
+    return [{ heading: section.heading, department: section.department, items }];
+  });
+}
+
 export function filterNav(
   departments: Array<DepartmentName | "*">,
   privileges: string[],
 ): NavSection[] {
   const granted = expandPrivileges(privileges);
-  return NAV.flatMap((section) => {
-    if (!hasDepartment(departments, section.heading)) return [];
-    const items = section.items.flatMap((item) => filterItem(item, granted));
-    if (!items.length) return [];
-    return [{ ...section, items }];
-  });
+  return filterSections(NAV, departments, granted);
+}
+
+export function filterAccessNav(
+  departments: Array<DepartmentName | "*">,
+  privileges: string[],
+): NavSection[] {
+  const granted = expandPrivileges(privileges);
+  return filterSections(ACCESS_NAV, departments, granted);
 }
 
 function hrefsFromNodes(nodes: NavNode[]): string[] {
@@ -134,6 +151,7 @@ export function collectHrefs(sections: NavSection[]): string[] {
 
 const OPEN_PATHS = new Set([
   "/dashboard",
+  "/password",
   "/admin",
   "/procurement",
   "/audit",
@@ -143,8 +161,13 @@ const OPEN_PATHS = new Set([
   "/catalog",
 ]);
 
-export function canAccessPath(pathname: string, sections: NavSection[]) {
+export function canAccessPath(
+  pathname: string,
+  departments: Array<DepartmentName | "*">,
+  privileges: string[],
+) {
   if (OPEN_PATHS.has(pathname) || pathname.startsWith("/verticals/")) return true;
+  const sections = filterAccessNav(departments, privileges);
   return collectHrefs(sections).some(
     (href) => pathname === href || pathname.startsWith(`${href}/`),
   );

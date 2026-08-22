@@ -50,8 +50,8 @@ export function CompanyManager() {
           ["Country", company.country],
           ["Currency", company.currency],
         ].map(([label, value]) => (
-          <tr key={label} className="border-b border-neutral-50">
-            <td className="px-4 py-3 text-neutral-500">{label}</td>
+          <tr key={label} className="border-b border-pos-border/60">
+            <td className="px-4 py-3 text-pos-ink-muted">{label}</td>
             <td className="px-4 py-3 font-medium">{value || "—"}</td>
           </tr>
         ))}

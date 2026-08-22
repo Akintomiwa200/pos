@@ -2,47 +2,55 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Menu, Search } from "lucide-react";
+import { ChevronRight, Menu, Search } from "lucide-react";
 import { AccountSwitcher } from "./AccountSwitcher";
 import { NotificationMenu } from "./NotificationMenu";
+import { filterAccessNav } from "../lib/access";
 import type { ConsoleSession } from "../lib/access";
-import { isNavGroup, type NavNode, type NavSection } from "../lib/nav";
+import { flattenNavForSearch, resolvePageCrumbs } from "../lib/page-meta";
+import type { NavSection } from "../lib/nav";
 
-type SearchHit = { href: string; label: string; trail: string };
+function ConsolePageTitle({ pathname }: { pathname: string }) {
+  const crumbs = useMemo(() => resolvePageCrumbs(pathname), [pathname]);
 
-function flattenNav(nav: NavSection[]): SearchHit[] {
-  const hits: SearchHit[] = [];
-
-  function walk(nodes: NavNode[], trail: string[]) {
-    for (const node of nodes) {
-      if (isNavGroup(node)) {
-        walk(node.children, [...trail, node.label]);
-        continue;
-      }
-      hits.push({
-        href: node.href,
-        label: node.label,
-        trail: [...trail, node.label].join(" · "),
-      });
-    }
+  if (crumbs.length <= 1) {
+    return (
+      <h1 className="min-w-0 truncate text-[15px] font-semibold tracking-tight text-pos-ink lg:text-base">
+        {crumbs[0]}
+      </h1>
+    );
   }
 
-  for (const section of nav) {
-    for (const item of section.items) {
-      if (item.href) {
-        hits.push({
-          href: item.href,
-          label: item.label,
-          trail: `${section.heading} · ${item.label}`,
-        });
-      }
-      if (item.children?.length) {
-        walk(item.children, [section.heading, item.label]);
-      }
-    }
-  }
-
-  return hits;
+  return (
+    <nav
+      aria-label="Current page"
+      className="min-w-0 max-w-[10rem] sm:max-w-[14rem] md:max-w-[20rem] lg:max-w-[24rem] xl:max-w-none"
+    >
+      <ol className="flex min-w-0 items-center gap-1 text-[13px] lg:text-[14px]">
+        {crumbs.map((crumb, index) => {
+          const last = index === crumbs.length - 1;
+          return (
+            <li key={`${crumb}-${index}`} className="flex min-w-0 items-center gap-1">
+              {index > 0 ? (
+                <ChevronRight
+                  size={13}
+                  strokeWidth={2}
+                  className="shrink-0 text-pos-ink-faint"
+                  aria-hidden
+                />
+              ) : null}
+              <span
+                className={`truncate ${last ? "font-semibold text-pos-ink" : "font-medium text-pos-ink-muted"}`}
+                title={crumb}
+              >
+                {crumb}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+    </nav>
+  );
 }
 
 function ConsoleSearch({ nav }: { nav: NavSection[] }) {
@@ -51,7 +59,7 @@ function ConsoleSearch({ nav }: { nav: NavSection[] }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
-  const pages = useMemo(() => flattenNav(nav), [nav]);
+  const pages = useMemo(() => flattenNavForSearch(nav), [nav]);
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -86,9 +94,9 @@ function ConsoleSearch({ nav }: { nav: NavSection[] }) {
   }, [open]);
 
   return (
-    <div className="relative min-w-0 flex-1" ref={rootRef}>
-      <label className="flex items-center gap-2 rounded-xl border border-transparent bg-white px-3 py-2 shadow-[0_1px_2px_rgba(28,28,30,0.04)] focus-within:border-[#6d4aff]">
-        <Search size={16} strokeWidth={1.8} className="shrink-0 text-neutral-400" />
+    <div className="relative w-[min(100%,12.5rem)] sm:w-56 lg:w-60" ref={rootRef}>
+      <label className="flex items-center gap-2 rounded-xl border border-transparent bg-pos-surface px-3 py-2 shadow-pos-sm focus-within:border-pos-primary">
+        <Search size={16} strokeWidth={1.8} className="shrink-0 text-pos-ink-faint" />
         <input
           value={query}
           onChange={(event) => {
@@ -97,27 +105,27 @@ function ConsoleSearch({ nav }: { nav: NavSection[] }) {
           }}
           onFocus={() => setOpen(true)}
           placeholder="Search HQ"
-          className="w-full bg-transparent text-sm text-[#1c1c1e] outline-none placeholder:text-neutral-400"
+          className="w-full bg-transparent text-sm text-pos-ink outline-none placeholder:text-pos-ink-faint"
         />
       </label>
       {open ? (
-        <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-2xl border border-neutral-100 bg-white py-1 shadow-[0_12px_40px_rgba(28,28,30,0.12)]">
+        <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-2xl border border-pos-border bg-pos-surface py-1 shadow-pos-md">
           {results.length === 0 ? (
-            <p className="px-3 py-3 text-sm text-neutral-500">No matching pages.</p>
+            <p className="px-3 py-3 text-sm text-pos-ink-muted">No matching pages.</p>
           ) : (
             results.map((row) => (
               <button
                 key={row.href}
                 type="button"
-                className="flex w-full flex-col px-3 py-2 text-left hover:bg-[#f6f5f8]"
+                className="flex w-full flex-col px-3 py-2 text-left hover:bg-pos-surface-muted"
                 onClick={() => {
                   setOpen(false);
                   setQuery("");
                   router.push(row.href);
                 }}
               >
-                <span className="text-sm text-[#1c1c1e]">{row.label}</span>
-                <span className="text-[11px] text-neutral-400">{row.trail}</span>
+                <span className="text-sm text-pos-ink">{row.label}</span>
+                <span className="text-[11px] text-pos-ink-faint">{row.trail}</span>
               </button>
             ))
           )}
@@ -136,20 +144,26 @@ export function ConsoleHeader({
   nav: NavSection[];
   onOpenNav?: () => void;
 }) {
+  const searchNav = filterAccessNav(session.departments, session.privileges);
+  const pathname = usePathname();
+
   return (
-    <header className="flex h-16 w-full shrink-0 items-center gap-3 bg-[#f3f4f8] px-4 sm:px-6 lg:h-[10vh] lg:gap-4 lg:px-8">
+    <header className="flex h-16 w-full shrink-0 items-center gap-3 bg-pos-bg px-4 sm:px-6 lg:h-[10vh] lg:gap-4 lg:px-8">
       <button
         type="button"
-        className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-[#1c1c1e] shadow-[0_1px_2px_rgba(28,28,30,0.04)] lg:hidden"
+        className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-pos-surface text-pos-ink shadow-pos-sm lg:hidden"
         aria-label="Open menu"
         onClick={onOpenNav}
       >
         <Menu size={18} strokeWidth={1.8} />
       </button>
-      <ConsoleSearch nav={nav} />
-      <div className="ml-auto flex items-center gap-2 sm:gap-3">
+      <ConsolePageTitle pathname={pathname} />
+      <ConsoleSearch nav={searchNav} />
+      <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
         <NotificationMenu token={session.token} />
-        <AccountSwitcher session={session} plain />
+        <div className="w-[min(100%,13rem)] sm:w-56">
+          <AccountSwitcher session={session} layout="sidebar" menu="down" />
+        </div>
       </div>
     </header>
   );

@@ -16,9 +16,9 @@ export function SetupHeader({
   return (
     <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
       <div className="min-w-0 max-w-3xl">
-        <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#6d4aff]">{kicker}</p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight">{title}</h1>
-        <p className="mt-2 text-neutral-500">{copy}</p>
+        <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-pos-primary">{kicker}</p>
+        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-pos-ink">{title}</h1>
+        <p className="mt-2 text-pos-ink-muted">{copy}</p>
       </div>
       {action}
     </div>
@@ -33,7 +33,7 @@ export function Field({
   children: ReactNode;
 }) {
   return (
-    <label className="mb-3 block text-sm font-medium">
+    <label className="mb-3 block text-sm font-medium text-pos-ink">
       {label}
       <span className="mt-1 block font-normal">{children}</span>
     </label>
@@ -41,7 +41,7 @@ export function Field({
 }
 
 export const fieldClass =
-  "w-full rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7B61FF]";
+  "w-full rounded-xl border border-pos-border bg-pos-surface px-3 py-2 text-sm text-pos-ink outline-none focus:border-pos-primary";
 
 export function ToggleField({
   label,
@@ -53,11 +53,11 @@ export function ToggleField({
   onChange: (value: boolean) => void;
 }) {
   return (
-    <label className="mb-3 flex items-center justify-between gap-3 text-sm">
+    <label className="mb-3 flex items-center justify-between gap-3 text-sm text-pos-ink">
       <span>{label}</span>
       <input
         type="checkbox"
-        className="accent-[#6d4aff]"
+        className="accent-pos-primary"
         checked={checked}
         onChange={(event) => onChange(event.target.checked)}
       />
@@ -73,9 +73,9 @@ export function DataTable({
   children: ReactNode;
 }) {
   return (
-    <section className="overflow-hidden rounded-2xl bg-white shadow-[0_8px_30px_rgba(28,28,30,0.06)]">
+    <section className="overflow-hidden rounded-2xl bg-pos-surface shadow-pos-md">
       <table className="w-full text-left text-sm">
-        <thead className="border-b border-neutral-100 text-neutral-500">
+        <thead className="border-b border-pos-border text-pos-ink-muted">
           <tr>
             {columns.map((column) => (
               <th key={column} className="px-4 py-3 font-medium">
@@ -98,9 +98,12 @@ export function PrimaryButton({
     <button
       type="button"
       {...props}
-      className={`rounded-xl bg-[#6d4aff] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60 ${props.className ?? ""}`}
+      className={`rounded-xl bg-pos-primary px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60 ${props.className ?? ""}`}
     >
       {children}
     </button>
   );
 }
+
+export const secondaryButtonClass =
+  "rounded-xl border border-pos-border px-4 py-2.5 text-sm text-pos-ink hover:bg-pos-surface-muted";

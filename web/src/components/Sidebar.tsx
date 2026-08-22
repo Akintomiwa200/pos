@@ -1,10 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ChevronDown, X } from "lucide-react";
+import { ChevronDown, LayoutDashboard, LogOut, SlidersHorizontal, X } from "lucide-react";
+import { AccountSwitcher } from "./AccountSwitcher";
 import { BrandLogo } from "./site/BrandLogo";
+import { useAuth } from "./AuthProvider";
+import type { ConsoleSession } from "../lib/access";
 import {
   isNavGroup,
   type NavItem,
@@ -50,19 +53,29 @@ function openIdsForPath(pathname: string, nav: NavSection[]) {
   return open;
 }
 
+function subtreeIndent(depth: number) {
+  // Align level 1 under parent label (icon + gaps), then step each level.
+  return 48 + depth * 20;
+}
+
 function NestedList({
   nodes,
   pathname,
   open,
   onToggle,
+  depth = 0,
 }: {
   nodes: NavNode[];
   pathname: string;
   open: Record<string, boolean>;
   onToggle: (id: string) => void;
+  depth?: number;
 }) {
   return (
-    <div className="ml-4 border-l border-[#ddd6fe] pl-3">
+    <div
+      className="mt-1 mb-2 flex flex-col gap-0.5"
+      style={{ paddingLeft: subtreeIndent(depth) }}
+    >
       {nodes.map((node) => {
         if (isNavGroup(node)) {
           const expanded = Boolean(open[node.id]);
@@ -71,8 +84,10 @@ function NestedList({
             <div key={node.id}>
               <button
                 type="button"
-                className={`flex w-full items-center gap-2 rounded-md py-1.5 pr-1 text-left text-[14px] ${
-                  active ? "font-semibold text-[#6d4aff]" : "text-neutral-600 hover:text-[#6d4aff]"
+                className={`flex w-full items-center gap-2 rounded-lg py-2 pr-1 text-left text-[13px] transition ${
+                  active
+                    ? "font-medium text-pos-primary"
+                    : "text-pos-ink-muted hover:text-pos-primary"
                 }`}
                 onClick={() => onToggle(node.id)}
                 aria-expanded={expanded}
@@ -80,7 +95,9 @@ function NestedList({
                 <span className="flex-1">{node.label}</span>
                 <ChevronDown
                   size={14}
-                  className={`shrink-0 text-neutral-400 transition ${expanded ? "rotate-180" : ""}`}
+                  className={`shrink-0 transition ${expanded ? "rotate-180" : ""} ${
+                    active ? "text-pos-primary" : "text-pos-ink-faint"
+                  }`}
                 />
               </button>
               {expanded && (
@@ -89,6 +106,7 @@ function NestedList({
                   pathname={pathname}
                   open={open}
                   onToggle={onToggle}
+                  depth={depth + 1}
                 />
               )}
             </div>
@@ -100,10 +118,10 @@ function NestedList({
           <Link
             key={node.id}
             href={node.href}
-            className={`block rounded-md px-2 py-1.5 text-[14px] ${
+            className={`block rounded-lg px-2 py-2 text-[13px] transition ${
               active
-                ? "bg-[#f4f0ff] font-semibold text-[#6d4aff]"
-                : "text-neutral-500 hover:text-[#6d4aff]"
+                ? "bg-pos-primary font-medium text-white shadow-[0_4px_12px_rgba(109,74,255,0.28)]"
+                : "text-pos-ink-muted hover:bg-pos-primary-soft hover:text-pos-primary"
             }`}
           >
             {node.label}
@@ -114,17 +132,83 @@ function NestedList({
   );
 }
 
+function NavRow({
+  item,
+  pathname,
+  expanded,
+  onToggle,
+}: {
+  item: NavItem;
+  pathname: string;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const Icon = item.icon;
+  const dropdown = Array.isArray(item.children);
+  const branchActive = itemMatches(pathname, item);
+  const selfActive = !dropdown && isActivePath(pathname, item.href);
+
+  let rowClass =
+    "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] transition ";
+
+  if (selfActive) {
+    rowClass +=
+      "bg-pos-primary font-medium text-white shadow-[0_4px_14px_rgba(109,74,255,0.3)]";
+  } else if (branchActive && dropdown) {
+    rowClass += "font-medium text-pos-primary";
+  } else {
+    rowClass += "text-pos-ink hover:bg-pos-surface-muted";
+  }
+
+  const iconClass = selfActive
+    ? "shrink-0 text-white"
+    : branchActive && dropdown
+      ? "shrink-0 text-pos-primary"
+      : "shrink-0 text-pos-ink-muted";
+
+  const chevronClass = `shrink-0 transition ${expanded ? "rotate-180" : ""} ${
+    selfActive || branchActive ? "text-current opacity-80" : "text-pos-ink-faint"
+  }`;
+
+  if (dropdown) {
+    return (
+      <button
+        type="button"
+        className={rowClass}
+        onClick={onToggle}
+        aria-expanded={expanded}
+      >
+        <Icon size={18} strokeWidth={1.75} className={iconClass} />
+        <span className="flex-1">{item.label}</span>
+        <ChevronDown size={16} className={chevronClass} />
+      </button>
+    );
+  }
+
+  return (
+    <Link href={item.href ?? "/dashboard"} className={rowClass}>
+      <Icon size={18} strokeWidth={1.75} className={iconClass} />
+      <span className="flex-1">{item.label}</span>
+    </Link>
+  );
+}
+
 export function Sidebar({
+  session,
   nav,
   open = false,
   onClose,
 }: {
+  session: ConsoleSession;
   nav: NavSection[];
   open?: boolean;
   onClose?: () => void;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { logout } = useAuth();
   const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({});
+  const dashboardActive = pathname === "/dashboard" || pathname.startsWith("/dashboard/");
 
   useEffect(() => {
     setOpenMenus((current) => ({ ...current, ...openIdsForPath(pathname, nav) }));
@@ -132,6 +216,53 @@ export function Sidebar({
 
   function toggle(id: string) {
     setOpenMenus((current) => ({ ...current, [id]: !current[id] }));
+  }
+
+  function renderSection(section: NavSection) {
+    return (
+      <div key={section.heading} className="mb-5">
+        <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-pos-sidebar-muted">
+          {section.heading}
+        </p>
+        <div className="flex flex-col gap-0.5">
+          {section.items.map((item) => {
+            const dropdown = Array.isArray(item.children);
+            const expanded = Boolean(openMenus[item.id]);
+
+            return (
+              <div key={item.id}>
+                <NavRow
+                  item={item}
+                  pathname={pathname}
+                  expanded={expanded}
+                  onToggle={() => toggle(item.id)}
+                />
+                {dropdown && expanded && (item.children?.length ?? 0) > 0 && (
+                  <NestedList
+                    nodes={item.children!}
+                    pathname={pathname}
+                    open={openMenus}
+                    onToggle={toggle}
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  const mainMenu = nav.find((section) => section.heading === "Main Menu");
+  const settingsSection = nav.find((section) => section.heading === "Settings");
+  const otherSections = nav.filter(
+    (section) => section.heading !== "Main Menu" && section.heading !== "Settings",
+  );
+  const settingsActive = isActivePath(pathname, "/setup/others/settings");
+
+  async function handleLogout() {
+    await logout();
+    router.replace("/login");
   }
 
   return (
@@ -145,84 +276,138 @@ export function Sidebar({
         onClick={onClose}
       />
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex h-svh w-72 shrink-0 flex-col border-r border-neutral-200 bg-white shadow-[8px_0_30px_rgba(28,28,30,0.12)] transition-transform duration-200 lg:static lg:z-auto lg:h-full lg:shadow-none ${
+        className={`fixed inset-y-0 left-0 z-50 flex h-svh w-72 shrink-0 flex-col border-r border-pos-border bg-pos-surface shadow-pos-md transition-transform duration-200 lg:static lg:z-auto lg:h-full lg:shadow-none ${
           open ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         }`}
         aria-label="Console navigation"
       >
-        <div className="flex items-center gap-2 px-5 py-5">
+        <div className="flex items-center gap-2 border-b border-pos-border px-5 py-5">
           <div className="min-w-0 flex-1">
             <BrandLogo href="/dashboard" size="sm" />
           </div>
           <button
             type="button"
-            className="grid h-8 w-8 place-items-center rounded-full text-neutral-500 hover:bg-[#f6f5f8] lg:hidden"
+            className="grid h-8 w-8 place-items-center rounded-full text-pos-ink-muted hover:bg-pos-surface-muted lg:hidden"
             aria-label="Close menu"
             onClick={onClose}
           >
             <X size={18} />
           </button>
         </div>
-        <nav className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
+
+        <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
+          <div className="mb-5">
+            <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-pos-sidebar-muted">
+              Main Menu
+            </p>
+            <div className="flex flex-col gap-0.5">
+              <Link
+                href="/dashboard"
+                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-[14px] transition ${
+                  dashboardActive
+                    ? "bg-pos-primary font-medium text-white shadow-[0_4px_14px_rgba(109,74,255,0.3)]"
+                    : "text-pos-ink hover:bg-pos-surface-muted"
+                }`}
+              >
+                <LayoutDashboard
+                  size={18}
+                  strokeWidth={1.75}
+                  className={dashboardActive ? "text-white" : "text-pos-ink-muted"}
+                />
+                <span className="flex-1">Dashboard</span>
+              </Link>
+              {mainMenu?.items.map((item) => {
+                const dropdown = Array.isArray(item.children);
+                const expanded = Boolean(openMenus[item.id]);
+
+                return (
+                  <div key={item.id}>
+                    <NavRow
+                      item={item}
+                      pathname={pathname}
+                      expanded={expanded}
+                      onToggle={() => toggle(item.id)}
+                    />
+                    {dropdown && expanded && (item.children?.length ?? 0) > 0 && (
+                      <NestedList
+                        nodes={item.children!}
+                        pathname={pathname}
+                        open={openMenus}
+                        onToggle={toggle}
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
           {nav.length === 0 && (
-            <p className="px-3 text-sm text-neutral-400">No menus assigned to this group.</p>
+            <p className="px-3 text-sm text-pos-ink-faint">No menus assigned to this group.</p>
           )}
-          {nav.map((section) => (
-            <div key={section.heading} className="mb-6">
-              <p className="px-3 pb-2 text-[11px] font-bold uppercase tracking-[0.12em] text-[#6d4aff]">
-                {section.heading}
-              </p>
-              <div className="flex flex-col">
-                {section.items.map((item) => {
-                  const Icon = item.icon;
+
+          {otherSections.map((section) => renderSection(section))}
+
+          <div className="mb-2">
+            <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-pos-sidebar-muted">
+              Settings
+            </p>
+            <div className="flex flex-col gap-0.5">
+              {settingsSection?.items
+                .filter((item) => item.id !== "others-settings")
+                .map((item) => {
                   const dropdown = Array.isArray(item.children);
                   const expanded = Boolean(openMenus[item.id]);
-                  const active = itemMatches(pathname, item);
-                  const rowClass = `flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-[15px] ${
-                    active
-                      ? "bg-[#f4f0ff] font-semibold text-[#6d4aff]"
-                      : "text-[#1c1c1e] hover:bg-[#f6f5f8]"
-                  }`;
 
                   return (
-                    <div key={item.id} className="mb-0.5">
-                      {dropdown ? (
-                        <button
-                          type="button"
-                          className={rowClass}
-                          onClick={() => toggle(item.id)}
-                          aria-expanded={expanded}
-                        >
-                          <Icon size={18} strokeWidth={1.8} className="shrink-0" />
-                          <span className="flex-1">{item.label}</span>
-                          <ChevronDown
-                            size={16}
-                            className={`shrink-0 text-neutral-400 transition ${expanded ? "rotate-180" : ""}`}
-                          />
-                        </button>
-                      ) : (
-                        <Link href={item.href ?? "/dashboard"} className={rowClass}>
-                          <Icon size={18} strokeWidth={1.8} className="shrink-0" />
-                          <span className="flex-1">{item.label}</span>
-                        </Link>
-                      )}
+                    <div key={item.id}>
+                      <NavRow
+                        item={item}
+                        pathname={pathname}
+                        expanded={expanded}
+                        onToggle={() => toggle(item.id)}
+                      />
                       {dropdown && expanded && (item.children?.length ?? 0) > 0 && (
-                        <div className="mb-2 mt-1">
-                          <NestedList
-                            nodes={item.children!}
-                            pathname={pathname}
-                            open={openMenus}
-                            onToggle={toggle}
-                          />
-                        </div>
+                        <NestedList
+                          nodes={item.children!}
+                          pathname={pathname}
+                          open={openMenus}
+                          onToggle={toggle}
+                        />
                       )}
                     </div>
                   );
                 })}
-              </div>
+              <Link
+                href="/setup/others/settings"
+                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-[14px] transition ${
+                  settingsActive
+                    ? "bg-pos-primary font-medium text-white shadow-[0_4px_14px_rgba(109,74,255,0.3)]"
+                    : "text-pos-ink hover:bg-pos-surface-muted"
+                }`}
+              >
+                <SlidersHorizontal
+                  size={18}
+                  strokeWidth={1.75}
+                  className={settingsActive ? "text-white" : "text-pos-ink-muted"}
+                />
+                <span className="flex-1">Settings</span>
+              </Link>
+              <button
+                type="button"
+                onClick={() => void handleLogout()}
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] text-pos-ink transition hover:bg-pos-surface-muted"
+              >
+                <LogOut size={18} strokeWidth={1.75} className="shrink-0 text-pos-ink-muted" />
+                <span className="flex-1">Log Out</span>
+              </button>
             </div>
-          ))}
+          </div>
         </nav>
+
+        <div className="border-t border-pos-border p-3">
+          <AccountSwitcher session={session} menu="up" layout="sidebar" />
+        </div>
       </aside>
     </>
   );

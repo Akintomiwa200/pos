@@ -28,7 +28,7 @@ export function ExportManager() {
         copy="Download HQ JSON for backup or another site. Sales are tickets posted from tills."
         action={<PrimaryButton onClick={() => setOpen(true)}>Export</PrimaryButton>}
       />
-      <div className="rounded-2xl bg-white p-5 text-sm text-neutral-600 shadow-[0_8px_30px_rgba(28,28,30,0.06)]">
+      <div className="rounded-2xl bg-pos-surface p-5 text-sm text-pos-ink-muted shadow-pos-md">
         <p>Company, branches, stores, tax, settings, catalog, and sales can leave as a JSON file.</p>
       </div>
       <SlideOver

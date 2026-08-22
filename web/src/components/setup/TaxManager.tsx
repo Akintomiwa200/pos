@@ -57,7 +57,7 @@ export function TaxManager() {
         {rows.map((row) => (
           <tr
             key={row.id}
-            className="cursor-pointer border-b border-neutral-50 hover:bg-[#f6f5f8]"
+            className="cursor-pointer border-b border-pos-border/60 hover:bg-pos-surface-muted"
             onClick={() => {
               setDraft(row);
               setOpen(true);
@@ -80,7 +80,7 @@ export function TaxManager() {
             {draft.id ? (
               <button
                 type="button"
-                className="rounded-xl border border-neutral-200 px-4 py-2.5 text-sm"
+                className="rounded-xl border border-pos-border px-4 py-2.5 text-sm text-pos-ink hover:bg-pos-surface-muted"
                 onClick={async () => {
                   try {
                     await deleteTax(draft.id!);

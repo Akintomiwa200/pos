@@ -40,7 +40,7 @@ export function ImportManager() {
         copy="Bring catalog rows into HQ. Columns: name, category, sku, barcode, price (naira), onHand."
         action={<PrimaryButton onClick={() => setOpen(true)}>Import catalog</PrimaryButton>}
       />
-      <div className="rounded-2xl bg-white p-5 text-sm text-neutral-600 shadow-[0_8px_30px_rgba(28,28,30,0.06)]">
+      <div className="rounded-2xl bg-pos-surface p-5 text-sm text-pos-ink-muted shadow-pos-md">
         <p>Paste CSV in the panel, or type a header row then your items. Duplicate SKU or barcode updates the existing item.</p>
       </div>
       <SlideOver

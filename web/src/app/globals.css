@@ -1,18 +1,259 @@
 @import "tailwindcss";
 
-@theme {
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  color-scheme: light;
+
+  --pos-bg: #f3f4f8;
+  --pos-surface: #ffffff;
+  --pos-surface-muted: #f6f5f8;
+  --pos-surface-elevated: #ffffff;
+  --pos-border: #e8e8ed;
+  --pos-ink: #1c1c1e;
+  --pos-ink-muted: #6b7280;
+  --pos-ink-faint: #9ca3af;
+  --pos-primary: #6d4aff;
+  --pos-primary-soft: #f4f0ff;
+  --pos-primary-muted: #ddd6fe;
+  --pos-sidebar-muted: #9ca3af;
+  --pos-success: #16a34a;
+  --pos-success-soft: #ecfdf3;
+  --pos-warning: #d97706;
+  --pos-danger: #dc2626;
+  --pos-inverse: #1c1c1e;
+  --pos-chart-bar: #e8e8ed;
+  --pos-chart-bar-accent: #d8d8df;
+  --pos-chart-grid: #f0f0f3;
+  --pos-chart-line: #b8b8c2;
+  --pos-chart-line-soft: #d4cce8;
+  --pos-chart-slice-2: #c4c4cc;
+  --pos-chart-slice-3: #dcdce2;
+  --pos-chart-slice-4: #ececf0;
+  --pos-avatar-1: #64748b;
+  --pos-avatar-2: #475569;
+  --pos-avatar-3: #6d4aff;
+  --pos-avatar-4: #94a3b8;
+  --pos-avatar-5: #78716c;
+  --pos-shadow-sm: 0 1px 2px rgb(28 28 30 / 0.04);
+  --pos-shadow-md: 0 8px 30px rgb(28 28 30 / 0.06);
+  --pos-shadow-primary: 0 4px 14px rgb(109 74 255 / 0.24);
+  --pos-scrollbar: rgb(28 28 30 / 0.14);
+  --pos-scrollbar-hover: rgb(109 74 255 / 0.32);
+}
+
+.dark {
+  color-scheme: dark;
+
+  --pos-bg: #0f1117;
+  --pos-surface: #181a22;
+  --pos-surface-muted: #22252e;
+  --pos-surface-elevated: #1e2129;
+  --pos-border: #2c303a;
+  --pos-ink: #f3f4f6;
+  --pos-ink-muted: #a1a8b3;
+  --pos-ink-faint: #7b8494;
+  --pos-primary: #8b7cff;
+  --pos-primary-soft: #2a2540;
+  --pos-primary-muted: #3d3560;
+  --pos-sidebar-muted: #7b8494;
+  --pos-success: #4ade80;
+  --pos-success-soft: #14281d;
+  --pos-warning: #fbbf24;
+  --pos-danger: #f87171;
+  --pos-inverse: #f3f4f6;
+  --pos-chart-bar: #2a2d38;
+  --pos-chart-bar-accent: #363945;
+  --pos-chart-grid: #22252e;
+  --pos-chart-line: #6b7280;
+  --pos-chart-line-soft: #4b4563;
+  --pos-chart-slice-2: #4b5563;
+  --pos-chart-slice-3: #374151;
+  --pos-chart-slice-4: #2a2d38;
+  --pos-avatar-1: #64748b;
+  --pos-avatar-2: #475569;
+  --pos-avatar-3: #8b7cff;
+  --pos-avatar-4: #94a3b8;
+  --pos-avatar-5: #78716c;
+  --pos-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.35);
+  --pos-shadow-md: 0 8px 30px rgb(0 0 0 / 0.35);
+  --pos-shadow-primary: 0 4px 14px rgb(139 124 255 / 0.22);
+  --pos-scrollbar: rgb(243 244 246 / 0.14);
+  --pos-scrollbar-hover: rgb(139 124 255 / 0.42);
+}
+
+@theme inline {
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --color-pos-bg: #f3f4f8;
-  --color-pos-ink: #1c1c1e;
-  --color-pos-primary: #7b61ff;
+  --color-pos-bg: var(--pos-bg);
+  --color-pos-surface: var(--pos-surface);
+  --color-pos-surface-muted: var(--pos-surface-muted);
+  --color-pos-surface-elevated: var(--pos-surface-elevated);
+  --color-pos-border: var(--pos-border);
+  --color-pos-ink: var(--pos-ink);
+  --color-pos-ink-muted: var(--pos-ink-muted);
+  --color-pos-ink-faint: var(--pos-ink-faint);
+  --color-pos-primary: var(--pos-primary);
+  --color-pos-primary-soft: var(--pos-primary-soft);
+  --color-pos-primary-muted: var(--pos-primary-muted);
+  --color-pos-sidebar-muted: var(--pos-sidebar-muted);
+  --color-pos-success: var(--pos-success);
+  --color-pos-success-soft: var(--pos-success-soft);
+  --color-pos-inverse: var(--pos-inverse);
+  --color-pos-inverse: var(--pos-inverse);
+  --shadow-pos-sm: var(--pos-shadow-sm);
+  --shadow-pos-md: var(--pos-shadow-md);
+  --shadow-pos-primary: var(--pos-shadow-primary);
 }
 
 html,
 body {
   min-height: 100%;
-  background: #f3f4f8;
-  color: #1c1c1e;
+  background: var(--pos-bg);
+  color: var(--pos-ink);
   letter-spacing: -0.011em;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+/* Slim SaaS scrollbars */
+html,
+body,
+main,
+nav,
+textarea,
+[class*="overflow-y-auto"],
+[class*="overflow-x-auto"],
+[class*="overflow-auto"] {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+html:hover,
+body:hover,
+main:hover,
+nav:hover,
+textarea:hover,
+[class*="overflow-y-auto"]:hover,
+[class*="overflow-x-auto"]:hover,
+[class*="overflow-auto"]:hover,
+html:focus-within,
+body:focus-within,
+main:focus-within,
+nav:focus-within,
+textarea:focus-within,
+[class*="overflow-y-auto"]:focus-within,
+[class*="overflow-x-auto"]:focus-within,
+[class*="overflow-auto"]:focus-within,
+html.is-scrolling,
+body.is-scrolling,
+main.is-scrolling,
+nav.is-scrolling,
+textarea.is-scrolling,
+[class*="overflow-y-auto"].is-scrolling,
+[class*="overflow-x-auto"].is-scrolling,
+[class*="overflow-auto"].is-scrolling {
+  scrollbar-color: var(--pos-scrollbar) transparent;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+main::-webkit-scrollbar,
+nav::-webkit-scrollbar,
+textarea::-webkit-scrollbar,
+[class*="overflow-y-auto"]::-webkit-scrollbar,
+[class*="overflow-x-auto"]::-webkit-scrollbar,
+[class*="overflow-auto"]::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+html::-webkit-scrollbar-track,
+body::-webkit-scrollbar-track,
+main::-webkit-scrollbar-track,
+nav::-webkit-scrollbar-track,
+textarea::-webkit-scrollbar-track,
+[class*="overflow-y-auto"]::-webkit-scrollbar-track,
+[class*="overflow-x-auto"]::-webkit-scrollbar-track,
+[class*="overflow-auto"]::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+html::-webkit-scrollbar-thumb,
+body::-webkit-scrollbar-thumb,
+main::-webkit-scrollbar-thumb,
+nav::-webkit-scrollbar-thumb,
+textarea::-webkit-scrollbar-thumb,
+[class*="overflow-y-auto"]::-webkit-scrollbar-thumb,
+[class*="overflow-x-auto"]::-webkit-scrollbar-thumb,
+[class*="overflow-auto"]::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 9999px;
+  transition: background-color 0.35s ease;
+}
+
+html:hover::-webkit-scrollbar-thumb,
+body:hover::-webkit-scrollbar-thumb,
+main:hover::-webkit-scrollbar-thumb,
+nav:hover::-webkit-scrollbar-thumb,
+textarea:hover::-webkit-scrollbar-thumb,
+[class*="overflow-y-auto"]:hover::-webkit-scrollbar-thumb,
+[class*="overflow-x-auto"]:hover::-webkit-scrollbar-thumb,
+[class*="overflow-auto"]:hover::-webkit-scrollbar-thumb,
+html:focus-within::-webkit-scrollbar-thumb,
+body:focus-within::-webkit-scrollbar-thumb,
+main:focus-within::-webkit-scrollbar-thumb,
+nav:focus-within::-webkit-scrollbar-thumb,
+textarea:focus-within::-webkit-scrollbar-thumb,
+[class*="overflow-y-auto"]:focus-within::-webkit-scrollbar-thumb,
+[class*="overflow-x-auto"]:focus-within::-webkit-scrollbar-thumb,
+[class*="overflow-auto"]:focus-within::-webkit-scrollbar-thumb,
+html.is-scrolling::-webkit-scrollbar-thumb,
+body.is-scrolling::-webkit-scrollbar-thumb,
+main.is-scrolling::-webkit-scrollbar-thumb,
+nav.is-scrolling::-webkit-scrollbar-thumb,
+textarea.is-scrolling::-webkit-scrollbar-thumb,
+[class*="overflow-y-auto"].is-scrolling::-webkit-scrollbar-thumb,
+[class*="overflow-x-auto"].is-scrolling::-webkit-scrollbar-thumb,
+[class*="overflow-auto"].is-scrolling::-webkit-scrollbar-thumb {
+  background-color: var(--pos-scrollbar);
+}
+
+html.is-scrolling::-webkit-scrollbar-thumb:hover,
+body.is-scrolling::-webkit-scrollbar-thumb:hover,
+main.is-scrolling::-webkit-scrollbar-thumb:hover,
+nav.is-scrolling::-webkit-scrollbar-thumb:hover,
+textarea.is-scrolling::-webkit-scrollbar-thumb:hover,
+[class*="overflow-y-auto"].is-scrolling::-webkit-scrollbar-thumb:hover,
+[class*="overflow-x-auto"].is-scrolling::-webkit-scrollbar-thumb:hover,
+[class*="overflow-auto"].is-scrolling::-webkit-scrollbar-thumb:hover,
+html:hover::-webkit-scrollbar-thumb:hover,
+body:hover::-webkit-scrollbar-thumb:hover,
+main:hover::-webkit-scrollbar-thumb:hover,
+nav:hover::-webkit-scrollbar-thumb:hover,
+textarea:hover::-webkit-scrollbar-thumb:hover,
+[class*="overflow-y-auto"]:hover::-webkit-scrollbar-thumb:hover,
+[class*="overflow-x-auto"]:hover::-webkit-scrollbar-thumb:hover,
+[class*="overflow-auto"]:hover::-webkit-scrollbar-thumb:hover {
+  background-color: var(--pos-scrollbar-hover);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html::-webkit-scrollbar-thumb,
+  body::-webkit-scrollbar-thumb,
+  main::-webkit-scrollbar-thumb,
+  nav::-webkit-scrollbar-thumb,
+  textarea::-webkit-scrollbar-thumb,
+  [class*="overflow-y-auto"]::-webkit-scrollbar-thumb,
+  [class*="overflow-x-auto"]::-webkit-scrollbar-thumb,
+  [class*="overflow-auto"]::-webkit-scrollbar-thumb {
+    transition: none;
+  }
+
+  html,
+  body {
+    transition: none;
+  }
 }
 
 .hero-matrix {

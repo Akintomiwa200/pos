@@ -4,9 +4,11 @@ import { AppService } from './app.service';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
 import { TenantsModule } from './tenants/tenants.module';
+import { DirectoryModule } from './directory/directory.module';
 import { CatalogModule } from './catalog/catalog.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { OrdersModule } from './orders/orders.module';
+import { ExpensesModule } from './expenses/expenses.module';
 import { PaymentsModule } from './payments/payments.module';
 import { ReportsModule } from './reports/reports.module';
 import { StaffModule } from './staff/staff.module';
@@ -20,9 +22,11 @@ import { ConsoleModule } from './console/console.module';
     HealthModule,
     AuthModule,
     TenantsModule,
+    DirectoryModule,
     CatalogModule,
     InventoryModule,
     OrdersModule,
+    ExpensesModule,
     PaymentsModule,
     ReportsModule,
     StaffModule,

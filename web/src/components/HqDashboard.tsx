@@ -45,13 +45,9 @@ import {
   type HqSale,
 } from "../lib/hq-api";
 import type { ConsoleAccount } from "../lib/access";
+import { useThemeColors } from "../hooks/useThemeColors";
 import { useAuth } from "./AuthProvider";
 import { DashboardSkeleton } from "./Skeleton";
-
-const PINK = "#6d4aff";
-const INK = "#111111";
-const GREEN = "#22c55e";
-const AVATAR = [INK, PINK, "#7c5cff", "#f59e0b", "#14b8a6"];
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -202,6 +198,7 @@ function inRange(sale: HqSale, from: Date, to: Date) {
 }
 
 function Avatar({ name, size = 36, index = 0 }: { name: string; size?: number; index?: number }) {
+  const { avatar } = useThemeColors();
   return (
     <span
       className="grid shrink-0 place-items-center rounded-full font-semibold text-white"
@@ -209,7 +206,7 @@ function Avatar({ name, size = 36, index = 0 }: { name: string; size?: number; i
         width: size,
         height: size,
         fontSize: size > 32 ? 12 : 10,
-        background: AVATAR[index % AVATAR.length],
+        background: avatar[index % avatar.length],
       }}
     >
       {initials(name)}
@@ -218,13 +215,18 @@ function Avatar({ name, size = 36, index = 0 }: { name: string; size?: number; i
 }
 
 const TENDERS = [
-  { id: "cash", name: "Cash", match: /cash/i, bg: "#16a34a", fg: "#fff", Icon: Banknote },
-  { id: "card", name: "Card", match: /card|pos|credit/i, bg: "#6d4aff", fg: "#fff", Icon: CreditCard },
-  { id: "transfer", name: "Transfer", match: /transfer|bank/i, bg: "#111111", fg: "#fff", Icon: ArrowLeftRight },
-  { id: "wallet", name: "Wallet", match: /wallet|opay|palmpay|kuda/i, bg: "#f59e0b", fg: "#fff", Icon: Wallet },
+  { id: "cash", name: "Cash", match: /cash/i, Icon: Banknote },
+  { id: "card", name: "Card", match: /card|pos|credit/i, Icon: CreditCard },
+  { id: "transfer", name: "Transfer", match: /transfer|bank/i, Icon: ArrowLeftRight },
+  { id: "wallet", name: "Wallet", match: /wallet|opay|palmpay|kuda/i, Icon: Wallet },
 ] as const;
 
 type TenderId = (typeof TENDERS)[number]["id"];
+
+function tenderColors(id: TenderId, colors: ReturnType<typeof useThemeColors>) {
+  if (id === "card") return { bg: colors.primarySoft, fg: colors.primary };
+  return { bg: colors.surfaceMuted, fg: colors.inkMuted };
+}
 
 function tenderIdOf(name: string): TenderId | "other" {
   const hit = TENDERS.find((row) => row.match.test(name));
@@ -254,8 +256,8 @@ function MenuItem({
   return (
     <button
       type="button"
-      className={`block w-full px-4 py-2 text-left text-sm ${
-        active ? "bg-[#f4f0ff] font-medium text-[#6d4aff]" : "hover:bg-[#f6f5f8]"
+      className={`block w-full px-4 py-2 text-left text-sm text-pos-ink ${
+        active ? "bg-pos-primary-soft font-medium text-pos-primary" : "hover:bg-pos-surface-muted"
       }`}
       onClick={onClick}
     >
@@ -297,7 +299,7 @@ function PillMenu({
       <div onClick={() => setOpen((value) => !value)}>{trigger}</div>
       {open ? (
         <div
-          className={`absolute z-20 mt-1 min-w-[168px] overflow-hidden rounded-2xl bg-white py-1 shadow-[0_12px_40px_rgba(28,28,30,0.12)] ${
+          className={`absolute z-20 mt-1 min-w-[168px] overflow-hidden rounded-2xl bg-pos-surface py-1 shadow-pos-md ${
             align === "left" ? "left-0" : "right-0"
           }`}
           onClick={() => setOpen(false)}
@@ -321,6 +323,7 @@ function expiryState(expiresAt?: string) {
 
 function ExpiredStockCard({ items }: { items: HqCatalogItem[] }) {
   const router = useRouter();
+  const colors = useThemeColors();
   const [scope, setScope] = useState<"expired" | "soon">("expired");
   const [metric, setMetric] = useState<"qty" | "value">("qty");
   const tones: Array<"fog" | "mist" | "stripe"> = ["fog", "mist", "fog", "stripe"];
@@ -337,7 +340,7 @@ function ExpiredStockCard({ items }: { items: HqCatalogItem[] }) {
   const values = source.map((row) => (row ? (metric === "value" ? row.value : row.qty) : 0));
   const max = Math.max(...values, 1);
   return (
-    <div className="flex h-full min-h-[292px] flex-col rounded-[28px] bg-white p-5 shadow-[0_1px_2px_rgba(28,28,30,0.04)]">
+    <div className="flex h-full min-h-[292px] flex-col rounded-[28px] bg-pos-surface p-5 shadow-pos-sm">
       <div className="flex items-center justify-between">
         <PillMenu align="left" trigger={<MenuPill icon={BarChart3} />}>
           <MenuItem label="Expiry report" onClick={() => router.push("/reports/stock/expiry")} />
@@ -357,10 +360,10 @@ function ExpiredStockCard({ items }: { items: HqCatalogItem[] }) {
           const tone = tones[index] ?? "fog";
           const fill =
             tone === "fog"
-              ? "#f0f0f2"
+              ? colors.chartGrid
               : tone === "mist"
-                ? "#e8e8ea"
-                : "repeating-linear-gradient(135deg, #f4f4f5 0 8px, #e4e4e7 8px 16px)";
+                ? colors.chartBar
+                : `repeating-linear-gradient(135deg, ${colors.chartSlice4} 0 8px, ${colors.chartBarAccent} 8px 16px)`;
           const iconTop = tone !== "stripe";
           return (
             <button
@@ -378,7 +381,7 @@ function ExpiredStockCard({ items }: { items: HqCatalogItem[] }) {
               {row ? (
                 <Avatar name={row.name} size={26} index={index} />
               ) : (
-                <Package size={16} className="text-neutral-300" />
+                <Package size={16} className="text-pos-ink-faint/60" />
               )}
             </button>
           );
@@ -387,7 +390,7 @@ function ExpiredStockCard({ items }: { items: HqCatalogItem[] }) {
       <PillMenu
         align="left"
         trigger={
-          <button type="button" className="mt-3 text-left text-[13px] leading-[1.25] text-[#c5c5c8]">
+          <button type="button" className="mt-3 text-left text-[13px] leading-[1.25] text-pos-ink-faint">
             <span className="block">{metric === "value" ? "Stock value" : "Expired stock"}</span>
             <span className="flex items-center gap-0.5">
               {scope === "soon" ? "by item expiring" : "by expired item"}
@@ -406,17 +409,19 @@ function ExpiredStockCard({ items }: { items: HqCatalogItem[] }) {
 }
 
 function TenderIcon({ id, size = 40 }: { id: string; size?: number }) {
+  const colors = useThemeColors();
   const meta = TENDERS.find((row) => row.id === id) ?? TENDERS[0]!;
   const Icon = meta.Icon as LucideIcon;
   const glyph = Math.round(size * 0.48);
+  const { bg, fg } = tenderColors(meta.id, colors);
   return (
     <span
       className="grid shrink-0 place-items-center"
       style={{
         width: size,
         height: size,
-        background: meta.bg,
-        color: meta.fg,
+        background: bg,
+        color: fg,
         borderRadius: Math.max(8, Math.round(size * 0.28)),
       }}
     >
@@ -432,7 +437,9 @@ function CountPill({
   value: number;
   tone?: "pink" | "black" | "green";
 }) {
-  const background = tone === "black" ? INK : tone === "green" ? GREEN : PINK;
+  const colors = useThemeColors();
+  const background =
+    tone === "black" ? colors.ink : tone === "green" ? colors.success : colors.primary;
   return (
     <span
       className="inline-flex min-w-[22px] items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold text-white"
@@ -447,7 +454,7 @@ function FilterPill({ label = "Filters" }: { label?: string }) {
   return (
     <button
       type="button"
-      className="flex items-center gap-1.5 rounded-full bg-[#f6f5f8] px-3 py-1.5 text-xs font-medium text-neutral-500"
+      className="flex items-center gap-1.5 rounded-full bg-pos-surface-muted px-3 py-1.5 text-xs font-medium text-pos-ink-muted"
     >
       <SlidersHorizontal size={12} strokeWidth={2} />
       {label}
@@ -460,7 +467,7 @@ function MenuPill({ icon: Icon }: { icon: LucideIcon }) {
   return (
     <button
       type="button"
-      className="flex items-center gap-1 rounded-full bg-[#f6f5f8] px-2.5 py-1.5 text-neutral-400"
+      className="flex items-center gap-1 rounded-full bg-pos-surface-muted px-2.5 py-1.5 text-pos-ink-muted"
     >
       <Icon size={14} strokeWidth={1.8} />
       <ChevronDown size={12} strokeWidth={2} />
@@ -481,6 +488,7 @@ function PeakPill({
   payload?: { a?: number; b?: number; c?: number };
   format?: "money" | "count" | "pct";
 }) {
+  const colors = useThemeColors();
   const amount = Number(value);
   if (x == null || y == null || !amount) return null;
   const peak = Math.max(payload?.a ?? 0, payload?.b ?? 0, payload?.c ?? 0);
@@ -494,8 +502,8 @@ function PeakPill({
   const width = Math.max(54, label.length * 6.6);
   return (
     <g transform={`translate(${x},${y})`}>
-      <rect x={-width / 2} y={-26} width={width} height={18} rx={9} fill={PINK} />
-      <text x={0} y={-13} textAnchor="middle" fill="#fff" fontSize={10} fontWeight={600}>
+      <rect x={-width / 2} y={-26} width={width} height={18} rx={9} fill={colors.primary} />
+      <text x={0} y={-13} textAnchor="middle" fill={colors.surface} fontSize={10} fontWeight={600}>
         {label}
       </text>
     </g>
@@ -530,6 +538,7 @@ function PlatformMonthChart({
   people: { name: string }[];
   focus: "revenue" | "tickets" | "mix";
 }) {
+  const colors = useThemeColors();
   const faces = people.length
     ? people
     : [{ name: "Ada O" }, { name: "Ben K" }, { name: "Cam L" }];
@@ -563,8 +572,8 @@ function PlatformMonthChart({
                 patternUnits="userSpaceOnUse"
                 patternTransform="rotate(45)"
               >
-                <rect width="10" height="10" fill="#f2f2f4" />
-                <rect width="5" height="10" fill="#c2c2c8" />
+                <rect width="10" height="10" fill={colors.chartGrid} />
+                <rect width="5" height="10" fill={colors.chartBarAccent} />
               </pattern>
             </defs>
             <YAxis
@@ -574,7 +583,7 @@ function PlatformMonthChart({
               axisLine={false}
               tickLine={false}
               width={56}
-              tick={{ fontSize: 11, fill: "#c5c5c8" }}
+              tick={{ fontSize: 11, fill: colors.inkFaint }}
               tickFormatter={(value) =>
                 format === "pct"
                   ? `${value}%`
@@ -586,19 +595,19 @@ function PlatformMonthChart({
             <XAxis dataKey="month" hide />
             <Bar dataKey="a" radius={[14, 14, 14, 14]} maxBarSize={24} isAnimationActive={false}>
               {data.map((row) => (
-                <Cell key={`${row.month}-a`} fill={row.stripe === 0 ? "url(#hq-stripe-month)" : "#e6e6ec"} />
+                <Cell key={`${row.month}-a`} fill={row.stripe === 0 ? "url(#hq-stripe-month)" : colors.chartBar} />
               ))}
               <LabelList dataKey="a" content={<PeakPill format={format} />} />
             </Bar>
             <Bar dataKey="b" radius={[14, 14, 14, 14]} maxBarSize={24} isAnimationActive={false}>
               {data.map((row) => (
-                <Cell key={`${row.month}-b`} fill={row.stripe === 1 ? "url(#hq-stripe-month)" : "#e6e6ec"} />
+                <Cell key={`${row.month}-b`} fill={row.stripe === 1 ? "url(#hq-stripe-month)" : colors.chartBar} />
               ))}
               <LabelList dataKey="b" content={<PeakPill format={format} />} />
             </Bar>
             <Bar dataKey="c" radius={[14, 14, 14, 14]} maxBarSize={24} isAnimationActive={false}>
               {data.map((row) => (
-                <Cell key={`${row.month}-c`} fill="#d5d5dc" />
+                <Cell key={`${row.month}-c`} fill={colors.chartBarAccent} />
               ))}
               <LabelList dataKey="c" content={<PeakPill format={format} />} />
             </Bar>
@@ -613,7 +622,7 @@ function PlatformMonthChart({
                 <Avatar key={`${row.month}-${person.name}`} name={person.name} size={20} index={index} />
               ))}
             </div>
-            <span className="mt-1 text-[12px] text-[#c5c5c8]">{row.month}</span>
+            <span className="mt-1 text-[12px] text-pos-ink-faint">{row.month}</span>
           </div>
         ))}
       </div>
@@ -634,6 +643,7 @@ function SalesWaveDot({
   index?: number;
   people: { name: string }[];
 }) {
+  const colors = useThemeColors();
   if (cx == null || cy == null) return null;
   const person = people[index % Math.max(people.length, 1)];
   if (person && (index === 4 || index === 6 || index === 10)) {
@@ -644,7 +654,7 @@ function SalesWaveDot({
     );
   }
   if (index === 2 || index === 8) {
-    return <circle cx={cx} cy={cy} r={4} fill={PINK} stroke="#fff" strokeWidth={2} />;
+    return <circle cx={cx} cy={cy} r={4} fill={colors.primary} stroke={colors.surface} strokeWidth={2} />;
   }
   return <g />;
 }
@@ -656,6 +666,7 @@ function SalesDynamicChart({
   weeks: { week: string; value: number; tickets: number }[];
   people: { name: string }[];
 }) {
+  const colors = useThemeColors();
   const data = weeks.map((row) => ({
     week: row.week.replace(/^W/, "W "),
     a: row.value,
@@ -673,7 +684,7 @@ function SalesDynamicChart({
               axisLine={false}
               tickLine={false}
               interval={0}
-              tick={{ fontSize: 11, fill: "#c5c5c8" }}
+              tick={{ fontSize: 11, fill: colors.inkFaint }}
               tickFormatter={(value) => {
                 const week = Number(String(value).replace(/\D/g, ""));
                 return week % 2 === 1 ? `W ${week}` : "";
@@ -682,7 +693,7 @@ function SalesDynamicChart({
             <Line
               type="monotone"
               dataKey="b"
-              stroke="#c4b5fd"
+              stroke={colors.chartLineSoft}
               strokeWidth={2}
               dot={false}
               isAnimationActive={false}
@@ -690,7 +701,7 @@ function SalesDynamicChart({
             <Line
               type="monotone"
               dataKey="a"
-              stroke={PINK}
+              stroke={colors.primary}
               strokeWidth={2.6}
               isAnimationActive={false}
               dot={(props) => (
@@ -706,11 +717,11 @@ function SalesDynamicChart({
           </LineChart>
         </ResponsiveContainer>
       </div>
-      <div className="relative mt-7 h-2.5 rounded-full bg-gradient-to-r from-[#22c55e] via-[#eab308] to-[#6d4aff]">
+      <div className="relative mt-7 h-2.5 rounded-full bg-pos-border">
         {[
-          { left: "16%", value: Math.max(weeks[2]?.tickets ?? 0, 0), tone: GREEN, name: people[0]?.name, face: 0 },
-          { left: "48%", value: Math.max(weeks[5]?.tickets ?? 0, 0), tone: "#eab308", name: people[1]?.name, face: 1 },
-          { left: "82%", value: Math.max(weeks[9]?.tickets ?? wins, 0), tone: PINK, name: people[2]?.name ?? people[0]?.name, face: 2 },
+          { left: "16%", value: Math.max(weeks[2]?.tickets ?? 0, 0), tone: colors.avatar[0], name: people[0]?.name, face: 0 },
+          { left: "48%", value: Math.max(weeks[5]?.tickets ?? 0, 0), tone: colors.avatar[1], name: people[1]?.name, face: 1 },
+          { left: "82%", value: Math.max(weeks[9]?.tickets ?? wins, 0), tone: colors.primary, name: people[2]?.name ?? people[0]?.name, face: 2 },
         ].map((mark) => (
           <span
             key={mark.left}
@@ -756,10 +767,11 @@ function SalesTeamCard({
   selected: string | null;
   onSelect: (name: string) => void;
 }) {
+  const colors = useThemeColors();
   const openName = selected || cashiers[0]?.name || null;
   return (
-    <div className="h-full rounded-[28px] bg-white p-5 shadow-[0_1px_2px_rgba(28,28,30,0.04)]">
-      <div className="grid grid-cols-[1.45fr_1fr_0.75fr_0.5fr_1.2fr] gap-2 px-1 text-[12px] text-[#c5c5c8]">
+    <div className="h-full rounded-[28px] bg-pos-surface p-5 shadow-pos-sm">
+      <div className="grid grid-cols-[1.45fr_1fr_0.75fr_0.5fr_1.2fr] gap-2 px-1 text-[12px] text-pos-ink-faint">
         <span>Sales</span>
         <span>Revenue</span>
         <span>Leads</span>
@@ -768,7 +780,7 @@ function SalesTeamCard({
       </div>
       <div className="mt-2 space-y-1">
         {cashiers.length === 0 ? (
-          <p className="px-1 py-6 text-sm text-neutral-400">Cashiers show here after sales post to HQ.</p>
+          <p className="px-1 py-6 text-sm text-pos-ink-faint">Cashiers show here after sales post to HQ.</p>
         ) : (
           cashiers.map((row, index) => {
             const leadCount = ticketsByCashier.find((item) => item.name === row.name)?.total ?? 0;
@@ -790,11 +802,11 @@ function SalesTeamCard({
             const otherShare = (otherTotal / tenderTotalAll) * 100;
             const padDonut = tenders.length === 0;
             const donut = [
-              { name: primary.name, value: padDonut ? 45 : Math.max(primary.total, 0), fill: PINK },
-              { name: second.name, value: padDonut ? 28 : Math.max(second.total, 0), fill: INK },
-              { name: third.name, value: padDonut ? 14 : Math.max(third.total, 0), fill: "#d4d4d8" },
-              { name: thirdExtra.name, value: padDonut ? 5 : Math.max(thirdExtra.total, 0), fill: "#e8e8ec" },
-              { name: "Other", value: padDonut ? 8 : Math.max(otherTotal, 0), fill: "#f4f4f5" },
+              { name: primary.name, value: padDonut ? 45 : Math.max(primary.total, 0), fill: colors.primary },
+              { name: second.name, value: padDonut ? 28 : Math.max(second.total, 0), fill: colors.ink },
+              { name: third.name, value: padDonut ? 14 : Math.max(third.total, 0), fill: colors.chartSlice2 },
+              { name: thirdExtra.name, value: padDonut ? 5 : Math.max(thirdExtra.total, 0), fill: colors.chartSlice3 },
+              { name: "Other", value: padDonut ? 8 : Math.max(otherTotal, 0), fill: colors.chartSlice4 },
             ].filter((slice) => slice.value > 0);
             const myWeeks = weeks.map((week, weekIndex) => {
               const to = new Date();
@@ -814,11 +826,11 @@ function SalesTeamCard({
             return (
               <div
                 key={row.name}
-                className={panel ? "rounded-[24px] bg-gradient-to-br from-[#fff1f5] via-[#fff7f2] to-white p-2" : ""}
+                className={panel ? "rounded-[24px] bg-pos-primary-soft p-2" : ""}
               >
                 <button
                   type="button"
-                  className="grid w-full grid-cols-[1.45fr_1fr_0.75fr_0.5fr_1.2fr] items-center gap-2 rounded-2xl px-1 py-2 text-left hover:bg-[#f6f5f8]"
+                  className="grid w-full grid-cols-[1.45fr_1fr_0.75fr_0.5fr_1.2fr] items-center gap-2 rounded-2xl px-1 py-2 text-left hover:bg-pos-surface-muted"
                   onClick={() => onSelect(row.name)}
                 >
                   <span className="flex min-w-0 items-center gap-2">
@@ -830,41 +842,38 @@ function SalesTeamCard({
                   </span>
                   <span className="text-[14px] tabular-nums">
                     <span className="font-medium">{leadCount}</span>{" "}
-                    <span className="text-[#c5c5c8]">{pipeline}</span>
+                    <span className="text-pos-ink-faint">{pipeline}</span>
                   </span>
                   <span className="text-[14px] tabular-nums">{kpi.toFixed(2)}</span>
-                  <span className="flex items-center gap-1.5 text-[13px] text-[#c5c5c8]">
+                  <span className="flex items-center gap-1.5 text-[13px] text-pos-ink-faint">
                     {mix}%
                     <CountPill value={wins || leadCount} tone={index === cashiers.length - 1 ? "green" : "pink"} />
                     <CountPill value={losses} tone="black" />
-                    {panel ? <ArrowUp size={14} strokeWidth={2.6} style={{ color: PINK }} /> : null}
+                    {panel ? <ArrowUp size={14} strokeWidth={2.6} className="text-pos-primary" /> : null}
                   </span>
                 </button>
                 {panel ? (
                   <div className="px-1 pb-2 pt-1">
                     <div className="mb-3 flex flex-wrap gap-1.5">
-                      <span className="rounded-full px-2.5 py-1 text-[11px] text-white" style={{ background: PINK }}>
+                      <span className="rounded-full bg-pos-primary px-2.5 py-1 text-[11px] text-white">
                         Top sales 💪
                       </span>
-                      <span className="rounded-full bg-white px-2.5 py-1 text-[11px]">Sales streak 🔥</span>
-                      <span className="rounded-full bg-white px-2.5 py-1 text-[11px]">Top review 👍</span>
+                      <span className="rounded-full bg-pos-surface px-2.5 py-1 text-[11px] text-pos-ink">Sales streak 🔥</span>
+                      <span className="rounded-full bg-pos-surface px-2.5 py-1 text-[11px] text-pos-ink">Top review 👍</span>
                     </div>
                     <div className="mb-3 flex items-center justify-between gap-2">
                       <p className="text-[14px] font-medium">Work with platforms</p>
                       <div className="flex items-center gap-2">
-                        <span
-                          className="grid h-6 min-w-6 place-items-center rounded-full px-1 text-[11px] font-semibold text-white"
-                          style={{ background: PINK }}
-                        >
+                        <span className="grid h-6 min-w-6 place-items-center rounded-full bg-pos-primary px-1 text-[11px] font-semibold text-white">
                           3
                         </span>
-                        <span className="rounded-full bg-white px-2.5 py-1 text-[12px] font-medium tabular-nums">
+                        <span className="rounded-full bg-pos-surface px-2.5 py-1 text-[12px] font-medium tabular-nums text-pos-ink">
                           <FitMoney minor={row.total} kind="cell" />
                         </span>
                       </div>
                     </div>
                     <div className="grid gap-3 sm:grid-cols-[1.15fr_0.85fr]">
-                      <div className="rounded-[20px] bg-white p-3 shadow-[0_1px_2px_rgba(28,28,30,0.04)]">
+                      <div className="rounded-[20px] bg-pos-surface p-3 shadow-pos-sm">
                         <div className="mb-1 flex items-center gap-2">
                           <TenderIcon id={primaryId === "other" ? "cash" : primaryId} size={36} />
                           <span className="text-[13px] font-medium">{primary.name}</span>
@@ -893,26 +902,26 @@ function SalesTeamCard({
                             <p className="text-[28px] font-semibold leading-none tabular-nums">
                               {primaryShare.toFixed(1)}%
                             </p>
-                            <p className="mt-1 min-w-0 text-[#c5c5c8]">
+                            <p className="mt-1 min-w-0 text-pos-ink-faint">
                               <FitMoney minor={primary.total} kind="cell" className="font-normal" />
                             </p>
                           </div>
                         </div>
                       </div>
                       <div className="space-y-2 text-[13px]">
-                        <div className="flex items-center justify-between gap-2 rounded-[18px] bg-white px-3 py-2.5 shadow-[0_1px_2px_rgba(28,28,30,0.04)]">
+                        <div className="flex items-center justify-between gap-2 rounded-[18px] bg-pos-surface-elevated px-3 py-2.5 shadow-pos-sm">
                           <span className="flex min-w-0 items-center gap-2">
                             <TenderIcon id={secondId === "other" ? "card" : secondId} size={36} />
                             <span className="truncate">{second.name}</span>
                           </span>
                           <span className="shrink-0 text-right tabular-nums">
                             <span className="font-medium">{((second.total / tenderTotalAll) * 100).toFixed(1)}%</span>
-                            <span className="ml-1 min-w-0 text-[#c5c5c8]">
+                            <span className="ml-1 min-w-0 text-pos-ink-faint">
                               <FitMoney minor={second.total} kind="cell" className="inline font-normal" />
                             </span>
                           </span>
                         </div>
-                        <div className="rounded-[18px] bg-white px-3 py-2.5 shadow-[0_1px_2px_rgba(28,28,30,0.04)]">
+                        <div className="rounded-[18px] bg-pos-surface-elevated px-3 py-2.5 shadow-pos-sm">
                           <div className="flex items-center justify-between gap-2">
                             <span className="flex min-w-0 items-center gap-2">
                               <TenderIcon id={thirdId === "other" ? "transfer" : thirdId} size={36} />
@@ -920,21 +929,21 @@ function SalesTeamCard({
                             </span>
                             <span className="shrink-0 text-right tabular-nums">
                               <span className="font-medium">{((third.total / tenderTotalAll) * 100).toFixed(1)}%</span>
-                              <span className="ml-1 min-w-0 text-[#c5c5c8]">
+                              <span className="ml-1 min-w-0 text-pos-ink-faint">
                                 <FitMoney minor={third.total} kind="cell" className="inline font-normal" />
                               </span>
                             </span>
                           </div>
-                          <div className="mt-1.5 flex items-center justify-end gap-1 pr-0 text-right tabular-nums text-[#c5c5c8]">
-                            <span className="font-medium text-[#111]">
+                          <div className="mt-1.5 flex items-center justify-end gap-1 pr-0 text-right tabular-nums text-pos-ink-faint">
+                            <span className="font-medium text-pos-ink">
                               {((thirdExtra.total / tenderTotalAll) * 100).toFixed(1)}%
                             </span>
                             <FitMoney minor={thirdExtra.total} kind="cell" className="inline font-normal" />
                           </div>
                         </div>
-                        <p className="px-1 text-[#c5c5c8]">
+                        <p className="px-1 text-pos-ink-faint">
                           Other{" "}
-                          <span className="font-medium text-[#111]">{otherShare.toFixed(1)}%</span>{" "}
+                          <span className="font-medium text-pos-ink">{otherShare.toFixed(1)}%</span>{" "}
                           <span className="tabular-nums">
                             <FitMoney minor={otherTotal} kind="cell" className="inline font-normal" />
                           </span>
@@ -1201,12 +1210,12 @@ export function HqDashboard() {
   if (!ready) return <DashboardSkeleton />;
 
   return (
-    <div className="relative space-y-5 text-[#111]">
+    <div className="relative space-y-5 text-pos-ink">
       <div>
         <div className="flex items-center gap-2">
           <Link
             href="/setup/users/account"
-            className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white text-[#111] shadow-[0_1px_2px_rgba(28,28,30,0.06)]"
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-pos-surface text-pos-ink shadow-pos-sm"
             aria-label="Add people"
           >
             <Plus size={18} strokeWidth={2} />
@@ -1215,15 +1224,15 @@ export function HqDashboard() {
             <Link
               key={row.id}
               href="/setup/users/account"
-              className="flex items-center gap-2 rounded-full bg-white py-1 pl-1 pr-3 shadow-[0_1px_2px_rgba(28,28,30,0.06)]"
+              className="flex items-center gap-2 rounded-full bg-pos-surface py-1 pl-1 pr-3 shadow-pos-sm"
             >
               <Avatar name={row.name} size={28} index={index} />
-              <span className="text-[13px] font-medium text-[#111]">{shortName(row.name)}</span>
+              <span className="text-[13px] font-medium text-pos-ink">{shortName(row.name)}</span>
             </Link>
           ))}
           <Link
             href="/setup/users/account"
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#111] text-[11px] font-semibold text-white"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-pos-inverse text-[11px] font-semibold text-white"
             aria-label="All accounts"
           >
             {extra?.name.trim().charAt(0).toUpperCase() || "C"}
@@ -1231,7 +1240,7 @@ export function HqDashboard() {
           <div className="ml-auto flex items-center gap-2">
             <button
               type="button"
-              className="grid h-9 w-9 place-items-center rounded-full bg-white text-[#111] shadow-[0_1px_2px_rgba(28,28,30,0.06)]"
+              className="grid h-9 w-9 place-items-center rounded-full bg-pos-surface text-pos-ink shadow-pos-sm"
               aria-label="Copy link"
               onClick={() => {
                 void navigator.clipboard.writeText(window.location.href).then(
@@ -1244,7 +1253,7 @@ export function HqDashboard() {
             </button>
             <button
               type="button"
-              className="grid h-9 w-9 place-items-center rounded-full bg-white text-[#111] shadow-[0_1px_2px_rgba(28,28,30,0.06)]"
+              className="grid h-9 w-9 place-items-center rounded-full bg-pos-surface text-pos-ink shadow-pos-sm"
               aria-label="Export report"
               onClick={downloadCsv}
             >
@@ -1252,7 +1261,7 @@ export function HqDashboard() {
             </button>
             <button
               type="button"
-              className="grid h-9 w-9 place-items-center rounded-full bg-white text-[#111] shadow-[0_1px_2px_rgba(28,28,30,0.06)]"
+              className="grid h-9 w-9 place-items-center rounded-full bg-pos-surface text-pos-ink shadow-pos-sm"
               aria-label="Share"
               onClick={() => void shareReport()}
             >
@@ -1262,21 +1271,21 @@ export function HqDashboard() {
         </div>
 
         <div className="mt-8 flex flex-wrap items-center justify-between gap-4">
-          <h1 className="min-w-0 max-w-[min(100%,22rem)] truncate text-[clamp(1.5rem,4vw,2.5rem)] font-medium leading-none tracking-tight text-[#d4d4d8]">
+          <h1 className="min-w-0 max-w-[min(100%,22rem)] truncate text-[clamp(1.5rem,4vw,2.5rem)] font-medium leading-none tracking-tight text-pos-ink-faint">
             Welcome, {firstName(session?.name || "there")}
           </h1>
           <div className="flex items-center gap-3">
-            <span className="text-sm text-neutral-400">Timeframe</span>
+            <span className="text-sm text-pos-ink-faint">Timeframe</span>
             <button
               type="button"
               className={`relative h-6 w-11 rounded-full transition-colors ${
-                days === 30 ? "bg-[#111]" : "bg-neutral-300"
+                days === 30 ? "bg-pos-inverse" : "bg-pos-border"
               }`}
               onClick={() => setDays((value) => (value === 30 ? 90 : 30))}
               aria-label="Toggle 30 or 90 days"
             >
               <span
-                className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition ${
+                className={`absolute top-0.5 h-5 w-5 rounded-full bg-pos-surface transition ${
                   days === 30 ? "right-0.5" : "left-0.5"
                 }`}
               />
@@ -1284,15 +1293,15 @@ export function HqDashboard() {
             <div className="relative" ref={rangeRef}>
               <button
                 type="button"
-                className="flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm text-[#111] shadow-[0_1px_2px_rgba(28,28,30,0.06)]"
+                className="flex items-center gap-2 rounded-full bg-pos-surface px-4 py-2 text-sm text-pos-ink shadow-pos-sm"
                 onClick={() => setRangeOpen((open) => !open)}
                 aria-expanded={rangeOpen}
               >
                 {rangeLabel(report.from, report.to)}
-                <ChevronDown size={14} strokeWidth={2} className="text-neutral-400" />
+                <ChevronDown size={14} strokeWidth={2} className="text-pos-ink-faint" />
               </button>
               {rangeOpen ? (
-                <div className="absolute right-0 z-20 mt-2 w-48 overflow-hidden rounded-2xl bg-white py-1 shadow-[0_12px_40px_rgba(28,28,30,0.12)]">
+                <div className="absolute right-0 z-20 mt-2 w-48 overflow-hidden rounded-2xl bg-pos-surface py-1 shadow-pos-md">
                   {[
                     { days: 30, label: "Last 30 days" },
                     { days: 90, label: "Last 90 days" },
@@ -1301,8 +1310,8 @@ export function HqDashboard() {
                     <button
                       key={row.days}
                       type="button"
-                      className={`block w-full px-4 py-2 text-left text-sm ${
-                        days === row.days ? "bg-[#f6f5f8] font-medium" : "hover:bg-[#f6f5f8]"
+                      className={`block w-full px-4 py-2 text-left text-sm text-pos-ink ${
+                        days === row.days ? "bg-pos-surface-muted font-medium" : "hover:bg-pos-surface-muted"
                       }`}
                       onClick={() => {
                         setDays(row.days);
@@ -1321,21 +1330,22 @@ export function HqDashboard() {
 
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-5">
         <div className="min-w-0 shrink-0 overflow-hidden lg:max-w-[340px]">
-          <p className="text-[13px] text-neutral-400">Revenue</p>
+          <p className="text-[13px] text-pos-ink-faint">Revenue</p>
           <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
             <FitMoney minor={report.revenue} kind="hero" />
             <span
-              className="inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[12px] font-semibold text-white"
-              style={{ background: positive ? GREEN : PINK }}
+              className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[12px] font-semibold text-white ${
+                positive ? "bg-pos-success" : "bg-pos-primary"
+              }`}
             >
               <DeltaIcon size={13} strokeWidth={2.6} />
               {Math.abs(report.pct).toFixed(1)}%
             </span>
-            <span className="min-w-0 max-w-[9rem] truncate rounded-full bg-[#f6ecec] px-2.5 py-0.5 text-[12px] font-medium text-[#c45c4a]" title={naira(Math.abs(report.delta))}>
+            <span className="min-w-0 max-w-[9rem] truncate rounded-full bg-red-500/10 px-2.5 py-0.5 text-[12px] font-medium text-red-600 dark:text-red-400" title={naira(Math.abs(report.delta))}>
               {displayMoney(Math.abs(report.delta))}
             </span>
           </div>
-          <p className="mt-2 min-w-0 truncate text-[13px] text-neutral-400" title={`vs prev. ${naira(report.prevRevenue)}`}>
+          <p className="mt-2 min-w-0 truncate text-[13px] text-pos-ink-faint" title={`vs prev. ${naira(report.prevRevenue)}`}>
             vs prev. {displayMoney(report.prevRevenue)} {rangeLabel(report.prevFrom, report.prevTo)}
           </p>
         </div>
@@ -1343,13 +1353,13 @@ export function HqDashboard() {
         <div className="grid min-w-0 flex-1 grid-cols-2 gap-2.5 sm:grid-cols-[minmax(0,0.85fr)_minmax(0,0.85fr)_minmax(0,1.35fr)]">
           <button
             type="button"
-            className="flex min-h-[118px] flex-col rounded-[20px] bg-white p-3.5 text-left shadow-[0_1px_2px_rgba(28,28,30,0.04)]"
+            className="flex min-h-[118px] flex-col rounded-[20px] bg-pos-surface p-3.5 text-left shadow-pos-sm"
             onClick={() => {
               if (report.topCashier) setSelectedCashier(report.topCashier.name);
               setFocus("tickets");
             }}
           >
-            <p className="text-[13px] text-neutral-400">Top cashier</p>
+            <p className="text-[13px] text-pos-ink-faint">Top cashier</p>
             <div className="mt-auto flex min-w-0 items-end justify-between gap-2">
               <p
                 className={`min-w-0 truncate font-semibold leading-none tabular-nums ${moneyClass(String(report.topCashier?.total ?? 0), "card")}`}
@@ -1369,7 +1379,7 @@ export function HqDashboard() {
 
           <Link
             href="/reports/sales/invoice/list"
-            className="flex min-h-[118px] flex-col rounded-[20px] bg-[#111] p-3.5 text-white"
+            className="flex min-h-[118px] flex-col rounded-[20px] bg-pos-inverse p-3.5 text-white"
           >
             <p className="flex items-center justify-between text-[13px] text-white/50">
               Best ticket
@@ -1387,7 +1397,7 @@ export function HqDashboard() {
             </p>
           </Link>
 
-          <div className="col-span-2 grid min-h-[118px] grid-cols-3 rounded-[20px] bg-white p-2 shadow-[0_1px_2px_rgba(28,28,30,0.04)] sm:col-span-1">
+          <div className="col-span-2 grid min-h-[118px] grid-cols-3 rounded-[20px] bg-pos-surface p-2 shadow-pos-sm sm:col-span-1">
             {[
               {
                 label: "Tickets",
@@ -1412,19 +1422,18 @@ export function HqDashboard() {
                 key={row.label}
                 type="button"
                 className={`flex flex-col justify-center rounded-[16px] px-2.5 py-2 text-left ${
-                  focus === row.key ? "ring-2 ring-[#6d4aff]" : ""
+                  focus === row.key ? "ring-2 ring-pos-primary" : ""
                 }`}
                 onClick={() => setFocus(row.key)}
               >
-                <p className="text-[12px] text-neutral-400">{row.label}</p>
+                <p className="text-[12px] text-pos-ink-faint">{row.label}</p>
                 <p className="mt-1 min-w-0">
                   <span className={`block truncate font-semibold leading-none tabular-nums ${moneyClass(row.value, "tile")}`}>
                     {row.value}
                   </span>
                 </p>
                 <p
-                  className="mt-1.5 inline-flex items-center gap-0.5 text-[11px] font-medium"
-                  style={{ color: PINK }}
+                  className="mt-1.5 inline-flex items-center gap-0.5 text-[11px] font-medium text-pos-primary"
                 >
                   <ArrowUpRight size={11} strokeWidth={2.6} />
                   {row.hint}
@@ -1435,9 +1444,9 @@ export function HqDashboard() {
         </div>
       </div>
 
-      <div className="flex h-12 w-full min-w-0 flex-nowrap items-center overflow-hidden rounded-full bg-white py-1 pl-2 pr-1 shadow-[0_1px_2px_rgba(28,28,30,0.04)]">
+      <div className="flex h-12 w-full min-w-0 flex-nowrap items-center overflow-hidden rounded-full bg-pos-surface py-1 pl-2 pr-1 shadow-pos-sm">
         {cashierBar.length === 0 ? (
-          <p className="flex-1 px-4 text-[13px] text-neutral-400">
+          <p className="flex-1 px-4 text-[13px] text-pos-ink-faint">
             No cashier split until tickets land.
           </p>
         ) : (
@@ -1455,7 +1464,7 @@ export function HqDashboard() {
                   <span className="min-w-0 truncate text-[13px] font-medium leading-none tabular-nums">
                     {displayMoney(row.total)}
                   </span>
-                  <span className="ml-auto shrink-0 text-[12px] leading-none text-neutral-400">
+                  <span className="ml-auto shrink-0 text-[12px] leading-none text-pos-ink-faint">
                     {share.toFixed(2)}%
                   </span>
                 </button>
@@ -1465,7 +1474,7 @@ export function HqDashboard() {
         )}
         <Link
           href="/reports/sales/invoice/list"
-          className="ml-1.5 shrink-0 rounded-full bg-[#111] px-4 py-2 text-[13px] font-medium leading-none text-white"
+          className="ml-1.5 shrink-0 rounded-full bg-pos-inverse px-4 py-2 text-[13px] font-medium leading-none text-white"
         >
           Details
         </Link>
@@ -1473,7 +1482,7 @@ export function HqDashboard() {
 
       <div className="grid gap-3 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.15fr)]">
         <div className="grid gap-3 sm:grid-cols-2">
-          <div className="flex h-full min-h-[292px] flex-col rounded-[28px] bg-white p-5 shadow-[0_1px_2px_rgba(28,28,30,0.04)]">
+          <div className="flex h-full min-h-[292px] flex-col rounded-[28px] bg-pos-surface p-5 shadow-pos-sm">
             <div className="mb-4 flex items-center justify-between">
               <PillMenu align="left" trigger={<MenuPill icon={Menu} />}>
                 <MenuItem
@@ -1517,13 +1526,13 @@ export function HqDashboard() {
                     }}
                   >
                     <TenderIcon id={row.id} />
-                    <span className="min-w-0 flex-1 truncate text-[15px] font-medium text-[#222]">
+                    <span className="min-w-0 flex-1 truncate text-[15px] font-medium text-pos-ink">
                       {row.name}
                     </span>
-                    <span className="min-w-0 max-w-[7.5rem] text-right text-[15px] font-medium text-[#222]">
+                    <span className="min-w-0 max-w-[7.5rem] text-right text-[15px] font-medium text-pos-ink">
                       <FitMoney minor={row.total} kind="cell" />
                     </span>
-                    <span className="w-10 text-right text-[13px] text-[#c5c5c7]">{row.share}%</span>
+                    <span className="w-10 text-right text-[13px] text-pos-ink-faint">{row.share}%</span>
                   </button>
                 </li>
               ))}
@@ -1532,7 +1541,7 @@ export function HqDashboard() {
 
           <ExpiredStockCard items={catalog} />
 
-          <div className="overflow-hidden rounded-[28px] bg-white shadow-[0_1px_2px_rgba(28,28,30,0.04)] sm:col-span-2">
+          <div className="overflow-hidden rounded-[28px] bg-pos-surface shadow-pos-sm sm:col-span-2">
             <div className="flex items-center justify-between gap-3 px-5 pt-4 pb-3">
               <PillMenu
                 align="left"
@@ -1540,10 +1549,10 @@ export function HqDashboard() {
                   <button type="button" className="flex min-w-0 items-center gap-3 text-left">
                     <TenderIcon id={asTenderId(featured.name)} size={36} />
                     <div className="min-w-0">
-                      <p className="text-[13px] text-neutral-400">Tender value</p>
-                      <p className="flex items-center gap-1 text-[16px] font-semibold text-[#111]">
+                      <p className="text-[13px] text-pos-ink-faint">Tender value</p>
+                      <p className="flex items-center gap-1 text-[16px] font-semibold text-pos-ink">
                         {featured.name}
-                        <ChevronDown size={16} className="text-neutral-400" />
+                        <ChevronDown size={16} className="text-pos-ink-faint" />
                       </p>
                     </div>
                   </button>
@@ -1566,7 +1575,7 @@ export function HqDashboard() {
                     key={key}
                     type="button"
                     className={`rounded-full px-3.5 py-1.5 ${
-                      focus === key ? "bg-[#111] text-white" : "text-neutral-400"
+                      focus === key ? "bg-pos-inverse text-white" : "text-pos-ink-faint"
                     }`}
                     onClick={() => setFocus(key)}
                   >
@@ -1577,8 +1586,7 @@ export function HqDashboard() {
             </div>
             <div className="flex min-h-[260px] items-stretch">
               <div
-                className="hidden w-[196px] shrink-0 rounded-tr-[32px] sm:flex"
-                style={{ background: PINK }}
+                className="hidden w-[196px] shrink-0 rounded-tr-[32px] bg-pos-primary sm:flex"
               >
                 <p
                   className="flex w-7 shrink-0 items-center justify-center text-[11px] font-medium tracking-[0.06em] text-white/70"

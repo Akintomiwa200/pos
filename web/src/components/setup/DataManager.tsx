@@ -43,7 +43,7 @@ export function DataManager() {
       />
       <DataTable columns={["Store", "Count"]}>
         {Object.entries(counts).map(([key, value]) => (
-          <tr key={key} className="border-b border-neutral-50">
+          <tr key={key} className="border-b border-pos-border/60">
             <td className="px-4 py-3 capitalize">{key}</td>
             <td className="px-4 py-3 font-medium tabular-nums">{value}</td>
           </tr>
@@ -76,7 +76,7 @@ export function DataManager() {
           </PrimaryButton>
         }
       >
-        <p className="text-sm text-neutral-600">
+        <p className="text-sm text-pos-ink-muted">
           Use this after a bad import. Live tills refresh from the catalog stream.
         </p>
       </SlideOver>

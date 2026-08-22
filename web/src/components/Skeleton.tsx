@@ -1,5 +1,5 @@
 function Bone({ className = "" }: { className?: string }) {
-  return <div className={`animate-pulse bg-[#e8e8ee] ${className}`} />;
+  return <div className={`animate-pulse bg-pos-border ${className}`} />;
 }
 
 export function Skeleton({ className = "" }: { className?: string }) {
@@ -78,12 +78,12 @@ export function ManagerSkeleton({ variant = "table" }: { variant?: "table" | "gr
     return (
       <div aria-busy="true" aria-live="polite">
         <span className="sr-only">Loading</span>
-        <div className="overflow-hidden rounded-2xl bg-white shadow-[0_8px_30px_rgba(28,28,30,0.06)]">
-          <div className="border-b border-neutral-100 px-4 py-3">
+        <div className="overflow-hidden rounded-2xl bg-pos-surface shadow-pos-md">
+          <div className="border-b border-pos-border px-4 py-3">
             <Bone className="h-4 w-full rounded-md" />
           </div>
           {Array.from({ length: 7 }, (_, index) => (
-            <div key={index} className="border-b border-neutral-50 px-4 py-3">
+            <div key={index} className="border-b border-pos-border/60 px-4 py-3">
               <Bone className="h-4 w-full rounded-md" />
             </div>
           ))}
@@ -95,13 +95,13 @@ export function ManagerSkeleton({ variant = "table" }: { variant?: "table" | "gr
     return (
       <div className="grid gap-6 lg:grid-cols-[240px_1fr]" aria-busy="true" aria-live="polite">
         <span className="sr-only">Loading</span>
-        <div className="rounded-2xl bg-white p-3 shadow-[0_8px_30px_rgba(28,28,30,0.06)]">
+        <div className="rounded-2xl bg-pos-surface p-3 shadow-pos-md">
           <Bone className="mb-2 h-9 w-full rounded-lg" />
           {Array.from({ length: 5 }, (_, index) => (
             <Bone key={index} className="mb-1 h-9 w-full rounded-lg" />
           ))}
         </div>
-        <div className="rounded-2xl bg-white p-6 shadow-[0_8px_30px_rgba(28,28,30,0.06)]">
+        <div className="rounded-2xl bg-pos-surface p-6 shadow-pos-md">
           <Bone className="h-4 w-24 rounded-md" />
           <Bone className="mt-2 h-10 w-full max-w-md rounded-xl" />
           <Bone className="mt-6 h-4 w-28 rounded-md" />
@@ -124,17 +124,17 @@ export function ManagerSkeleton({ variant = "table" }: { variant?: "table" | "gr
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_340px]" aria-busy="true" aria-live="polite">
       <span className="sr-only">Loading</span>
-      <div className="overflow-hidden rounded-2xl bg-white shadow-[0_8px_30px_rgba(28,28,30,0.06)]">
-        <div className="border-b border-neutral-100 px-4 py-3">
+      <div className="overflow-hidden rounded-2xl bg-pos-surface shadow-pos-md">
+        <div className="border-b border-pos-border px-4 py-3">
           <Bone className="h-4 w-full rounded-md" />
         </div>
         {Array.from({ length: 6 }, (_, index) => (
-          <div key={index} className="border-b border-neutral-50 px-4 py-3">
+          <div key={index} className="border-b border-pos-border/60 px-4 py-3">
             <Bone className="h-4 w-full rounded-md" />
           </div>
         ))}
       </div>
-      <div className="rounded-2xl bg-white p-5 shadow-[0_8px_30px_rgba(28,28,30,0.06)]">
+      <div className="rounded-2xl bg-pos-surface p-5 shadow-pos-md">
         <Bone className="h-5 w-32 rounded-md" />
         {Array.from({ length: 5 }, (_, index) => (
           <div key={index} className="mt-4">
@@ -167,9 +167,9 @@ export function NoticeSkeleton() {
 
 export function ConsoleChromeSkeleton() {
   return (
-    <div className="flex h-svh overflow-hidden bg-[#f3f4f8]" aria-busy="true" aria-live="polite">
+    <div className="flex h-svh overflow-hidden bg-pos-bg" aria-busy="true" aria-live="polite">
       <span className="sr-only">Loading</span>
-      <aside className="hidden h-full w-72 shrink-0 border-r border-neutral-200 bg-white lg:flex lg:flex-col">
+      <aside className="hidden h-full w-72 shrink-0 border-r border-pos-border bg-pos-surface lg:flex lg:flex-col">
         <div className="flex items-center gap-2 px-5 py-5">
           <Bone className="h-8 w-8 rounded-full" />
           <Bone className="h-4 w-28 rounded-md" />
@@ -188,10 +188,13 @@ export function ConsoleChromeSkeleton() {
         </div>
       </aside>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <header className="flex h-16 w-full shrink-0 items-center gap-3 bg-[#f3f4f8] px-4 sm:px-6 lg:h-[10vh] lg:px-8">
-          <Bone className="h-10 min-w-0 flex-1 rounded-xl" />
-          <Bone className="h-10 w-10 shrink-0 rounded-xl" />
-          <Bone className="h-10 w-10 shrink-0 rounded-full" />
+        <header className="flex h-16 w-full shrink-0 items-center gap-3 bg-pos-bg px-4 sm:px-6 lg:h-[10vh] lg:px-8">
+          <Bone className="h-5 w-36 shrink-0 rounded-md" />
+          <Bone className="h-10 w-56 shrink-0 rounded-xl" />
+          <div className="ml-auto flex shrink-0 items-center gap-2">
+            <Bone className="h-10 w-10 shrink-0 rounded-xl" />
+            <Bone className="h-[52px] w-56 shrink-0 rounded-2xl" />
+          </div>
         </header>
         <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
           <div className="mx-auto w-full max-w-7xl p-4 sm:p-8">

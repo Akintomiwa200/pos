@@ -84,7 +84,7 @@ export function NotificationMenu({ token }: { token: string }) {
     <div className="relative" ref={rootRef}>
       <button
         type="button"
-        className="relative grid h-10 w-10 place-items-center rounded-xl bg-white text-neutral-600 shadow-[0_1px_2px_rgba(28,28,30,0.04)]"
+        className="relative grid h-10 w-10 place-items-center rounded-xl bg-pos-surface text-pos-ink-muted shadow-pos-sm"
         aria-label={unread ? `${unread} unread notifications` : "Notifications"}
         aria-haspopup="menu"
         aria-expanded={open}
@@ -95,7 +95,7 @@ export function NotificationMenu({ token }: { token: string }) {
       >
         <Bell size={18} strokeWidth={1.8} />
         {unread > 0 ? (
-          <span className="absolute -right-1 -top-1 grid min-w-[1.15rem] place-items-center rounded-full bg-[#6d4aff] px-1 text-[10px] font-semibold leading-4 text-white">
+          <span className="absolute -right-1 -top-1 grid min-w-[1.15rem] place-items-center rounded-full bg-pos-primary px-1 text-[10px] font-semibold leading-4 text-white">
             {badge}
           </span>
         ) : null}
@@ -103,14 +103,14 @@ export function NotificationMenu({ token }: { token: string }) {
       {open ? (
         <div
           role="menu"
-          className="absolute right-0 z-50 mt-1 w-80 overflow-hidden rounded-2xl border border-neutral-100 bg-white py-1 shadow-[0_12px_40px_rgba(28,28,30,0.12)]"
+          className="absolute right-0 z-50 mt-1 w-80 overflow-hidden rounded-2xl border border-pos-border bg-pos-surface py-1 shadow-pos-md"
         >
           <div className="flex items-center justify-between px-3 py-2">
-            <p className="text-sm font-semibold">Notifications</p>
+            <p className="text-sm font-semibold text-pos-ink">Notifications</p>
             {unread > 0 ? (
               <button
                 type="button"
-                className="text-xs font-medium text-[#6d4aff]"
+                className="text-xs font-medium text-pos-primary"
                 onClick={() => {
                   void markAllNotificationsRead(token)
                     .then(() => load())
@@ -125,25 +125,25 @@ export function NotificationMenu({ token }: { token: string }) {
             {!ready ? (
               <NoticeSkeleton />
             ) : items.length === 0 ? (
-              <p className="px-3 py-4 text-sm text-neutral-500">No notifications yet.</p>
+              <p className="px-3 py-4 text-sm text-pos-ink-muted">No notifications yet.</p>
             ) : (
               items.map((row) => (
                 <button
                   key={row.id}
                   type="button"
                   role="menuitem"
-                  className="flex w-full gap-3 px-3 py-2.5 text-left hover:bg-[#f6f5f8]"
+                  className="flex w-full gap-3 px-3 py-2.5 text-left hover:bg-pos-surface-muted"
                   onClick={() => void openNotice(row)}
                 >
                   <span
                     className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${
-                      row.readAt ? "bg-neutral-200" : "bg-[#6d4aff]"
+                      row.readAt ? "bg-pos-border" : "bg-pos-primary"
                     }`}
                   />
                   <span className="min-w-0">
-                    <span className="block text-sm font-medium text-[#1c1c1e]">{row.title}</span>
-                    <span className="mt-0.5 block text-xs text-neutral-500">{row.body}</span>
-                    <span className="mt-1 block text-[11px] text-neutral-400">
+                    <span className="block text-sm font-medium text-pos-ink">{row.title}</span>
+                    <span className="mt-0.5 block text-xs text-pos-ink-muted">{row.body}</span>
+                    <span className="mt-1 block text-[11px] text-pos-ink-faint">
                       {relativeTime(row.createdAt)}
                     </span>
                   </span>

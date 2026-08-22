@@ -172,9 +172,9 @@ export function TillManager() {
           Issue till
         </PrimaryButton>
       </div>
-      <div className="overflow-hidden rounded-2xl bg-white shadow-[0_8px_30px_rgba(28,28,30,0.06)]">
+      <div className="overflow-hidden rounded-2xl bg-pos-surface shadow-pos-md">
         <table className="w-full text-left text-sm">
-          <thead className="border-b border-neutral-100 text-neutral-500">
+          <thead className="border-b border-pos-border text-pos-ink-muted">
             <tr>
               <th className="px-4 py-3 font-medium">Till name</th>
               <th className="px-4 py-3 font-medium">Provider code</th>
@@ -189,18 +189,18 @@ export function TillManager() {
           <tbody>
             {tills.length === 0 ? (
               <tr>
-                <td className="px-4 py-6 text-neutral-400" colSpan={8}>
+                <td className="px-4 py-6 text-pos-ink-faint" colSpan={8}>
                   No tills issued yet. Create one and give the code to that device.
                 </td>
               </tr>
             ) : (
               tills.map((row) => (
-                <tr key={row.id} className="border-b border-neutral-50 align-top">
+                <tr key={row.id} className="border-b border-pos-border/60 align-top">
                   <td className="px-4 py-3 font-medium">{row.name}</td>
                   <td className="px-4 py-3">
                     <button
                       type="button"
-                      className="font-mono text-[13px] text-[#6d4aff]"
+                      className="font-mono text-[13px] text-pos-primary"
                       onClick={() => void copyCode(row.code)}
                     >
                       {row.code}
@@ -208,29 +208,29 @@ export function TillManager() {
                   </td>
                   <td className="px-4 py-3">
                     {row.hardwareHex ? (
-                      <span className="block font-mono text-[12px] text-neutral-700">
+                      <span className="block font-mono text-[12px] text-pos-ink">
                         {row.hardwareHex}
                       </span>
                     ) : (
-                      <span className="text-neutral-400">Not paired</span>
+                      <span className="text-pos-ink-faint">Not paired</span>
                     )}
                     {row.lastSeenAt ? (
-                      <span className="mt-1 block text-[11px] text-neutral-400">
+                      <span className="mt-1 block text-[11px] text-pos-ink-faint">
                         Seen {new Date(row.lastSeenAt).toLocaleTimeString("en-NG")}
                       </span>
                     ) : null}
                   </td>
-                  <td className="px-4 py-3 text-neutral-600">{tillProductLabel(row.product)}</td>
-                  <td className="px-4 py-3 text-neutral-600">{row.branchName || "—"}</td>
-                  <td className="px-4 py-3 text-neutral-600">{expiryLabel(row)}</td>
+                  <td className="px-4 py-3 text-pos-ink-muted">{tillProductLabel(row.product)}</td>
+                  <td className="px-4 py-3 text-pos-ink-muted">{row.branchName || "—"}</td>
+                  <td className="px-4 py-3 text-pos-ink-muted">{expiryLabel(row)}</td>
                   <td className="px-4 py-3">{statusLabel(row)}</td>
                   <td className="px-4 py-3 text-right whitespace-nowrap">
-                    <button type="button" className="text-[#6d4aff]" onClick={() => edit(row)}>
+                    <button type="button" className="text-pos-primary" onClick={() => edit(row)}>
                       Edit
                     </button>
                     <button
                       type="button"
-                      className="ml-3 text-[#6d4aff]"
+                      className="ml-3 text-pos-primary"
                       onClick={() => void onRenew(row.id)}
                       disabled={busy}
                     >
@@ -238,7 +238,7 @@ export function TillManager() {
                     </button>
                     <button
                       type="button"
-                      className="ml-3 text-[#6d4aff]"
+                      className="ml-3 text-pos-primary"
                       onClick={() => void onRegenerate(row.id)}
                       disabled={busy}
                     >
@@ -246,7 +246,7 @@ export function TillManager() {
                     </button>
                     <button
                       type="button"
-                      className="ml-3 text-neutral-400"
+                      className="ml-3 text-pos-ink-faint"
                       onClick={() => void onDelete(row.id)}
                     >
                       Delete

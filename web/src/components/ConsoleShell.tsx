@@ -36,11 +36,11 @@ export function ConsoleShell({ children }: { children: React.ReactNode }) {
   }
 
   const nav = filterNav(session.departments, session.privileges);
-  const allowed = canAccessPath(pathname, nav);
+  const allowed = canAccessPath(pathname, session.departments, session.privileges);
 
   return (
-    <div className="flex h-svh overflow-hidden bg-[#f3f4f8]">
-      <Sidebar nav={nav} open={navOpen} onClose={() => setNavOpen(false)} />
+    <div className="flex h-svh overflow-hidden bg-pos-bg">
+      <Sidebar session={session} nav={nav} open={navOpen} onClose={() => setNavOpen(false)} />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <ConsoleHeader
           session={session}
@@ -53,11 +53,11 @@ export function ConsoleShell({ children }: { children: React.ReactNode }) {
               children
             ) : (
               <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#6d4aff]">
+                <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-pos-primary">
                   Access
                 </p>
                 <h1 className="mt-1 text-2xl font-semibold tracking-tight">No access</h1>
-                <p className="mt-2 max-w-xl text-neutral-500">
+                <p className="mt-2 max-w-xl text-pos-ink-muted">
                   This page is not in the departments or privileges assigned to your group.
                 </p>
               </div>

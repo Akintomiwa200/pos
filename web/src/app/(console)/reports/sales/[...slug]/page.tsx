@@ -1,5 +1,7 @@
 import { DepartmentPage } from "@/components/DepartmentPage";
 import { GrossProfitReport, type GrossProfitVariant } from "@/components/reports/GrossProfitReport";
+import { ItemSalesPage } from "@/components/reports/ItemSalesPage";
+import { LeaderboardPage } from "@/components/reports/LeaderboardPage";
 import { SalesReports, type SalesReportVariant } from "@/components/reports/SalesReports";
 import {
   DocManager,
@@ -34,6 +36,8 @@ export default async function SalesReportPage({
   if (variant) return <SalesReports variant={variant} />;
 
   const gp = GP_VARIANTS[key];
+  if (gp === "by-item") return <ItemSalesPage />;
+  if (gp === "by-subgroup") return <LeaderboardPage />;
   if (gp) return <GrossProfitReport variant={gp} />;
 
   if (key === "quote/list") return <DocManager config={SALES_QUOTE_CONFIG} mode="list" />;

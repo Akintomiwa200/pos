@@ -13,6 +13,8 @@ export type ThemeColors = {
   surfaceMuted: string;
   border: string;
   success: string;
+  warning: string;
+  danger: string;
   chartBar: string;
   chartBarAccent: string;
   chartGrid: string;
@@ -39,6 +41,8 @@ function readThemeColors(): ThemeColors {
     surfaceMuted: readVar("--pos-surface-muted"),
     border: readVar("--pos-border"),
     success: readVar("--pos-success"),
+    warning: readVar("--pos-warning"),
+    danger: readVar("--pos-danger"),
     chartBar: readVar("--pos-chart-bar"),
     chartBarAccent: readVar("--pos-chart-bar-accent"),
     chartGrid: readVar("--pos-chart-grid"),
@@ -71,6 +75,8 @@ export function useThemeColors() {
           surfaceMuted: "#f6f5f8",
           border: "#e8e8ed",
           success: "#16a34a",
+          warning: "#d97706",
+          danger: "#dc2626",
           chartBar: "#e8e8ed",
           chartBarAccent: "#d8d8df",
           chartGrid: "#f0f0f3",

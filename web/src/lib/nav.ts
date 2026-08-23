@@ -11,9 +11,12 @@ import {
   CreditCard,
   FileText,
   Flag,
+  HelpCircle,
   History,
   IdCard,
+  LifeBuoy,
   Megaphone,
+  MessageSquare,
   Package,
   RotateCcw,
   Scale,
@@ -130,6 +133,17 @@ const CUSTOMER_NAV: NavNode[] = [
       { id: "customer-report-trail", label: "Trail", href: "/reports/trail/customer" },
     ],
   },
+];
+
+const SUPPORT_NAV: NavNode[] = [
+  { id: "support-overview", label: "Overview", href: "/crm/overview" },
+  { id: "support-contacts", label: "Contacts", href: "/crm/contacts" },
+  { id: "support-deals", label: "Deals", href: "/crm/deals" },
+  { id: "support-pipeline", label: "Pipeline", href: "/crm/pipeline" },
+  { id: "support-tickets", label: "Tickets", href: "/crm/tickets" },
+  { id: "support-activity", label: "Activity", href: "/crm/activity" },
+  { id: "support-projects", label: "Projects", href: "/crm/projects" },
+  { id: "support-issues", label: "Issues", href: "/crm/issues" },
 ];
 
 function nodeToAccess(node: NavNode): AccessNode {
@@ -421,6 +435,8 @@ export const ACCESS_NAV: NavSection[] = [
         children: PRODUCTS_NAV,
       },
       { id: "customer", label: "Customers", icon: User, children: CUSTOMER_NAV },
+      { id: "support", label: "Support", icon: LifeBuoy, children: SUPPORT_NAV },
+      { id: "chat", label: "Chat", icon: MessageSquare, href: "/chat" },
       { id: "vendor", label: "Vendor", icon: Building2, href: "/setup/vendor" },
       {
         id: "sales-rep",
@@ -487,6 +503,7 @@ export const ACCESS_NAV: NavSection[] = [
           { id: "others-export", label: "Export", href: "/setup/others/export" },
         ],
       },
+      { id: "help", label: "Help", icon: HelpCircle, href: "/help" },
     ],
   },
 ];
@@ -590,6 +607,8 @@ export const NAV: NavSection[] = [
     heading: "Workspace",
     department: "Setup",
     items: [
+      { id: "chat", label: "Chat", icon: MessageSquare, href: "/chat" },
+      { id: "support", label: "Support", icon: LifeBuoy, children: SUPPORT_NAV },
       { id: "customer", label: "Customers", icon: User, children: CUSTOMER_NAV },
       { id: "vendor", label: "Vendors", icon: Building2, href: "/setup/vendor" },
       { id: "staff", label: "Staff", icon: UserRound, href: "/setup/staff" },
@@ -666,6 +685,7 @@ export const NAV: NavSection[] = [
         icon: Settings,
         href: "/setup/others/settings",
       },
+      { id: "help", label: "Help", icon: HelpCircle, href: "/help" },
     ],
   },
 ];

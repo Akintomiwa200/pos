@@ -15,9 +15,32 @@ import {
   type NavSection,
 } from "../lib/nav";
 
+function navPathname(pathname: string) {
+  return pathname === "/crm" ? "/crm/overview" : pathname;
+}
+
 function isActivePath(pathname: string, href?: string) {
+  const path = navPathname(pathname);
   if (!href) return false;
-  return pathname === href || pathname.startsWith(`${href}/`);
+  return path === href || path.startsWith(`${href}/`);
+}
+
+function collectLeafHrefs(nodes: NavNode[]): string[] {
+  const hrefs: string[] = [];
+  for (const node of nodes) {
+    if (isNavGroup(node)) hrefs.push(...collectLeafHrefs(node.children));
+    else if (node.href) hrefs.push(node.href);
+  }
+  return hrefs;
+}
+
+/** Highlight only the most specific matching nav link (avoids /crm + /crm/contacts both active). */
+function isLeafNavActive(pathname: string, href: string, allHrefs: string[]) {
+  const path = navPathname(pathname);
+  const matches = allHrefs.filter((h) => path === h || path.startsWith(`${h}/`));
+  if (!matches.length) return false;
+  const best = matches.sort((a, b) => b.length - a.length)[0];
+  return best === href;
 }
 
 function nodeMatches(pathname: string, node: NavNode): boolean {
@@ -64,12 +87,14 @@ function NestedList({
   open,
   onToggle,
   depth = 0,
+  leafHrefs,
 }: {
   nodes: NavNode[];
   pathname: string;
   open: Record<string, boolean>;
   onToggle: (id: string) => void;
   depth?: number;
+  leafHrefs: string[];
 }) {
   return (
     <div
@@ -107,13 +132,14 @@ function NestedList({
                   open={open}
                   onToggle={onToggle}
                   depth={depth + 1}
+                  leafHrefs={leafHrefs}
                 />
               )}
             </div>
           );
         }
 
-        const active = isActivePath(pathname, node.href);
+        const active = isLeafNavActive(pathname, node.href, leafHrefs);
         return (
           <Link
             key={node.id}
@@ -243,6 +269,7 @@ export function Sidebar({
                     pathname={pathname}
                     open={openMenus}
                     onToggle={toggle}
+                    leafHrefs={collectLeafHrefs(item.children!)}
                   />
                 )}
               </div>
@@ -334,6 +361,7 @@ export function Sidebar({
                         pathname={pathname}
                         open={openMenus}
                         onToggle={toggle}
+                        leafHrefs={collectLeafHrefs(item.children!)}
                       />
                     )}
                   </div>
@@ -373,6 +401,7 @@ export function Sidebar({
                           pathname={pathname}
                           open={openMenus}
                           onToggle={toggle}
+                          leafHrefs={collectLeafHrefs(item.children!)}
                         />
                       )}
                     </div>

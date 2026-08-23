@@ -18,6 +18,8 @@ import { HardwareModule } from './hardware/hardware.module';
 import { SalesModule } from './sales/sales.module';
 import { ConsoleModule } from './console/console.module';
 import { CustomersModule } from './customers/customers.module';
+import { ChatModule } from './chat/chat.module';
+import { CrmModule } from './crm/crm.module';
 
 @Module({
   imports: [
@@ -38,6 +40,8 @@ import { CustomersModule } from './customers/customers.module';
     SalesModule,
     ConsoleModule,
     CustomersModule,
+    ChatModule,
+    CrmModule,
   ],
   controllers: [AppController],
   providers: [AppService],

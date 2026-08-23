@@ -24,12 +24,6 @@ export function SiteHeader() {
     setSolutionsOpen(false);
   }, [pathname]);
 
-  const cta = !loading && session
-    ? { href: "/dashboard", label: "My dashboard" }
-    : !loading
-      ? { href: "/register", label: "Get started" }
-      : null;
-
   return (
     <header className="sticky top-0 z-50">
       <div className="mx-auto max-w-5xl px-4 pt-4 sm:px-6">
@@ -81,13 +75,35 @@ export function SiteHeader() {
               ),
             )}
           </nav>
-          <div className="ml-auto flex items-center gap-1">
-            {cta ? (
+          <div className="ml-auto flex items-center gap-1 sm:gap-2">
+            {!loading && !session ? (
+              <>
+                <Link
+                  href="/login"
+                  className={`hidden rounded-full px-3 py-2 text-sm font-medium sm:inline-flex ${
+                    pathname.startsWith("/login") ||
+                    pathname.startsWith("/forgot-password") ||
+                    pathname.startsWith("/reset-password")
+                      ? "text-pos-primary"
+                      : "text-pos-ink-muted hover:text-pos-ink"
+                  }`}
+                >
+                  Sign in
+                </Link>
+                <Link
+                  href="/register"
+                  className="rounded-full bg-pos-primary px-4 py-2 text-sm font-medium text-white shadow-pos-primary sm:px-5"
+                >
+                  Sign up company
+                </Link>
+              </>
+            ) : null}
+            {!loading && session ? (
               <Link
-                href={cta.href}
-                className="rounded-full bg-pos-primary px-4 py-2 text-sm font-medium text-white sm:px-5"
+                href="/dashboard"
+                className="rounded-full bg-pos-primary px-4 py-2 text-sm font-medium text-white shadow-pos-primary sm:px-5"
               >
-                {cta.label}
+                My dashboard
               </Link>
             ) : null}
             <button
@@ -105,6 +121,30 @@ export function SiteHeader() {
             {HEADER_NAV.map((item) => (
               <MobileBlock key={item.href} item={item} pathname={pathname} />
             ))}
+            {!loading && !session ? (
+              <>
+                <Link
+                  href="/login"
+                  className="mt-1 block rounded-lg px-3 py-2.5 text-sm font-medium text-pos-ink"
+                >
+                  Sign in
+                </Link>
+                <Link
+                  href="/register"
+                  className="mt-1 block rounded-lg bg-pos-primary-soft px-3 py-2.5 text-sm font-medium text-pos-primary"
+                >
+                  Sign up company
+                </Link>
+              </>
+            ) : null}
+            {!loading && session ? (
+              <Link
+                href="/dashboard"
+                className="mt-1 block rounded-lg bg-pos-primary-soft px-3 py-2.5 text-sm font-medium text-pos-primary"
+              >
+                My dashboard
+              </Link>
+            ) : null}
           </div>
         ) : null}
       </div>

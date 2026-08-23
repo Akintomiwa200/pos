@@ -5,11 +5,13 @@ import type { ConsoleSession } from "../lib/access";
 import {
   changePassword,
   fetchConsoleSession,
+  googleAuthConsole,
   loginConsole,
   logoutConsole,
   NetworkError,
   readSession,
-  registerConsole,
+  registerCompanyConsole,
+  type CompanySignupInput,
   writeSession,
 } from "../lib/hq-api";
 
@@ -17,13 +19,16 @@ type AuthContextValue = {
   session: ConsoleSession | null;
   loading: boolean;
   live: boolean;
+  /** Any HQ account (admin, sales, accountant, …). */
   login: (email: string, password: string) => Promise<void>;
-  register: (input: {
-    name: string;
-    email: string;
-    username: string;
-    password: string;
-  }) => Promise<void>;
+  /** Company onboarding — creates org + administrator. */
+  registerCompany: (input: CompanySignupInput) => Promise<void>;
+  /** Google: login for existing accounts, or company signup when intent is signup. */
+  loginWithGoogle: (credential: string) => Promise<void>;
+  signupCompanyWithGoogle: (
+    credential: string,
+    company: CompanySignupInput["company"],
+  ) => Promise<void>;
   logout: () => Promise<void>;
   updatePassword: (current: string, password: string) => Promise<void>;
   setSession: (session: ConsoleSession | null) => void;
@@ -135,8 +140,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setLive(true);
         setSessionState(next);
       },
-      async register(input) {
-        const next = await registerConsole(input);
+      async registerCompany(input) {
+        const next = await registerCompanyConsole(input);
+        setLive(true);
+        setSessionState(next);
+      },
+      async loginWithGoogle(credential) {
+        const next = await googleAuthConsole({ credential, intent: "login" });
+        setLive(true);
+        setSessionState(next);
+      },
+      async signupCompanyWithGoogle(credential, company) {
+        const next = await googleAuthConsole({
+          credential,
+          intent: "signup",
+          company,
+        });
         setLive(true);
         setSessionState(next);
       },

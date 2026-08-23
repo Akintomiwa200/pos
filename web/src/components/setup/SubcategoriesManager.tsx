@@ -18,7 +18,7 @@ import {
 } from "@/lib/hq-taxonomy";
 import { ManagerSkeleton } from "../Skeleton";
 import { SlideOver } from "../SlideOver";
-import { DataTable, Field, PrimaryButton, SetupHeader, ToggleField, fieldClass } from "./SetupChrome";
+import { DataTable, Field, PrimaryButton, ToggleField, fieldClass } from "./SetupChrome";
 
 type Draft = {
   id?: string;
@@ -121,42 +121,58 @@ export function SubcategoriesManager() {
     }
   }
 
+  const activeCount = rows.filter((row) => row.active).length;
+
   return (
-    <div>
-      <SetupHeader
-        kicker="Setup · Products"
-        title="Subcategories"
-        copy="Second-level grouping under a category — e.g. Beverages → Soft drinks. Used in gross-profit reports."
-        action={
-          <PrimaryButton onClick={openNew}>
-            <span className="inline-flex items-center gap-2">
-              <Plus size={16} />
-              New subcategory
-            </span>
-          </PrimaryButton>
+    <div className="relative space-y-5 text-pos-ink">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="text-[clamp(1.5rem,3.5vw,2.25rem)] font-medium leading-none tracking-tight text-pos-ink-faint">
+            Subcategories
+          </h1>
+          <p className="mt-3 text-[14px] text-pos-ink-muted">
+            Second-level grouping under a category · {rows.length} total · {activeCount}{" "}
+            active
+          </p>
+        </div>
+        <PrimaryButton onClick={openNew}>
+          <Plus size={16} strokeWidth={2.2} />
+          New subcategory
+        </PrimaryButton>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="rounded-[20px] bg-pos-surface p-4 shadow-pos-sm">
+          <p className="text-[13px] text-pos-ink-faint">Subcategories</p>
+          <p className="mt-2 text-[24px] font-semibold tabular-nums">{rows.length}</p>
+        </div>
+        <div className="rounded-[20px] bg-pos-surface p-4 shadow-pos-sm">
+          <p className="text-[13px] text-pos-ink-faint">Parent categories</p>
+          <p className="mt-2 text-[24px] font-semibold tabular-nums">{categories.length}</p>
+        </div>
+      </div>
+
+      <DataTable
+        columns={["Subcategory", "Parent category", "Products", "Status"]}
+        toolbar={
+          <select
+            className="w-full max-w-sm rounded-full bg-pos-surface-muted px-4 py-2.5 text-sm text-pos-ink outline-none focus:bg-pos-surface focus:ring-1 focus:ring-pos-primary/25"
+            value={filterCategory}
+            onChange={(event) => setFilterCategory(event.target.value)}
+            aria-label="Filter by category"
+          >
+            <option value="">All categories</option>
+            {categories.map((row) => (
+              <option key={row.id} value={row.id}>
+                {row.name}
+              </option>
+            ))}
+          </select>
         }
-      />
-      <label className="mb-4 block max-w-xs">
-        <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-pos-ink-muted">
-          Filter by category
-        </span>
-        <select
-          className={fieldClass}
-          value={filterCategory}
-          onChange={(event) => setFilterCategory(event.target.value)}
-        >
-          <option value="">All categories</option>
-          {categories.map((row) => (
-            <option key={row.id} value={row.id}>
-              {row.name}
-            </option>
-          ))}
-        </select>
-      </label>
-      <DataTable columns={["Subcategory", "Category", "Products", "Status"]}>
+      >
         {filtered.length === 0 ? (
           <tr>
-            <td colSpan={4} className="px-4 py-8 text-center text-pos-ink-faint">
+            <td className="px-4 py-12 text-center text-pos-ink-faint" colSpan={4}>
               No subcategories yet.
             </td>
           </tr>
@@ -164,19 +180,21 @@ export function SubcategoriesManager() {
           filtered.map((row) => (
             <tr
               key={row.id}
-              className="cursor-pointer border-b border-pos-border/60 hover:bg-pos-surface-muted"
+              className="cursor-pointer transition hover:bg-pos-surface-muted/70"
               onClick={() => openEdit(row)}
             >
-              <td className="px-4 py-3 font-medium">{row.name}</td>
-              <td className="px-4 py-3 text-pos-ink-muted">
-                {subcategoryParentName(row) || "—"}
+              <td className="px-4 py-3.5 font-semibold text-pos-ink">{row.name}</td>
+              <td className="px-4 py-3.5 text-pos-ink-muted">
+                {subcategoryParentName(row) || "Unassigned"}
               </td>
-              <td className="px-4 py-3">{productCount(usage, "subcategories", row.name)}</td>
-              <td className="px-4 py-3">
+              <td className="px-4 py-3.5 tabular-nums text-pos-ink">
+                {productCount(usage, "subcategories", row.name)}
+              </td>
+              <td className="px-4 py-3.5">
                 <span
-                  className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                  className={`inline-flex rounded-full px-2.5 py-1 text-[12px] font-semibold ${
                     row.active
-                      ? "bg-pos-primary/10 text-pos-primary"
+                      ? "bg-pos-success/10 text-pos-success"
                       : "bg-pos-surface-muted text-pos-ink-faint"
                   }`}
                 >
@@ -197,7 +215,7 @@ export function SubcategoriesManager() {
             {draft.id ? (
               <button
                 type="button"
-                className="rounded-xl border border-pos-border px-4 py-2.5 text-sm text-pos-ink hover:bg-pos-surface-muted"
+                className="rounded-full bg-pos-surface-muted px-4 py-2.5 text-sm text-pos-ink"
                 disabled={busy}
                 onClick={async () => {
                   const count = productCount(usage, "subcategories", draft.name);

@@ -25,7 +25,13 @@ export function SiteFooter() {
     <footer className="px-4 pb-8 pt-2 sm:px-6">
       <div className="mx-auto flex max-w-5xl flex-col items-center gap-4 rounded-[28px] bg-pos-surface px-5 py-4 shadow-[0_8px_28px_rgba(28,28,30,0.06)] md:flex-row md:justify-between md:rounded-full md:py-3">
         <BrandLogo size="sm" />
-        <nav className="flex items-center gap-6 text-sm font-medium text-pos-ink">
+        <nav className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm font-medium text-pos-ink">
+          <Link href="/login" className="hover:text-pos-primary">
+            Sign in
+          </Link>
+          <Link href="/register" className="hover:text-pos-primary">
+            Sign up company
+          </Link>
           <Link href="/privacy" className="hover:text-pos-primary">
             Privacy Policy
           </Link>

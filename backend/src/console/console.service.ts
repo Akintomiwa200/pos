@@ -17,6 +17,8 @@ import {
   type ConsoleGroup,
   type HqNotice,
 } from "./console.types";
+import { SetupService } from "./setup.service";
+import type { HqCompany } from "./setup.types";
 import {
   SEED_TILLS,
   DEMO_TILL,
@@ -30,6 +32,14 @@ import {
   tillProductLabel,
   type HqTill,
 } from "./till-code";
+
+type GoogleProfile = {
+  sub: string;
+  email: string;
+  emailVerified: boolean;
+  name: string;
+  picture?: string;
+};
 
 @Injectable()
 export class ConsoleService implements OnModuleInit {
@@ -46,6 +56,8 @@ export class ConsoleService implements OnModuleInit {
   private readonly sessionsFile = join(this.dir, "hq-sessions.json");
   private readonly resetsFile = join(this.dir, "hq-resets.json");
   private readonly noticesFile = join(this.dir, "hq-notices.json");
+
+  constructor(private readonly setup: SetupService) {}
 
   async onModuleInit() {
     await mkdir(this.dir, { recursive: true });
@@ -240,21 +252,7 @@ export class ConsoleService implements OnModuleInit {
         row.password === password,
     );
     if (!account) throw new UnauthorizedException("Invalid email or password");
-    const group = this.groups.find((row) => row.id === account.groupId);
-    if (!group) throw new UnauthorizedException("Account has no group");
-    const token = generateSessionToken();
-    this.sessions = this.sessions.filter((row) => row.accountId !== account.id);
-    this.sessions.push({ token, accountId: account.id });
-    await this.persist();
-    return {
-      token,
-      user: {
-        ...publicAccount(account),
-        groupName: group.name,
-        departments: group.departments,
-        privileges: group.privileges,
-      },
-    };
+    return this.issueSession(account);
   }
 
   private sessionPayload(token: string) {
@@ -291,6 +289,7 @@ export class ConsoleService implements OnModuleInit {
     username?: string;
     password?: string;
   }) {
+    // Legacy personal register → sales staff. Prefer registerCompany for new tenants.
     const password = input.password?.trim() ?? "";
     if (password.length < 6) {
       throw new BadRequestException("Password must be at least 6 characters");
@@ -307,8 +306,250 @@ export class ConsoleService implements OnModuleInit {
       password,
       groupId: group.id,
       active: true,
+      authProvider: "password",
     });
     return this.login(input.email ?? input.username ?? "", password);
+  }
+
+  googleConfig() {
+    const clientId = process.env.GOOGLE_CLIENT_ID?.trim() || "";
+    return {
+      enabled: Boolean(clientId),
+      clientId: clientId || null,
+    };
+  }
+
+  /** Company onboarding — creates Administrator account + company profile in real time. */
+  async registerCompany(input: {
+    company?: Partial<HqCompany>;
+    account?: {
+      name?: string;
+      email?: string;
+      username?: string;
+      password?: string;
+    };
+  }) {
+    const companyName = input.company?.name?.trim();
+    if (!companyName) throw new BadRequestException("Company name is required");
+
+    const name = input.account?.name?.trim();
+    const email = input.account?.email?.trim().toLowerCase();
+    const username = input.account?.username?.trim().toLowerCase();
+    const password = input.account?.password?.trim() ?? "";
+    if (!name || !email || !username) {
+      throw new BadRequestException("Owner name, email, and username are required");
+    }
+    if (password.length < 6) {
+      throw new BadRequestException("Password must be at least 6 characters");
+    }
+
+    const adminGroup =
+      this.groups.find((row) => row.id === "g-admin") ??
+      this.groups.find((row) => row.privileges.includes("*")) ??
+      this.groups[0];
+    if (!adminGroup) throw new BadRequestException("Administrator group is missing");
+
+    await this.saveAccount({
+      name,
+      email,
+      username,
+      password,
+      groupId: adminGroup.id,
+      active: true,
+      authProvider: "password",
+    });
+
+    const company = await this.setup.saveCompany({
+      name: companyName,
+      legalName: input.company?.legalName?.trim() || companyName,
+      email: input.company?.email?.trim() || email,
+      phone: input.company?.phone?.trim() || "",
+      address: input.company?.address?.trim() || "",
+      state: input.company?.state?.trim() || "",
+      country: input.company?.country?.trim() || "Nigeria",
+      currency: input.company?.currency?.trim() || "NGN",
+      rc: input.company?.rc?.trim() || "",
+      tin: input.company?.tin?.trim() || "",
+    });
+
+    await this.pushNotice({
+      key: `company.onboarded:${company.id}:${Date.now()}`,
+      type: "company.onboarded",
+      title: "Company onboarded",
+      body: `${company.name} was created with owner ${name}.`,
+      href: "/setup/others/company",
+    });
+
+    const session = await this.login(email, password);
+    return { ...session, company, onboarding: "company" as const };
+  }
+
+  async googleAuth(input: {
+    credential?: string;
+    intent?: "login" | "signup";
+    company?: Partial<HqCompany>;
+  }) {
+    const intent = input.intent === "signup" ? "signup" : "login";
+    const profile = await this.verifyGoogleCredential(input.credential ?? "");
+
+    if (intent === "login") {
+      let account =
+        this.accounts.find((row) => row.active && row.googleId === profile.sub) ??
+        this.accounts.find(
+          (row) => row.active && row.email.toLowerCase() === profile.email.toLowerCase(),
+        );
+      if (!account) {
+        throw new UnauthorizedException(
+          "No HQ account for this Google email. Ask an admin for access, or Sign up as a company.",
+        );
+      }
+      if (!account.googleId) {
+        account.googleId = profile.sub;
+        account.authProvider =
+          account.authProvider === "password" || !account.authProvider ? "both" : account.authProvider;
+        await this.persist();
+      }
+      return { ...(await this.issueSession(account)), linked: true as const };
+    }
+
+    const companyName = input.company?.name?.trim();
+    if (!companyName) {
+      throw new BadRequestException("Company name is required for Google signup");
+    }
+
+    const existing = this.accounts.find(
+      (row) =>
+        row.email.toLowerCase() === profile.email.toLowerCase() || row.googleId === profile.sub,
+    );
+    if (existing) {
+      throw new ConflictException(
+        "This Google account already has HQ access. Use Login instead.",
+      );
+    }
+
+    const adminGroup =
+      this.groups.find((row) => row.id === "g-admin") ??
+      this.groups.find((row) => row.privileges.includes("*")) ??
+      this.groups[0];
+    if (!adminGroup) throw new BadRequestException("Administrator group is missing");
+
+    const usernameBase = profile.email.split("@")[0].replace(/[^a-z0-9]+/gi, "").toLowerCase() || "owner";
+    let username = usernameBase.slice(0, 24);
+    let suffix = 0;
+    while (this.accounts.some((row) => row.username === username)) {
+      suffix += 1;
+      username = `${usernameBase.slice(0, 20)}${suffix}`;
+    }
+
+    await this.saveAccount({
+      name: profile.name || companyName,
+      email: profile.email,
+      username,
+      password: generateSessionToken().slice(0, 24),
+      groupId: adminGroup.id,
+      active: true,
+      googleId: profile.sub,
+      authProvider: "google",
+    });
+
+    const company = await this.setup.saveCompany({
+      name: companyName,
+      legalName: input.company?.legalName?.trim() || companyName,
+      email: input.company?.email?.trim() || profile.email,
+      phone: input.company?.phone?.trim() || "",
+      address: input.company?.address?.trim() || "",
+      state: input.company?.state?.trim() || "",
+      country: input.company?.country?.trim() || "Nigeria",
+      currency: input.company?.currency?.trim() || "NGN",
+      rc: input.company?.rc?.trim() || "",
+      tin: input.company?.tin?.trim() || "",
+    });
+
+    await this.pushNotice({
+      key: `company.onboarded.google:${company.id}:${Date.now()}`,
+      type: "company.onboarded",
+      title: "Company onboarded with Google",
+      body: `${company.name} was created via Google by ${profile.email}.`,
+      href: "/setup/others/company",
+    });
+
+    const account = this.accounts.find((row) => row.googleId === profile.sub);
+    if (!account) throw new BadRequestException("Could not finish Google signup");
+    return {
+      ...(await this.issueSession(account)),
+      company,
+      onboarding: "company" as const,
+    };
+  }
+
+  private async verifyGoogleCredential(credential: string): Promise<GoogleProfile> {
+    const token = credential.trim();
+    if (!token) throw new BadRequestException("Google credential is required");
+
+    const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
+    if (!clientId) {
+      throw new BadRequestException(
+        "Google sign-in is not configured. Set GOOGLE_CLIENT_ID on the API.",
+      );
+    }
+
+    let response: Response;
+    try {
+      response = await fetch(
+        `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(token)}`,
+      );
+    } catch {
+      throw new BadRequestException("Could not reach Google to verify the sign-in");
+    }
+    if (!response.ok) {
+      throw new UnauthorizedException("Google credential is invalid or expired");
+    }
+    const data = (await response.json()) as {
+      aud?: string;
+      sub?: string;
+      email?: string;
+      email_verified?: string | boolean;
+      name?: string;
+      picture?: string;
+    };
+    if (data.aud !== clientId) {
+      throw new UnauthorizedException("Google client mismatch");
+    }
+    const email = data.email?.trim().toLowerCase();
+    const sub = data.sub?.trim();
+    if (!email || !sub) {
+      throw new UnauthorizedException("Google profile is incomplete");
+    }
+    const verified =
+      data.email_verified === true || data.email_verified === "true";
+    if (!verified) {
+      throw new UnauthorizedException("Google email is not verified");
+    }
+    return {
+      sub,
+      email,
+      emailVerified: true,
+      name: data.name?.trim() || email.split("@")[0],
+      picture: data.picture,
+    };
+  }
+
+  private async issueSession(account: ConsoleAccount) {
+    const group = this.groups.find((row) => row.id === account.groupId);
+    if (!group) throw new UnauthorizedException("Account has no group");
+    const token = generateSessionToken();
+    this.sessions = this.sessions.filter((row) => row.accountId !== account.id);
+    this.sessions.push({ token, accountId: account.id });
+    await this.persist();
+    return {
+      token,
+      user: {
+        ...publicAccount(account),
+        groupName: group.name,
+        departments: group.departments,
+        privileges: group.privileges,
+      },
+    };
   }
 
   async forgotPassword(emailOrUsername: string) {
@@ -422,6 +663,11 @@ export class ConsoleService implements OnModuleInit {
       password: input.password?.trim() || existing?.password || "demo",
       groupId: input.groupId!,
       active: input.active ?? existing?.active ?? true,
+      googleId: input.googleId !== undefined ? input.googleId : existing?.googleId ?? null,
+      authProvider:
+        input.authProvider ??
+        existing?.authProvider ??
+        (input.googleId ? "google" : "password"),
     };
     if (existing) {
       this.accounts = this.accounts.map((row) => (row.id === existing.id ? next : row));

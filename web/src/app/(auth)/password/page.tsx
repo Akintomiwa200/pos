@@ -4,7 +4,13 @@ import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "@/lib/toast";
 import { useAuth } from "../../../components/AuthProvider";
-import { AuthCard, AuthField, AuthLinks, AuthSubmit } from "../../../components/site/AuthCard";
+import {
+  AuthFooterLink,
+  AuthInput,
+  AuthPrimaryButton,
+  AuthSplit,
+} from "../../../components/site/AuthSplit";
+
 export default function ChangePasswordPage() {
   const router = useRouter();
   const { session, loading, updatePassword } = useAuth();
@@ -36,40 +42,49 @@ export default function ChangePasswordPage() {
   }
 
   if (loading || !session) {
-    return <p className="p-16 text-center text-sm text-neutral-500">Loading…</p>;
+    return (
+      <div className="grid min-h-screen place-items-center bg-pos-surface text-sm text-pos-ink-faint">
+        Loading…
+      </div>
+    );
   }
 
   return (
-    <AuthCard title="Change password" copy="This updates your HQ password on the live API immediately.">
+    <AuthSplit
+      title="Change password"
+      mode="other"
+      footer={
+        <>
+          <AuthFooterLink href="/dashboard">Back to HQ</AuthFooterLink>
+        </>
+      }
+    >
       <form onSubmit={(event) => void onSubmit(event)}>
-        <AuthField
+        <AuthInput
           label="Current password"
           name="current"
           type="password"
           autoComplete="current-password"
+          required
         />
-        <AuthField
-          label="New password"
+        <AuthInput
+          label="Password"
           name="password"
           type="password"
           autoComplete="new-password"
           minLength={6}
+          required
         />
-        <AuthField
+        <AuthInput
           label="Confirm password"
           name="confirm"
           type="password"
           autoComplete="new-password"
           minLength={6}
+          required
         />
-        <AuthSubmit busy={busy} label="Update password" />
+        <AuthPrimaryButton busy={busy}>Update password</AuthPrimaryButton>
       </form>
-      <AuthLinks
-        items={[
-          { href: "/dashboard", label: "Back to HQ" },
-          { href: "/login", label: "Sign in with another account" },
-        ]}
-      />
-    </AuthCard>
+    </AuthSplit>
   );
 }

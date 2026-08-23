@@ -44,11 +44,44 @@ export class ConsoleController {
     return this.consoleService.login(body.email ?? body.username ?? "", body.password ?? "");
   }
 
+  @Get("auth/google-config")
+  googleConfig() {
+    return this.consoleService.googleConfig();
+  }
+
+  @Post("auth/google")
+  googleAuth(
+    @Body()
+    body: {
+      credential?: string;
+      intent?: "login" | "signup";
+      company?: Partial<HqCompany>;
+    },
+  ) {
+    return this.consoleService.googleAuth(body);
+  }
+
   @Post("register")
   register(
     @Body() body: { name?: string; email?: string; username?: string; password?: string },
   ) {
     return this.consoleService.register(body);
+  }
+
+  @Post("register-company")
+  registerCompany(
+    @Body()
+    body: {
+      company?: Partial<HqCompany>;
+      account?: {
+        name?: string;
+        email?: string;
+        username?: string;
+        password?: string;
+      };
+    },
+  ) {
+    return this.consoleService.registerCompany(body);
   }
 
   @Post("forgot-password")

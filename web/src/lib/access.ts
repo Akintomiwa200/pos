@@ -55,12 +55,18 @@ export function allNavIds(): string[] {
   return ACCESS_NAV.flatMap((section) => section.items.flatMap(itemIds));
 }
 
+function allSidebarIds(): string[] {
+  return NAV.flatMap((section) => section.items.flatMap(itemIds));
+}
+
 function accessIds(node: AccessNode): string[] {
   return [node.id, ...(node.children ?? []).flatMap(accessIds)];
 }
 
 export function expandPrivileges(privileges: string[]): Set<string> {
-  if (privileges.includes("*")) return new Set(["*", ...allNavIds()]);
+  if (privileges.includes("*")) {
+    return new Set(["*", ...allNavIds(), ...allSidebarIds()]);
+  }
   const granted = new Set(privileges);
 
   function expand(node: AccessNode) {
@@ -78,6 +84,7 @@ export function expandPrivileges(privileges: string[]): Set<string> {
 }
 
 function filterNodes(nodes: NavNode[], granted: Set<string>): NavNode[] {
+  if (granted.has("*")) return nodes;
   return nodes.flatMap((node): NavNode[] => {
     if (isNavGroup(node)) {
       if (granted.has(node.id)) return [node];
@@ -89,6 +96,7 @@ function filterNodes(nodes: NavNode[], granted: Set<string>): NavNode[] {
 }
 
 function filterItem(item: NavItem, granted: Set<string>): NavItem[] {
+  if (granted.has("*")) return [item];
   if (item.children?.length) {
     if (granted.has(item.id)) return [item];
     const children = filterNodes(item.children, granted);
@@ -166,7 +174,8 @@ export function canAccessPath(
   departments: Array<DepartmentName | "*">,
   privileges: string[],
 ) {
-  if (OPEN_PATHS.has(pathname) || pathname.startsWith("/verticals/")) return true;
+  if (privileges.includes("*")) return true;
+  if (OPEN_PATHS.has(pathname) || pathname.startsWith("/verticals")) return true;
   const sections = filterAccessNav(departments, privileges);
   return collectHrefs(sections).some(
     (href) => pathname === href || pathname.startsWith(`${href}/`),

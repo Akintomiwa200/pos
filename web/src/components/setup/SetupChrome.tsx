@@ -14,13 +14,50 @@ export function SetupHeader({
   action?: ReactNode;
 }) {
   return (
-    <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
-      <div className="min-w-0 max-w-3xl">
-        <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-pos-primary">{kicker}</p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-pos-ink">{title}</h1>
-        <p className="mt-2 text-pos-ink-muted">{copy}</p>
+    <div className="mb-6 space-y-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 max-w-3xl">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-pos-ink-faint">
+            {kicker}
+          </p>
+          <h1 className="mt-2 text-[clamp(1.5rem,3.5vw,2.25rem)] font-medium leading-none tracking-tight text-pos-ink-faint">
+            {title}
+          </h1>
+          <p className="mt-3 max-w-2xl text-[14px] leading-relaxed text-pos-ink-muted">{copy}</p>
+        </div>
+        {action ? <div className="shrink-0 pt-1">{action}</div> : null}
       </div>
-      {action}
+    </div>
+  );
+}
+
+export function SetupStat({
+  label,
+  value,
+  hint,
+  tone = "default",
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  tone?: "default" | "inverse" | "accent";
+}) {
+  const shell =
+    tone === "inverse"
+      ? "bg-pos-inverse text-white"
+      : tone === "accent"
+        ? "bg-pos-primary text-white"
+        : "bg-pos-surface text-pos-ink shadow-pos-sm";
+  const muted =
+    tone === "default" ? "text-pos-ink-faint" : "text-white/55";
+
+  return (
+    <div className={`flex min-h-[104px] flex-col rounded-[20px] p-4 ${shell}`}>
+      <p className={`text-[13px] ${muted}`}>{label}</p>
+      <p className="mt-auto truncate text-[22px] font-semibold leading-none tracking-tight tabular-nums">
+        {value}
+      </p>
+      {hint ? <p className={`mt-2 truncate text-[12px] ${muted}`}>{hint}</p> : null}
     </div>
   );
 }
@@ -41,7 +78,7 @@ export function Field({
 }
 
 export const fieldClass =
-  "w-full rounded-xl border border-pos-border bg-pos-surface px-3 py-2 text-sm text-pos-ink outline-none focus:border-pos-primary";
+  "w-full rounded-2xl border-0 bg-pos-surface-muted px-3.5 py-2.5 text-sm text-pos-ink outline-none ring-1 ring-transparent transition focus:bg-pos-surface focus:ring-pos-primary/30";
 
 export function ToggleField({
   label,
@@ -53,14 +90,23 @@ export function ToggleField({
   onChange: (value: boolean) => void;
 }) {
   return (
-    <label className="mb-3 flex items-center justify-between gap-3 text-sm text-pos-ink">
+    <label className="mb-3 flex items-center justify-between gap-3 rounded-2xl bg-pos-surface-muted px-3.5 py-3 text-sm text-pos-ink">
       <span>{label}</span>
-      <input
-        type="checkbox"
-        className="accent-pos-primary"
-        checked={checked}
-        onChange={(event) => onChange(event.target.checked)}
-      />
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        className={`relative h-6 w-11 rounded-full transition-colors ${
+          checked ? "bg-pos-primary" : "bg-pos-border"
+        }`}
+        onClick={() => onChange(!checked)}
+      >
+        <span
+          className={`absolute top-0.5 h-5 w-5 rounded-full bg-pos-surface transition ${
+            checked ? "right-0.5" : "left-0.5"
+          }`}
+        />
+      </button>
     </label>
   );
 }
@@ -68,24 +114,29 @@ export function ToggleField({
 export function DataTable({
   columns,
   children,
+  toolbar,
 }: {
   columns: string[];
   children: ReactNode;
+  toolbar?: ReactNode;
 }) {
   return (
-    <section className="overflow-hidden rounded-2xl bg-pos-surface shadow-pos-md">
-      <table className="w-full text-left text-sm">
-        <thead className="border-b border-pos-border text-pos-ink-muted">
-          <tr>
-            {columns.map((column) => (
-              <th key={column} className="px-4 py-3 font-medium">
-                {column}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>{children}</tbody>
-      </table>
+    <section className="overflow-hidden rounded-[24px] bg-pos-surface shadow-pos-md">
+      {toolbar ? <div className="border-b border-pos-border/60 px-4 py-3">{toolbar}</div> : null}
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[720px] text-left text-sm">
+          <thead>
+            <tr className="border-b border-pos-border/60 bg-pos-surface-muted/40 text-[11px] font-semibold uppercase tracking-[0.08em] text-pos-ink-faint">
+              {columns.map((column) => (
+                <th key={column || "thumb"} className="whitespace-nowrap px-4 py-3 font-semibold">
+                  {column}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-pos-border/45">{children}</tbody>
+        </table>
+      </div>
     </section>
   );
 }
@@ -98,7 +149,7 @@ export function PrimaryButton({
     <button
       type="button"
       {...props}
-      className={`rounded-xl bg-pos-primary px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60 ${props.className ?? ""}`}
+      className={`inline-flex items-center justify-center gap-2 rounded-full bg-pos-primary px-5 py-2.5 text-sm font-semibold text-white shadow-pos-primary transition hover:opacity-90 disabled:opacity-60 ${props.className ?? ""}`}
     >
       {children}
     </button>
@@ -106,4 +157,4 @@ export function PrimaryButton({
 }
 
 export const secondaryButtonClass =
-  "rounded-xl border border-pos-border px-4 py-2.5 text-sm text-pos-ink hover:bg-pos-surface-muted";
+  "inline-flex items-center justify-center gap-2 rounded-full bg-pos-surface px-4 py-2.5 text-sm font-medium text-pos-ink shadow-pos-sm hover:bg-pos-surface-muted";

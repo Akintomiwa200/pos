@@ -1,5 +1,6 @@
-import { SiteShell } from "../../components/site/SiteShell";
+import type { ReactNode } from "react";
 
-export default function AuthLayout({ children }: { children: React.ReactNode }) {
-  return <SiteShell>{children}</SiteShell>;
+/** Dedicated auth screens — no marketing navbar/footer (matches Figma). */
+export default function AuthLayout({ children }: { children: ReactNode }) {
+  return children;
 }

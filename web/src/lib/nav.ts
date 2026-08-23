@@ -2,7 +2,6 @@ import type { LucideIcon } from "lucide-react";
 import {
   Activity,
   ArrowLeftRight,
-  Award,
   Banknote,
   Boxes,
   Building2,
@@ -10,15 +9,12 @@ import {
   CircleDollarSign,
   ClipboardList,
   CreditCard,
-  Factory,
   FileText,
   Flag,
   History,
   IdCard,
-  Landmark,
   Megaphone,
   Package,
-  Plug,
   RotateCcw,
   Scale,
   ScanBarcode,
@@ -73,6 +69,68 @@ export type AccessNode = {
   href?: string;
   children?: AccessNode[];
 };
+
+const PRODUCTS_NAV: NavNode[] = [
+  { id: "items-items", label: "All Products", href: "/setup/items/items" },
+  { id: "items-groups", label: "Categories", href: "/setup/items/groups" },
+  { id: "items-subgroups", label: "Subcategories", href: "/setup/items/subgroups" },
+  { id: "items-units", label: "Units of Measure", href: "/setup/items/units" },
+  { id: "items-packs", label: "Pack & Cartons", href: "/setup/items/packs" },
+  { id: "manufacturer", label: "Brands", href: "/setup/items/brands" },
+  { id: "items-prices", label: "Price List", href: "/setup/items/prices" },
+  { id: "items-low-stock", label: "Low Stock", href: "/setup/items/low-stock" },
+  { id: "items-expiring", label: "Expiring", href: "/setup/items/expiring" },
+  { id: "scan-barcode", label: "Barcode Lookup", href: "/setup/items/barcode" },
+  { id: "others-import", label: "Import Products", href: "/setup/items/import" },
+  { id: "items-export", label: "Export Products", href: "/setup/items/export" },
+];
+
+const ORDERS_NAV: NavNode[] = [
+  { id: "purchase-order-list", label: "All Orders", href: "/orders/list" },
+  { id: "purchase-order-new", label: "New Order", href: "/orders/new" },
+  { id: "purchase-order-drafts", label: "Drafts", href: "/orders/drafts" },
+  { id: "purchase-order-pending", label: "Pending Approval", href: "/orders/pending" },
+  { id: "purchase-order-approved", label: "Approved & Sent", href: "/orders/approved" },
+  { id: "purchase-order-receiving", label: "Receiving", href: "/orders/receiving" },
+  { id: "purchase-order-received", label: "Received", href: "/orders/received" },
+  { id: "purchase-order-cancelled", label: "Cancelled", href: "/orders/cancelled" },
+  { id: "purchase-order-summary", label: "Summary", href: "/orders/summary" },
+];
+
+const CUSTOMER_NAV: NavNode[] = [
+  { id: "customer-list", label: "All Customers", href: "/setup/customers/list" },
+  { id: "customer-groups", label: "Groups", href: "/setup/customers/groups" },
+  { id: "customer-credits", label: "Credits", href: "/setup/customers/credits" },
+  { id: "customer-credit-rules", label: "Credit Rules", href: "/setup/customers/credit-rules" },
+  {
+    id: "customer-loyalty",
+    label: "Loyalty",
+    children: [
+      { id: "customer-loyalty-program", label: "Programme", href: "/setup/customers/loyalty/program" },
+      { id: "customer-loyalty-registration", label: "Registration", href: "/setup/customers/loyalty/registration" },
+      { id: "customer-loyalty-rules", label: "Rules", href: "/setup/customers/loyalty/rules" },
+      { id: "customer-loyalty-cards", label: "Assign Cards", href: "/setup/customers/loyalty/cards" },
+    ],
+  },
+  {
+    id: "customer-gift",
+    label: "Gift Cards",
+    children: [
+      { id: "customer-gift-list", label: "All Gift Cards", href: "/setup/customers/gift-cards" },
+      { id: "customer-gift-batches", label: "Issue Batches", href: "/setup/customers/gift-batches" },
+    ],
+  },
+  { id: "customer-import", label: "Import", href: "/setup/customers/import" },
+  {
+    id: "customer-reports",
+    label: "Reports",
+    children: [
+      { id: "customer-report-balance", label: "Balance", href: "/reports/balance/customer" },
+      { id: "customer-report-ledger", label: "Ledger", href: "/reports/ledger/customer" },
+      { id: "customer-report-trail", label: "Trail", href: "/reports/trail/customer" },
+    ],
+  },
+];
 
 function nodeToAccess(node: NavNode): AccessNode {
   if (isNavGroup(node)) {
@@ -174,6 +232,15 @@ export const ACCESS_NAV: NavSection[] = [
               },
             ],
           },
+        ],
+      },
+      {
+        id: "pos-hub",
+        label: "Point of Sales",
+        icon: ShoppingBasket,
+        children: [
+          { id: "others-till", label: "Till", href: "/setup/others/till" },
+          { id: "others-store", label: "Store", href: "/setup/others/store" },
         ],
       },
       {
@@ -285,14 +352,7 @@ export const ACCESS_NAV: NavSection[] = [
           {
             id: "purchase-order",
             label: "Order",
-            children: [
-              { id: "purchase-order-list", label: "List", href: "/transactions/purchase/order/list" },
-              {
-                id: "purchase-order-summary",
-                label: "Summary",
-                href: "/transactions/purchase/order/summary",
-              },
-            ],
+            children: ORDERS_NAV,
           },
           {
             id: "purchase-return",
@@ -358,18 +418,9 @@ export const ACCESS_NAV: NavSection[] = [
         id: "items",
         label: "Products",
         icon: Package,
-        children: [
-          { id: "items-items", label: "All Products", href: "/setup/items/items" },
-          { id: "items-groups", label: "Categories", href: "/setup/items/groups" },
-          { id: "items-subgroups", label: "Subcategories", href: "/setup/items/subgroups" },
-          { id: "items-units", label: "Units of Measure", href: "/setup/items/units" },
-          { id: "items-packs", label: "Pack & Cartons", href: "/setup/items/packs" },
-          { id: "manufacturer", label: "Brands", href: "/setup/manufacturer" },
-          { id: "scan-barcode", label: "Scan Barcode", href: "/catalog" },
-          { id: "others-import", label: "Import Products", href: "/setup/others/import" },
-        ],
+        children: PRODUCTS_NAV,
       },
-      { id: "customer", label: "Customer", icon: User, href: "/setup/customer" },
+      { id: "customer", label: "Customers", icon: User, children: CUSTOMER_NAV },
       { id: "vendor", label: "Vendor", icon: Building2, href: "/setup/vendor" },
       {
         id: "sales-rep",
@@ -378,7 +429,6 @@ export const ACCESS_NAV: NavSection[] = [
         href: "/setup/sales-representative",
       },
       { id: "staff", label: "Staff", icon: UserRound, href: "/setup/staff" },
-      { id: "manufacturer", label: "Manufacturer", icon: Factory, href: "/setup/manufacturer" },
       {
         id: "payment-method",
         label: "Payment Method",
@@ -425,8 +475,6 @@ export const ACCESS_NAV: NavSection[] = [
         children: [
           { id: "others-company", label: "Company", href: "/setup/others/company" },
           { id: "others-branch", label: "Branch", href: "/setup/others/branch" },
-          { id: "others-till", label: "Till", href: "/setup/others/till" },
-          { id: "others-store", label: "Store", href: "/setup/others/store" },
           { id: "others-storefront", label: "Storefront", href: "/setup/others/storefront" },
           {
             id: "others-payment-gateway",
@@ -436,7 +484,6 @@ export const ACCESS_NAV: NavSection[] = [
           { id: "others-tax", label: "Tax", href: "/setup/others/tax" },
           { id: "others-settings", label: "Settings", href: "/setup/others/settings" },
           { id: "others-data", label: "Data", href: "/setup/others/data" },
-          { id: "others-import", label: "Import", href: "/setup/others/import" },
           { id: "others-export", label: "Export", href: "/setup/others/export" },
         ],
       },
@@ -454,16 +501,7 @@ export const NAV: NavSection[] = [
         id: "items",
         label: "Products",
         icon: ShoppingCart,
-        children: [
-          { id: "items-items", label: "All Products", href: "/setup/items/items" },
-          { id: "items-groups", label: "Categories", href: "/setup/items/groups" },
-          { id: "items-subgroups", label: "Subcategories", href: "/setup/items/subgroups" },
-          { id: "items-units", label: "Units of Measure", href: "/setup/items/units" },
-          { id: "items-packs", label: "Pack & Cartons", href: "/setup/items/packs" },
-          { id: "manufacturer", label: "Brands", href: "/setup/manufacturer" },
-          { id: "scan-barcode", label: "Scan Barcode", href: "/catalog" },
-          { id: "others-import", label: "Import Products", href: "/setup/others/import" },
-        ],
+        children: PRODUCTS_NAV,
       },
     ],
   },
@@ -513,14 +551,7 @@ export const NAV: NavSection[] = [
         id: "purchase-order",
         label: "Orders",
         icon: ShoppingCart,
-        children: [
-          { id: "purchase-order-list", label: "Order List", href: "/transactions/purchase/order/list" },
-          {
-            id: "purchase-order-summary",
-            label: "Order Summary",
-            href: "/transactions/purchase/order/summary",
-          },
-        ],
+        children: ORDERS_NAV,
       },
       {
         id: "sales-return-list",
@@ -559,24 +590,45 @@ export const NAV: NavSection[] = [
     heading: "Workspace",
     department: "Setup",
     items: [
-      { id: "admin-hub", label: "Admin", icon: Landmark, href: "/admin" },
-      { id: "audit-hub", label: "Audit", icon: ClipboardList, href: "/audit" },
-      { id: "finance-hub", label: "Finance", icon: Banknote, href: "/finance" },
-      { id: "hr-hub", label: "HR", icon: UserRound, href: "/hr" },
-      { id: "procurement-hub", label: "Procurement", icon: Truck, href: "/procurement" },
-      { id: "catalog-browser", label: "Catalog", icon: ScanBarcode, href: "/catalog" },
+      { id: "customer", label: "Customers", icon: User, children: CUSTOMER_NAV },
+      { id: "vendor", label: "Vendors", icon: Building2, href: "/setup/vendor" },
+      { id: "staff", label: "Staff", icon: UserRound, href: "/setup/staff" },
       {
-        id: "verticals",
-        label: "Verticals",
-        icon: Boxes,
+        id: "sales-rep",
+        label: "Sales Representatives",
+        icon: IdCard,
+        href: "/setup/sales-representative",
+      },
+      {
+        id: "payment-method",
+        label: "Payment Methods",
+        icon: CreditCard,
+        href: "/setup/payment-method",
+      },
+      {
+        id: "sales-promotion",
+        label: "Sales Promotions",
+        icon: Megaphone,
+        href: "/setup/sales-promotion",
+      },
+      {
+        id: "expense-account",
+        label: "Expense Accounts",
+        icon: Calculator,
+        href: "/setup/expense-account",
+      },
+      {
+        id: "billing",
+        label: "Billing",
+        icon: FileText,
         children: [
-          { id: "vertical-supermarket", label: "Supermarket", href: "/verticals/supermarket" },
-          { id: "vertical-hotel", label: "Hotel", href: "/verticals/hotel" },
-          { id: "vertical-restaurant", label: "Restaurant", href: "/verticals/restaurant" },
-          { id: "vertical-dark-kitchen", label: "Dark Kitchen", href: "/verticals/dark-kitchen" },
+          {
+            id: "billing-subscriptions",
+            label: "Subscriptions",
+            href: "/setup/billing/subscriptions",
+          },
         ],
       },
-      { id: "it-integrations", label: "IT & Integrations", icon: Plug, href: "/it" },
     ],
   },
   {
@@ -599,8 +651,6 @@ export const NAV: NavSection[] = [
         children: [
           { id: "others-company", label: "Company", href: "/setup/others/company" },
           { id: "others-branch", label: "Branch", href: "/setup/others/branch" },
-          { id: "others-till", label: "Till", href: "/setup/others/till" },
-          { id: "others-store", label: "Store", href: "/setup/others/store" },
           { id: "others-storefront", label: "Storefront", href: "/setup/others/storefront" },
           {
             id: "others-payment-gateway",

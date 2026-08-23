@@ -7,6 +7,7 @@ const SKIP_HEADINGS = new Set([
   "Setup",
   "Main Menu",
   "Analytics",
+  "Workspace",
   "Apps",
   "Settings",
 ]);

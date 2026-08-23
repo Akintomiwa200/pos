@@ -24,7 +24,7 @@ export const FOOTER_COLUMNS: { heading: string; links: SiteLink[] }[] = [
       { href: "/pricing", label: "Pricing" },
       { href: "/download", label: "Download" },
       { href: "/login", label: "HQ login" },
-      { href: "/register", label: "Create account" },
+      { href: "/register", label: "Sign up company" },
       { href: "/forgot-password", label: "Forgot password" },
     ],
   },

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import type { CartLine, CatalogItem, TenderType } from "./lib/types";
 import { computeTotals, formatMoney } from "./lib/types";
 import { formatStock, formatUnitLabel } from "./lib/units";
@@ -12,7 +13,8 @@ import { PaymentMethodsScreen } from "./screens/payment-methods/PaymentMethodsSc
 import { SplitPaymentScreen } from "./screens/split-payment/SplitPaymentScreen";
 import { PaidScreen } from "./screens/paid/PaidScreen";
 import { SettingsScreen } from "./screens/settings/SettingsScreen";
-import { KdsScreen } from "./screens/kds/KdsScreen";
+import { KitchenDisplay } from "./screens/kds/KitchenDisplay";
+import type { TicketStatus } from "./lib/tickets";
 import { LoginScreen } from "./screens/login/LoginScreen";
 import { OpenShiftModal } from "./components/shift/OpenShiftModal";
 import { PinModal } from "./components/shift/PinModal";
@@ -28,7 +30,15 @@ import {
 } from "./lib/tickets";
 import { findCatalogByCode, lookupCatalog, useCatalog } from "./lib/catalog";
 import { TENDER_LABEL, type SaleReceipt } from "./lib/receipt";
-import { archiveSale } from "./lib/sales";
+import { archiveSale, flushSalesOutbox } from "./lib/sales";
+import {
+  loadKitchenTickets,
+  loadRooms,
+  loadTables,
+  saveKitchenTickets,
+  saveRooms,
+  saveTables,
+} from "./lib/boards";
 import {
   loadStoreSettings,
   normalizeBarcode,
@@ -120,7 +130,7 @@ const GATE_COPY: Record<Gate, { title: string; subtitle: string; confirm: string
 };
 
 export default function App() {
-  const { items: catalog, updateItem, adjustOnHand } = useCatalog();
+  const { items: catalog, updateItem, applySaleDeltas } = useCatalog();
   const settings = useStoreSettings();
   const { tills } = useTills();
   const { hex: hardwareHex } = useHardwareHex();
@@ -154,9 +164,13 @@ export default function App() {
   const [loyaltyOpen, setLoyaltyOpen] = useState(false);
   const [loyaltyNumber, setLoyaltyNumber] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<SaleReceipt | null>(null);
+  const [receiptSaved, setReceiptSaved] = useState<"saving" | "saved" | "queued">("saved");
+  const [pendingSales, setPendingSales] = useState(0);
   const [dialog, setDialog] = useState<"profile" | null>(null);
   const [lockoutMessage, setLockoutMessage] = useState("");
   const awaitingActivation = useRef(false);
+  const boardsHydrated = useRef(false);
+  const boardSyncTimer = useRef(0);
 
   const items = catalog.filter((item) => {
     const q = query.trim().toLowerCase();
@@ -296,6 +310,56 @@ export default function App() {
     );
   }, [cart, activeTicketId]);
 
+  /* Pull the shared floor/rooms/kitchen boards from HQ after sign-in. */
+  useEffect(() => {
+    if (!session) return;
+    boardsHydrated.current = false;
+    let cancelled = false;
+    async function hydrate() {
+      const [tableRows, roomRows, ticketRows] = await Promise.all([
+        loadTables(),
+        loadRooms(),
+        loadKitchenTickets(),
+      ]);
+      if (cancelled) return;
+      if (tableRows?.length) setFloor(tableRows);
+      if (roomRows?.length) setRooms(roomRows);
+      if (ticketRows?.length) setTickets(ticketRows);
+      boardsHydrated.current = true;
+    }
+    void hydrate();
+    return () => {
+      cancelled = true;
+    };
+  }, [session]);
+
+  /* Push board edits back to HQ (debounced so drag/qty changes coalesce). */
+  useEffect(() => {
+    if (!session || !boardsHydrated.current) return;
+    window.clearTimeout(boardSyncTimer.current);
+    boardSyncTimer.current = window.setTimeout(() => {
+      void saveTables(floor);
+      void saveRooms(rooms);
+      void saveKitchenTickets(tickets);
+    }, 800);
+    return () => window.clearTimeout(boardSyncTimer.current);
+  }, [session, floor, rooms, tickets]);
+
+  /* Retry any sales that failed to reach HQ earlier. */
+  useEffect(() => {
+    let stopped = false;
+    async function flush() {
+      const remaining = await flushSalesOutbox();
+      if (!stopped) setPendingSales(remaining);
+    }
+    void flush();
+    const timer = window.setInterval(() => void flush(), 30_000);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, []);
+
   const splitParts = useMemo(() => {
     const n = Math.max(1, splitCount);
     const base = Math.floor(totals.totalMinor / n);
@@ -314,6 +378,7 @@ export default function App() {
     setSplitTenders(["cash", "card"]);
     setSplitPaid([false, false]);
     setReceipt(null);
+    setReceiptSaved("saved");
     setPaying(false);
     setLoyaltyOpen(false);
     setLoyaltyNumber(null);
@@ -340,9 +405,16 @@ export default function App() {
   }
 
   async function startShift(user: StaffUser) {
-    const next = await openShift(user.id);
-    setShift(next);
-    setNeedsShift(false);
+    try {
+      const next = await openShift(user.id);
+      setShift(next);
+      setNeedsShift(false);
+    } catch (error) {
+      // Server unreachable: keep the cashier on the shift prompt to retry,
+      // or let them continue when offline mode is configured.
+      setNotice(error instanceof Error ? error.message : "Could not open a shift.");
+      setNeedsShift(true);
+    }
   }
 
   async function handleLogin(user: StaffUser, mustOpenShift: boolean) {
@@ -377,6 +449,19 @@ export default function App() {
     setTickets((current) =>
       current.map((ticket) => (ticket.id === id ? { ...ticket, ...patch } : ticket)),
     );
+  }
+
+  const TICKET_FLOW: Record<TicketStatus, TicketStatus> = {
+    new: "prep",
+    prep: "ready",
+    ready: "dispatched",
+    dispatched: "dispatched",
+  };
+
+  function advanceTicket(id: string) {
+    const ticket = tickets.find((row) => row.id === id);
+    if (!ticket) return;
+    patchTicket(id, { status: TICKET_FLOW[ticket.status] });
   }
 
   function openTable(table: FloorTable, guests: number) {
@@ -712,12 +797,25 @@ export default function App() {
       tillKey: till?.name ?? null,
     };
     if (settings.trackStockOnTill) {
-      for (const line of cart) {
-        adjustOnHand(line.itemId, -line.quantity);
-      }
+      applySaleDeltas(
+        cart.map((line) => ({ itemId: line.itemId, delta: -line.quantity })),
+      );
     }
     setReceipt(sale);
-    void archiveSale(sale);
+    setReceiptSaved("saving");
+    setScreen("paid");
+    void archiveSale(sale)
+      .then((delivered) => {
+        setReceiptSaved(delivered ? "saved" : "queued");
+        if (delivered) {
+          if (pendingSales > 0) {
+            void flushSalesOutbox().then(setPendingSales);
+          }
+        } else {
+          setPendingSales((count) => count + 1);
+          toast.error("HQ unreachable — receipt queued and will retry automatically.");
+        }
+      });
     setShift((current) =>
       current
         ? {
@@ -738,7 +836,6 @@ export default function App() {
       patchTicket(activeTicketId, { status: "dispatched", lines: cart });
     }
     setPaying(false);
-    setScreen("paid");
   }
 
   function startCharge(method: TenderType) {
@@ -900,7 +997,13 @@ export default function App() {
               setQuery(value);
               setLookupNotice("");
             }}
-            onCommitQuery={(value) => void addByCode(value, true)}
+            onCommitQuery={(value) => {
+              if (!settings.barcodeAllowManual) {
+                setLookupNotice("Manual code entry is off — scan a barcode or pick from the grid.");
+                return;
+              }
+              void addByCode(value, true);
+            }}
             notice={lookupNotice}
           />
         )}
@@ -943,7 +1046,13 @@ export default function App() {
               setQuery(value);
               setLookupNotice("");
             }}
-            onCommitQuery={(value) => void addByCode(value, true)}
+            onCommitQuery={(value) => {
+              if (!settings.barcodeAllowManual) {
+                setLookupNotice("Manual code entry is off — scan a barcode or pick from the grid.");
+                return;
+              }
+              void addByCode(value, true);
+            }}
             notice={lookupNotice}
           />
         )}
@@ -974,6 +1083,7 @@ export default function App() {
         {screen === "paid" && receipt && (
           <PaidScreen
             sale={receipt}
+            saveState={receiptSaved}
             onNewOrder={newOrder}
           />
         )}
@@ -985,7 +1095,12 @@ export default function App() {
             onOpenTill={() => setScreen("home")}
           />
         )}
-        {screen === "kds" && <KdsScreen />}
+        {screen === "kds" && (
+          <KitchenDisplay
+            tickets={tickets}
+            onAdvance={advanceTicket}
+          />
+        )}
       </main>
       {!fullscreen && (
       <div className="right-col">

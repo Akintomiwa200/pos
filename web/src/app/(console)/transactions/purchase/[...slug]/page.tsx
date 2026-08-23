@@ -1,18 +1,19 @@
 import { DepartmentPage } from "@/components/DepartmentPage";
+import { redirect } from "next/navigation";
 import {
   DocManager,
   PURCHASE_INVOICE_CONFIG,
-  PURCHASE_ORDER_CONFIG,
   PURCHASE_RETURN_CONFIG,
 } from "@/components/transactions/DocManager";
 
-const ROUTES: Record<string, { config: typeof PURCHASE_ORDER_CONFIG; mode: "list" | "summary" | "book" | "history" }> = {
+const ROUTES: Record<
+  string,
+  { config: typeof PURCHASE_INVOICE_CONFIG; mode: "list" | "summary" | "book" | "history" }
+> = {
   "invoice/list": { config: PURCHASE_INVOICE_CONFIG, mode: "list" },
   "invoice/summary": { config: PURCHASE_INVOICE_CONFIG, mode: "summary" },
   "invoice/book": { config: PURCHASE_INVOICE_CONFIG, mode: "book" },
   "invoice/history": { config: PURCHASE_INVOICE_CONFIG, mode: "history" },
-  "order/list": { config: PURCHASE_ORDER_CONFIG, mode: "list" },
-  "order/summary": { config: PURCHASE_ORDER_CONFIG, mode: "summary" },
   "return/list": { config: PURCHASE_RETURN_CONFIG, mode: "list" },
   "return/summary": { config: PURCHASE_RETURN_CONFIG, mode: "summary" },
 };
@@ -24,6 +25,8 @@ export default async function PurchaseTransactionPage({
 }) {
   const { slug = [] } = await params;
   const key = slug.join("/");
+  if (key === "order/list") redirect("/orders/list");
+  if (key === "order/summary") redirect("/orders/summary");
   const route = ROUTES[key];
   if (!route) {
     return (

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Plus } from "lucide-react";
 import { toast } from "@/lib/toast";
 import {
   deleteDirectory,
@@ -62,7 +63,24 @@ export function DirectoryManager({ config }: { config: DirectoryConfig }) {
 
   return (
     <div>
-      <SetupHeader kicker={config.kicker} title={config.title} copy={config.copy} />
+      <SetupHeader
+        kicker={config.kicker}
+        title={config.title}
+        copy={config.copy}
+        action={
+          <PrimaryButton
+            onClick={() => {
+              setDraft(blank());
+              setOpen(true);
+            }}
+          >
+            <span className="inline-flex items-center gap-2">
+              <Plus size={16} />
+              New {config.singular}
+            </span>
+          </PrimaryButton>
+        }
+      />
       <DataTable columns={columns}>
         {rows.length === 0 ? (
           <tr>

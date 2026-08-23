@@ -93,6 +93,50 @@ export async function registerConsole(input: {
   return asSession(data);
 }
 
+export type CompanySignupInput = {
+  company: {
+    name: string;
+    legalName?: string;
+    email?: string;
+    phone?: string;
+    state?: string;
+    country?: string;
+    currency?: string;
+  };
+  account: {
+    name: string;
+    email: string;
+    username: string;
+    password: string;
+  };
+};
+
+export async function registerCompanyConsole(
+  input: CompanySignupInput,
+): Promise<ConsoleSession> {
+  const data = await api<{ token: string; user: Omit<ConsoleSession, "token"> }>(
+    "/api/console/register-company",
+    { method: "POST", body: JSON.stringify(input) },
+  );
+  return asSession(data);
+}
+
+export async function fetchGoogleAuthConfig() {
+  return api<{ enabled: boolean; clientId: string | null }>("/api/console/auth/google-config");
+}
+
+export async function googleAuthConsole(input: {
+  credential: string;
+  intent: "login" | "signup";
+  company?: CompanySignupInput["company"];
+}): Promise<ConsoleSession> {
+  const data = await api<{ token: string; user: Omit<ConsoleSession, "token"> }>(
+    "/api/console/auth/google",
+    { method: "POST", body: JSON.stringify(input) },
+  );
+  return asSession(data);
+}
+
 export async function forgotPassword(email: string) {
   return api<{ ok: true; resetToken?: string }>("/api/console/forgot-password", {
     method: "POST",
@@ -196,6 +240,7 @@ export type HqCatalogItem = {
   sku: string;
   barcode: string;
   batchNumber?: string;
+  brand?: string;
   costMinor: number;
   priceMinor: number;
   onHand: number;

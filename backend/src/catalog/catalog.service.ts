@@ -26,6 +26,7 @@ export type CatalogRow = {
   sku?: string;
   barcode?: string;
   batchNumber?: string;
+  brand?: string;
   costMinor?: number;
   priceMinor?: number;
   onHand?: number;
@@ -46,6 +47,7 @@ export type CatalogPatch = {
   reorderLevel?: number;
   image?: string;
   batchNumber?: string;
+  brand?: string;
   subcategory?: string;
   unit?: string;
   unitLabel?: string;
@@ -153,6 +155,7 @@ export class CatalogService implements OnModuleInit {
       image: typeof patch.image === "string" ? patch.image : current.image,
       batchNumber:
         typeof patch.batchNumber === "string" ? patch.batchNumber : current.batchNumber,
+      brand: typeof patch.brand === "string" ? patch.brand : current.brand,
       subcategory:
         typeof patch.subcategory === "string" ? patch.subcategory : current.subcategory,
       unit: typeof patch.unit === "string" ? patch.unit : current.unit,
@@ -170,6 +173,20 @@ export class CatalogService implements OnModuleInit {
     void this.persist();
     this.events.next({ type: "updated", item: next });
     return next;
+  }
+
+  applyStockDeltas(deltas: Array<{ itemId?: string; delta?: number }>) {
+    const applied: CatalogItem[] = [];
+    for (const entry of deltas.slice(0, 500)) {
+      const itemId = typeof entry?.itemId === "string" ? entry.itemId : "";
+      const delta = Math.round(Number(entry?.delta));
+      if (!itemId || !Number.isFinite(delta) || delta === 0) continue;
+      const item = this.update(itemId, {
+        onHand: Math.max(0, (this.findById(itemId)?.onHand ?? 0) + delta),
+      });
+      if (item) applied.push(item);
+    }
+    return { updated: applied.length, items: applied };
   }
 
   async uploadImage(id: string, file: Express.Multer.File) {
@@ -237,6 +254,10 @@ export class CatalogService implements OnModuleInit {
           row.batchNumber !== undefined
             ? row.batchNumber.trim() || undefined
             : existing?.batchNumber,
+        brand:
+          row.brand !== undefined
+            ? row.brand.trim() || undefined
+            : existing?.brand,
         costMinor:
           typeof row.costMinor === "number" && Number.isFinite(row.costMinor)
             ? row.costMinor

@@ -1,8 +1,19 @@
+import { redirect } from "next/navigation";
 import { DepartmentPage } from "@/components/DepartmentPage";
 import { ItemsManager } from "@/components/setup/ItemsManager";
 import { CategoriesManager } from "@/components/setup/CategoriesManager";
 import { SubcategoriesManager } from "@/components/setup/SubcategoriesManager";
 import { UnitsManager } from "@/components/setup/UnitsManager";
+import { PacksManager } from "@/components/setup/PacksManager";
+import {
+  BarcodeLookupManager,
+  BrandsManager,
+  ExpiringManager,
+  LowStockManager,
+  PriceListManager,
+  ProductExportManager,
+  ProductImportManager,
+} from "@/components/setup/ProductManagers";
 
 const TITLES: Record<string, string> = {
   items: "All Products",
@@ -10,6 +21,13 @@ const TITLES: Record<string, string> = {
   subgroups: "Subcategories",
   units: "Units of Measure",
   packs: "Pack & Cartons",
+  brands: "Brands",
+  prices: "Price List",
+  "low-stock": "Low Stock",
+  expiring: "Expiring Products",
+  barcode: "Barcode Lookup",
+  import: "Import Products",
+  export: "Export Products",
 };
 
 export default async function SetupItemsPage({
@@ -24,11 +42,18 @@ export default async function SetupItemsPage({
   if (key === "groups") return <CategoriesManager />;
   if (key === "subgroups") return <SubcategoriesManager />;
   if (key === "units") return <UnitsManager />;
-  if (key === "packs") return <UnitsManager kindFilter="composite" />;
+  if (key === "packs") return <PacksManager />;
+  if (key === "brands") return <BrandsManager />;
+  if (key === "prices") return <PriceListManager />;
+  if (key === "low-stock") return <LowStockManager />;
+  if (key === "expiring") return <ExpiringManager />;
+  if (key === "barcode") return <BarcodeLookupManager />;
+  if (key === "import") return <ProductImportManager />;
+  if (key === "export") return <ProductExportManager />;
 
   return (
     <DepartmentPage
-      kicker="Setup · Products"
+      kicker="Main Menu · Products"
       title={TITLES[key] ?? (slug.length ? slug.join(" / ") : "Products")}
     />
   );

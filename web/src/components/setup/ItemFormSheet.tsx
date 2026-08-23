@@ -28,6 +28,7 @@ export type ItemDraft = {
   sku: string;
   barcode: string;
   batchNumber: string;
+  brand: string;
   cost: string;
   price: string;
   onHand: string;
@@ -47,6 +48,7 @@ type Props = {
   categories: TaxonomyRecord[];
   subcategories: TaxonomyRecord[];
   units: TaxonomyRecord[];
+  brands?: TaxonomyRecord[];
   onClose: () => void;
   onChange: (patch: Partial<ItemDraft>) => void;
   onImageChange: (file: File | null) => void;
@@ -65,14 +67,14 @@ function Section({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-pos-border bg-pos-surface p-4 shadow-pos-sm">
+    <section className="rounded-[20px] bg-pos-surface p-4 shadow-pos-sm">
       <div className="mb-4 flex items-start gap-3">
-        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-pos-primary/10 text-pos-primary">
+        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-pos-surface-muted text-pos-ink">
           {icon}
         </div>
         <div className="min-w-0">
           <h3 className="text-sm font-semibold text-pos-ink">{title}</h3>
-          {hint ? <p className="mt-0.5 text-xs text-pos-ink-muted">{hint}</p> : null}
+          {hint ? <p className="mt-0.5 text-xs text-pos-ink-faint">{hint}</p> : null}
         </div>
       </div>
       {children}
@@ -105,6 +107,7 @@ export function ItemFormSheet({
   categories,
   subcategories,
   units,
+  brands = [],
   onClose,
   onChange,
   onImageChange,
@@ -174,21 +177,21 @@ export function ItemFormSheet({
         onClick={onClose}
       />
       <aside className="absolute inset-y-0 right-0 flex h-full w-full max-w-2xl flex-col bg-pos-bg text-pos-ink shadow-pos-md">
-        <header className="flex shrink-0 items-start justify-between gap-4 border-b border-pos-border bg-pos-surface px-6 py-5">
+        <header className="flex shrink-0 items-start justify-between gap-4 bg-pos-surface px-6 py-5 shadow-pos-sm">
           <div className="min-w-0">
-            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-pos-primary">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-pos-ink-faint">
               {isEdit ? "Edit product" : "New product"}
             </p>
-            <h2 className="mt-1 text-xl font-semibold tracking-tight text-pos-ink">
+            <h2 className="mt-2 text-[clamp(1.25rem,2.5vw,1.75rem)] font-medium leading-none tracking-tight text-pos-ink-faint">
               {isEdit ? draft.name || "Untitled item" : "Add to catalog"}
             </h2>
-            <p className="mt-1 text-sm text-pos-ink-muted">
+            <p className="mt-2 text-sm text-pos-ink-muted">
               Cost, selling price, batch, and stock sync live to tills and reports.
             </p>
           </div>
           <button
             type="button"
-            className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-pos-border bg-pos-surface text-pos-ink hover:bg-pos-surface-muted"
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-pos-surface-muted text-pos-ink hover:bg-pos-border/60"
             onClick={onClose}
             aria-label="Close"
           >
@@ -254,6 +257,23 @@ export function ItemFormSheet({
                     </select>
                   </InputLabel>
                 </div>
+                <InputLabel label="Brand" hint="Optional — manage under Brands.">
+                  <select
+                    className={fieldClass}
+                    value={draft.brand}
+                    disabled={busy}
+                    onChange={(event) => onChange({ brand: event.target.value })}
+                  >
+                    <option value="">None</option>
+                    {brands
+                      .filter((row) => row.active !== false)
+                      .map((row) => (
+                        <option key={row.id} value={row.name}>
+                          {row.name}
+                        </option>
+                      ))}
+                  </select>
+                </InputLabel>
                 <InputLabel label="Unit" hint={unitKindLabel(selectedUnitKind)}>
                   <select
                     className={fieldClass}
@@ -267,7 +287,7 @@ export function ItemFormSheet({
                         inferUnitKind(code);
                       onChange({
                         unit: code,
-                        packSize: kind === "composite" ? draft.packSize || "1" : "1",
+                        packSize: kind === "composite" ? draft.packSize || "12" : "1",
                       });
                     }}
                   >
@@ -325,9 +345,13 @@ export function ItemFormSheet({
               icon={<Barcode size={18} />}
               title="Identifiers & batch"
               hint={
-                isEdit
-                  ? "SKU and barcode are fixed after creation. Batch can be updated per delivery."
-                  : "Leave SKU and barcode blank — both are auto-generated when you save."
+                selectedUnitKind === "composite"
+                  ? isEdit
+                    ? "Pack barcode is the code on the outer carton/pack. Regenerate under Pack & Cartons if needed."
+                    : "Pack barcode is the outer pack code — leave blank to auto-generate. Pieces per pack is required."
+                  : isEdit
+                    ? "SKU and barcode are fixed after creation. Batch can be updated per delivery."
+                    : "Leave SKU and barcode blank — both are auto-generated when you save."
               }
             >
               {isEdit ? (
@@ -337,7 +361,9 @@ export function ItemFormSheet({
                     <p className="mt-1 font-mono text-sm text-pos-ink">{draft.sku || "—"}</p>
                   </div>
                   <div className="rounded-xl border border-pos-border bg-pos-surface-muted px-3 py-2.5">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-pos-ink-faint">Barcode</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-pos-ink-faint">
+                      {selectedUnitKind === "composite" ? "Pack barcode" : "Barcode"}
+                    </p>
                     <p className="mt-1 font-mono text-sm text-pos-ink">{draft.barcode || "—"}</p>
                   </div>
                 </div>
@@ -352,7 +378,14 @@ export function ItemFormSheet({
                       onChange={(event) => onChange({ sku: event.target.value })}
                     />
                   </InputLabel>
-                  <InputLabel label="Barcode" hint="Auto-generated if empty">
+                  <InputLabel
+                    label={selectedUnitKind === "composite" ? "Pack barcode" : "Barcode"}
+                    hint={
+                      selectedUnitKind === "composite"
+                        ? "Outer pack/carton code — auto if empty"
+                        : "Auto-generated if empty"
+                    }
+                  >
                     <input
                       className={fieldClass}
                       placeholder="Auto"
@@ -471,20 +504,20 @@ export function ItemFormSheet({
             </Section>
           </div>
 
-          <footer className="shrink-0 border-t border-pos-border bg-pos-surface px-6 py-4">
+          <footer className="shrink-0 bg-pos-surface px-6 py-4 shadow-[0_-8px_24px_rgba(28,28,30,0.04)]">
             <div className="flex gap-3">
               <button
                 type="button"
                 disabled={busy}
                 onClick={onClose}
-                className="flex-1 rounded-xl border border-pos-border bg-pos-surface px-4 py-2.5 text-sm font-semibold text-pos-ink hover:bg-pos-surface-muted disabled:opacity-60"
+                className="flex-1 rounded-full bg-pos-surface-muted px-4 py-2.5 text-sm font-semibold text-pos-ink hover:bg-pos-border/50 disabled:opacity-60"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={busy}
-                className="flex-[1.4] rounded-xl bg-pos-primary px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
+                className="flex-[1.4] rounded-full bg-pos-primary px-4 py-2.5 text-sm font-semibold text-white shadow-pos-primary hover:opacity-90 disabled:opacity-60"
               >
                 {busy ? "Saving…" : isEdit ? "Save changes" : "Create item"}
               </button>

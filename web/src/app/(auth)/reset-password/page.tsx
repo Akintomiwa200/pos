@@ -4,7 +4,12 @@ import { FormEvent, Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "@/lib/toast";
 import { resetPassword } from "../../../lib/hq-api";
-import { AuthCard, AuthField, AuthLinks, AuthSubmit } from "../../../components/site/AuthCard";
+import {
+  AuthFooterLink,
+  AuthInput,
+  AuthPrimaryButton,
+  AuthSplit,
+} from "../../../components/site/AuthSplit";
 
 function ResetForm() {
   const router = useRouter();
@@ -35,39 +40,55 @@ function ResetForm() {
   }
 
   return (
-    <AuthCard title="Set a new password" copy="Paste the reset token if it is not already filled, then choose a new password.">
+    <AuthSplit
+      title="New password"
+      mode="other"
+      footer={
+        <>
+          <AuthFooterLink href="/login">Back to login</AuthFooterLink>
+        </>
+      }
+    >
       <form onSubmit={(event) => void onSubmit(event)}>
-        <AuthField
+        <AuthInput
           key={preset}
           label="Reset token"
           name="token"
           autoComplete="off"
           defaultValue={preset}
+          required
         />
-        <AuthField
-          label="New password"
+        <AuthInput
+          label="Password"
           name="password"
           type="password"
           autoComplete="new-password"
           minLength={6}
+          required
         />
-        <AuthField
+        <AuthInput
           label="Confirm password"
           name="confirm"
           type="password"
           autoComplete="new-password"
           minLength={6}
+          required
         />
-        <AuthSubmit busy={busy} label="Save password" />
+        <AuthPrimaryButton busy={busy}>Save password</AuthPrimaryButton>
       </form>
-      <AuthLinks items={[{ href: "/login", label: "Back to login" }]} />
-    </AuthCard>
+    </AuthSplit>
   );
 }
 
 export default function ResetPasswordPage() {
   return (
-    <Suspense fallback={<p className="p-16 text-center text-sm text-neutral-500">Loading…</p>}>
+    <Suspense
+      fallback={
+        <div className="grid min-h-screen place-items-center bg-pos-surface text-sm text-pos-ink-faint">
+          Loading…
+        </div>
+      }
+    >
       <ResetForm />
     </Suspense>
   );

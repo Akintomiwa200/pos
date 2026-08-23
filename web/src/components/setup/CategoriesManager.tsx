@@ -18,7 +18,7 @@ import { naira } from "@/lib/hq-ops";
 import { listCatalog } from "@/lib/hq-api";
 import { ManagerSkeleton } from "../Skeleton";
 import { SlideOver } from "../SlideOver";
-import { DataTable, Field, PrimaryButton, SetupHeader, ToggleField, fieldClass } from "./SetupChrome";
+import { DataTable, Field, PrimaryButton, ToggleField, fieldClass } from "./SetupChrome";
 
 type Draft = { id?: string; name: string; note: string; active: boolean };
 
@@ -107,66 +107,100 @@ export function CategoriesManager() {
     }
   }
 
+  const totalValue = [...stockByCategory.values()].reduce((sum, value) => sum + value, 0);
+  const activeCount = rows.filter((row) => row.active).length;
+
   return (
-    <div>
-      <SetupHeader
-        kicker="Setup · Products"
-        title="Categories"
-        copy="Top-level product groups used on items, reports, and the till grid. Assign categories when adding products."
-        action={
+    <div className="relative space-y-5 text-pos-ink">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="text-[clamp(1.5rem,3.5vw,2.25rem)] font-medium leading-none tracking-tight text-pos-ink-faint">
+            Categories
+          </h1>
+          <p className="mt-3 text-[14px] text-pos-ink-muted">
+            Top-level product groups · {activeCount} active · stock value{" "}
+            {naira(totalValue, 0)}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href="/setup/items/items"
+            className="rounded-full bg-pos-surface px-4 py-2.5 text-sm font-medium text-pos-ink shadow-pos-sm"
+          >
+            All products
+          </Link>
           <PrimaryButton onClick={openNew}>
-            <span className="inline-flex items-center gap-2">
-              <Plus size={16} />
-              New category
-            </span>
+            <Plus size={16} strokeWidth={2.2} />
+            New category
           </PrimaryButton>
-        }
-      />
-      <DataTable columns={["Category", "Products", "Stock value", "Status", ""]}>
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-[20px] bg-pos-surface p-4 shadow-pos-sm">
+          <p className="text-[13px] text-pos-ink-faint">Categories</p>
+          <p className="mt-2 text-[24px] font-semibold tabular-nums">{rows.length}</p>
+        </div>
+        <div className="rounded-[20px] bg-pos-surface p-4 shadow-pos-sm">
+          <p className="text-[13px] text-pos-ink-faint">Active</p>
+          <p className="mt-2 text-[24px] font-semibold tabular-nums">{activeCount}</p>
+        </div>
+        <div className="rounded-[20px] bg-pos-surface p-4 shadow-pos-sm">
+          <p className="text-[13px] text-pos-ink-faint">Stock value</p>
+          <p className="mt-2 truncate text-[22px] font-semibold tabular-nums">
+            {naira(totalValue, 0)}
+          </p>
+        </div>
+      </div>
+
+      <DataTable columns={["Category", "Description", "Products", "Stock value", "Status"]}>
         {sorted.length === 0 ? (
           <tr>
-            <td colSpan={5} className="px-4 py-8 text-center text-pos-ink-faint">
+            <td className="px-4 py-12 text-center text-pos-ink-faint" colSpan={5}>
               No categories yet.{" "}
-              <Link href="/setup/items/items" className="text-pos-primary underline">
+              <Link href="/setup/items/items" className="font-medium text-pos-primary">
                 Add a product
               </Link>{" "}
-              or create a category here.
+              or create one here.
             </td>
           </tr>
         ) : (
           sorted.map((row) => {
             const count = productCount(usage, "categories", row.name);
+            const value = stockByCategory.get(row.name) ?? 0;
             return (
               <tr
                 key={row.id}
-                className="cursor-pointer border-b border-pos-border/60 hover:bg-pos-surface-muted"
+                className="cursor-pointer transition hover:bg-pos-surface-muted/70"
                 onClick={() => openEdit(row)}
               >
-                <td className="px-4 py-3">
-                  <p className="font-medium text-pos-ink">{row.name}</p>
-                  {row.note ? <p className="text-xs text-pos-ink-muted">{row.note}</p> : null}
+                <td className="px-4 py-3.5">
+                  <div className="flex items-center gap-3">
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-pos-surface-muted text-[13px] font-semibold">
+                      {row.name.slice(0, 1).toUpperCase()}
+                    </span>
+                    <span className="font-semibold text-pos-ink">{row.name}</span>
+                  </div>
                 </td>
-                <td className="px-4 py-3">{count}</td>
-                <td className="px-4 py-3">{naira(stockByCategory.get(row.name) ?? 0, 0)}</td>
-                <td className="px-4 py-3">
+                <td className="px-4 py-3.5 text-pos-ink-muted">
+                  {row.note || "—"}
+                </td>
+                <td className="px-4 py-3.5 tabular-nums text-pos-ink">
+                  {count}
+                </td>
+                <td className="px-4 py-3.5 font-medium tabular-nums text-pos-ink">
+                  {naira(value, 0)}
+                </td>
+                <td className="px-4 py-3.5">
                   <span
-                    className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                    className={`inline-flex rounded-full px-2.5 py-1 text-[12px] font-semibold ${
                       row.active
-                        ? "bg-pos-primary/10 text-pos-primary"
+                        ? "bg-pos-success/10 text-pos-success"
                         : "bg-pos-surface-muted text-pos-ink-faint"
                     }`}
                   >
                     {row.active ? "Active" : "Inactive"}
                   </span>
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <Link
-                    href={`/setup/items/subgroups`}
-                    className="text-xs font-medium text-pos-primary hover:underline"
-                    onClick={(event) => event.stopPropagation()}
-                  >
-                    Subcategories
-                  </Link>
                 </td>
               </tr>
             );
@@ -184,7 +218,7 @@ export function CategoriesManager() {
             {draft.id ? (
               <button
                 type="button"
-                className="rounded-xl border border-pos-border px-4 py-2.5 text-sm text-pos-ink hover:bg-pos-surface-muted"
+                className="rounded-full bg-pos-surface-muted px-4 py-2.5 text-sm text-pos-ink"
                 disabled={busy}
                 onClick={async () => {
                   const count = productCount(usage, "categories", draft.name);

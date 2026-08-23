@@ -1,14 +1,37 @@
 import { Controller, Get } from '@nestjs/common';
+import { CatalogService } from '../catalog/catalog.service';
+import { ConsoleService } from '../console/console.service';
+import { SetupService } from '../console/setup.service';
 
 @Controller('tenants')
 export class TenantsController {
+  constructor(
+    private readonly catalog: CatalogService,
+    private readonly console: ConsoleService,
+    private readonly setup: SetupService,
+  ) {}
+
   @Get()
-  list() {
+  async list() {
+    const snapshot = await this.setup.snapshot();
+    const tills = this.console.listTills();
     return [
-      { id: 't-super', name: 'Shoprite Ikeja', kind: 'supermarket' },
-      { id: 't-hotel', name: 'Eko Hotel', kind: 'hotel' },
-      { id: 't-rest', name: 'The Place VI', kind: 'restaurant' },
-      { id: 't-dk', name: 'Yaba Dark Kitchen', kind: 'dark_kitchen' },
+      {
+        id: 'current',
+        name: snapshot.company?.name || 'My Organisation',
+        kind: 'organisation',
+        tin: snapshot.company?.tin ?? null,
+        branches: snapshot.branches.length,
+        stores: snapshot.stores.length,
+        catalogItems: this.catalog.list().length,
+        tills: tills.map((till) => ({
+          id: till.id,
+          name: till.name,
+          product: till.product,
+          active: till.active !== false,
+          online: till.online,
+        })),
+      },
     ];
   }
 }

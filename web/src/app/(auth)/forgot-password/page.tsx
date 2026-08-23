@@ -4,7 +4,12 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "@/lib/toast";
 import { forgotPassword } from "../../../lib/hq-api";
-import { AuthCard, AuthField, AuthLinks, AuthSubmit } from "../../../components/site/AuthCard";
+import {
+  AuthFooterLink,
+  AuthInput,
+  AuthPrimaryButton,
+  AuthSplit,
+} from "../../../components/site/AuthSplit";
 
 export default function ForgotPasswordPage() {
   const router = useRouter();
@@ -30,15 +35,22 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <AuthCard
+    <AuthSplit
       title="Forgot password"
-      copy="If that HQ account exists, the API creates a one-hour reset. This server has no mailer, so the next screen opens immediately."
+      mode="other"
+      footer={
+        <>
+          Remembered it? <AuthFooterLink href="/login">Login</AuthFooterLink>
+        </>
+      }
     >
+      <p className="mb-5 text-[14px] leading-relaxed text-pos-ink-muted">
+        Enter your HQ email or username. If the account exists, you can set a new password next.
+      </p>
       <form onSubmit={(event) => void onSubmit(event)}>
-        <AuthField label="Email or username" name="email" autoComplete="username" />
-        <AuthSubmit busy={busy} label="Continue" />
+        <AuthInput label="Email" name="email" autoComplete="username" required />
+        <AuthPrimaryButton busy={busy}>Continue</AuthPrimaryButton>
       </form>
-      <AuthLinks items={[{ href: "/login", label: "Back to login" }]} />
-    </AuthCard>
+    </AuthSplit>
   );
 }

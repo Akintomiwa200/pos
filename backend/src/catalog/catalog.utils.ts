@@ -59,6 +59,7 @@ export function normalizeCatalogItem(raw: Partial<CatalogItem> & Pick<CatalogIte
     sku: raw.sku?.trim() || slugFromName(raw.name) || raw.id,
     barcode: raw.barcode?.trim() || "",
     batchNumber: raw.batchNumber?.trim() || undefined,
+    brand: raw.brand?.trim() || undefined,
     costMinor,
     priceMinor,
     currency: "NGN",

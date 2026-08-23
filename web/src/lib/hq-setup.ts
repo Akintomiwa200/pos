@@ -191,6 +191,7 @@ export async function importCatalogRows(
     sku?: string;
     barcode?: string;
     batchNumber?: string;
+    brand?: string;
     costMinor?: number;
     priceMinor?: number;
     onHand?: number;

@@ -23,13 +23,26 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return data;
 }
 
+/**
+ * Demo staff are only honoured in explicit offline stock mode.
+ * Online, a dead HQ must fail loudly instead of silently logging into fake data.
+ */
+function offlineMode() {
+  return loadStoreSettings().stockMode === "offline";
+}
+
+function unreachable() {
+  return new Error("Cannot reach the HQ server. Check your connection and try again.");
+}
+
 export async function loginWithPassword(username: string, password: string) {
   try {
     return await post<{
       user: StaffUser;
       needsOpenShift: boolean;
     }>("/api/auth/login", { username, password });
-  } catch {
+  } catch (error) {
+    if (!offlineMode()) throw error instanceof Error ? error : unreachable();
     const name = username.trim().toLowerCase();
     const match = DEMO_STAFF.find(
       (staff) =>
@@ -47,19 +60,17 @@ export async function loginWithPassword(username: string, password: string) {
 }
 
 export async function listStaff() {
-  try {
-    const response = await fetch(apiUrl("/api/staff"));
-    if (!response.ok) throw new Error("fail");
-    return (await response.json()) as StaffUser[];
-  } catch {
-    return DEMO_STAFF.map(publicUser);
-  }
+  if (offlineMode()) return DEMO_STAFF.map(publicUser);
+  const response = await fetch(apiUrl("/api/staff"));
+  if (!response.ok) throw new Error(`Staff request failed (${response.status})`);
+  return (await response.json()) as StaffUser[];
 }
 
 export async function unlockWithPin(pin: string) {
   try {
     return await post<StaffUser>("/api/staff/unlock", { pin });
-  } catch {
+  } catch (error) {
+    if (!offlineMode()) throw error instanceof Error ? error : unreachable();
     const match = DEMO_STAFF.find(
       (staff) => staff.pin === pin && staff.privileges.includes("unlock"),
     );
@@ -71,7 +82,8 @@ export async function unlockWithPin(pin: string) {
 export async function openShift(staffId: string) {
   try {
     return await post<ShiftRecord>("/api/staff/shift/open", { staffId });
-  } catch {
+  } catch (error) {
+    if (!offlineMode()) throw error instanceof Error ? error : unreachable();
     return {
       id: `SH-${Date.now().toString().slice(-8)}`,
       staffId,
@@ -91,7 +103,8 @@ export async function closeShift(staffId: string, pin: string) {
       staffId,
       pin,
     });
-  } catch {
+  } catch (error) {
+    if (!offlineMode()) throw error instanceof Error ? error : unreachable();
     return null;
   }
 }
@@ -100,7 +113,7 @@ export async function recordShiftSale(staffId: string, amountMinor: number) {
   try {
     await post("/api/staff/shift/sale", { staffId, amountMinor });
   } catch {
-    // local till still works if the API is down
+    // local till copy keeps the total; next shift report reconciles
   }
 }
 
@@ -108,7 +121,8 @@ export async function closeDay(pin: string) {
   await unlockWithPin(pin);
   try {
     return await post<{ closedAt: string }>("/api/staff/day/close", { pin });
-  } catch {
+  } catch (error) {
+    if (!offlineMode()) throw error instanceof Error ? error : unreachable();
     return { closedAt: new Date().toISOString() };
   }
 }

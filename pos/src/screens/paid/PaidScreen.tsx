@@ -8,13 +8,24 @@ import { useStoreSettings } from "../../lib/use-store-settings";
 
 type Props = {
   sale: SaleReceipt;
+  saveState?: "saving" | "saved" | "queued";
   onNewOrder: () => void;
 };
 
-export function PaidScreen({ sale, onNewOrder }: Props) {
+const SAVE_COPY = {
+  saving: "Saving to HQ…",
+  saved: "Receipt saved.",
+  queued: "HQ unreachable — receipt is safe on this till and will retry.",
+} as const;
+
+export function PaidScreen({ sale, saveState = "saved", onNewOrder }: Props) {
   const settings = useStoreSettings();
-  const [status, setStatus] = useState("Receipt saved.");
+  const [status, setStatus] = useState<string>(SAVE_COPY[saveState]);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setStatus(SAVE_COPY[saveState]);
+  }, [saveState]);
 
   async function handlePrint() {
     const assigned = loadPrinterConfig().receiptPrinter;

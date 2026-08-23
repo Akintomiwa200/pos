@@ -337,18 +337,28 @@ export async function heartbeatDeviceTill(hardwareHex: string) {
     if (body.org) {
       applyHqOrg(body.org);
       if (body.org.branches?.length) {
-        saveBranches(
-          body.org.branches.map((row) => ({
-            id: row.id,
-            name: row.name,
-            address: row.address,
-            city: row.city,
-            state: row.state,
-            phone: row.phone,
-            manager: row.manager,
-            active: row.active,
-          })),
-        );
+        // Merge HQ branches over local edits instead of clobbering them:
+        // keep any locally-added branch and preserve fields HQ does not send.
+        const remote = body.org.branches.map((row) => ({
+          id: row.id,
+          name: row.name,
+          address: row.address,
+          city: row.city,
+          state: row.state,
+          phone: row.phone,
+          manager: row.manager,
+          active: row.active,
+        }));
+        const current = loadBranches();
+        const byId = new Map(current.map((row) => [row.id, row]));
+        const merged = [
+          ...remote.map((row) => {
+            const local = byId.get(row.id);
+            return local ? { ...local, ...row } : row;
+          }),
+          ...current.filter((row) => !remote.some((entry) => entry.id === row.id)),
+        ];
+        saveBranches(merged);
       }
     }
     const nextExpires = body.subscriptionExpiresAt ?? till.subscriptionExpiresAt;

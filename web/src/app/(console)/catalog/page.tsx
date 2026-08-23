@@ -1,5 +1,5 @@
-import { CatalogBrowser } from "@/components/departments/CatalogBrowser";
+import { redirect } from "next/navigation";
 
 export default function CatalogPage() {
-  return <CatalogBrowser />;
+  redirect("/setup/items/barcode");
 }

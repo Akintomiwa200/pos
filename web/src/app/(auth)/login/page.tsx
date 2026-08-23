@@ -4,11 +4,18 @@ import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "@/lib/toast";
 import { useAuth } from "../../../components/AuthProvider";
-import { AuthCard, AuthField, AuthLinks, AuthSubmit } from "../../../components/site/AuthCard";
+import { GoogleAuthButton } from "../../../components/site/GoogleAuthButton";
+import {
+  AuthFooterLink,
+  AuthInput,
+  AuthPrimaryButton,
+  AuthRememberRow,
+  AuthSplit,
+} from "../../../components/site/AuthSplit";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login, session, loading } = useAuth();
+  const { login, loginWithGoogle, session, loading } = useAuth();
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -31,23 +38,46 @@ export default function LoginPage() {
   }
 
   return (
-    <AuthCard title="HQ login" copy="Live sign-in against the API. Menus follow your group.">
+    <AuthSplit
+      title="Login"
+      subtitle="Any HQ account can sign in — administrator, sales, accountant, and more."
+      mode="signin"
+      googleSlot={
+        <GoogleAuthButton
+          intent="login"
+          label="Sign in with Google"
+          disabled={busy}
+          onCredential={async (credential) => {
+            await loginWithGoogle(credential);
+            toast.success("Signed in with Google.");
+            router.replace("/dashboard");
+          }}
+        />
+      }
+      footer={
+        <>
+          Starting a new company?{" "}
+          <AuthFooterLink href="/register">Sign up</AuthFooterLink>
+        </>
+      }
+    >
       <form onSubmit={(event) => void onSubmit(event)}>
-        <AuthField label="Email or username" name="email" autoComplete="username" />
-        <AuthField
+        <AuthInput
+          label="Email or username"
+          name="email"
+          autoComplete="username"
+          required
+        />
+        <AuthInput
           label="Password"
           name="password"
           type="password"
           autoComplete="current-password"
+          required
         />
-        <AuthSubmit busy={busy} label="Sign in" />
+        <AuthRememberRow />
+        <AuthPrimaryButton busy={busy}>Login</AuthPrimaryButton>
       </form>
-      <AuthLinks
-        items={[
-          { href: "/register", label: "Create account" },
-          { href: "/forgot-password", label: "Forgot password" },
-        ]}
-      />
-    </AuthCard>
+    </AuthSplit>
   );
 }

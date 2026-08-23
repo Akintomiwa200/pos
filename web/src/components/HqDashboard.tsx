@@ -1232,7 +1232,7 @@ export function HqDashboard() {
           ))}
           <Link
             href="/setup/users/account"
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-pos-inverse text-[11px] font-semibold text-white"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-pos-primary text-[11px] font-semibold text-white"
             aria-label="All accounts"
           >
             {extra?.name.trim().charAt(0).toUpperCase() || "C"}
@@ -1279,7 +1279,7 @@ export function HqDashboard() {
             <button
               type="button"
               className={`relative h-6 w-11 rounded-full transition-colors ${
-                days === 30 ? "bg-pos-inverse" : "bg-pos-border"
+                days === 30 ? "bg-pos-primary" : "bg-pos-border"
               }`}
               onClick={() => setDays((value) => (value === 30 ? 90 : 30))}
               aria-label="Toggle 30 or 90 days"
@@ -1379,7 +1379,7 @@ export function HqDashboard() {
 
           <Link
             href="/reports/sales/invoice/list"
-            className="flex min-h-[118px] flex-col rounded-[20px] bg-pos-inverse p-3.5 text-white"
+            className="flex min-h-[118px] flex-col rounded-[20px] bg-pos-primary p-3.5 text-white shadow-pos-primary"
           >
             <p className="flex items-center justify-between text-[13px] text-white/50">
               Best ticket
@@ -1474,7 +1474,7 @@ export function HqDashboard() {
         )}
         <Link
           href="/reports/sales/invoice/list"
-          className="ml-1.5 shrink-0 rounded-full bg-pos-inverse px-4 py-2 text-[13px] font-medium leading-none text-white"
+          className="ml-1.5 shrink-0 rounded-full bg-pos-primary px-4 py-2 text-[13px] font-medium leading-none text-white shadow-pos-primary"
         >
           Details
         </Link>
@@ -1575,7 +1575,7 @@ export function HqDashboard() {
                     key={key}
                     type="button"
                     className={`rounded-full px-3.5 py-1.5 ${
-                      focus === key ? "bg-pos-inverse text-white" : "text-pos-ink-faint"
+                      focus === key ? "bg-pos-primary text-white" : "text-pos-ink-faint"
                     }`}
                     onClick={() => setFocus(key)}
                   >

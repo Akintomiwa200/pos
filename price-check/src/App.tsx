@@ -238,8 +238,16 @@ function CameraSheet({
     const video = videoRef.current;
     if (!video) return;
     let stop: (() => void) | undefined;
+    // Guard against the race where the sheet unmounts before the camera
+    // promise settles (StrictMode remount / quick close) — otherwise the
+    // cleanup below runs while `stop` is still undefined and the stream leaks.
+    let cancelled = false;
     startCameraScan(video, (code) => onCodeRef.current(code))
       .then((cleanup) => {
+        if (cancelled) {
+          cleanup();
+          return;
+        }
         stop = cleanup;
       })
       .catch((err: unknown) => {
@@ -249,7 +257,10 @@ function CameraSheet({
             : "Camera needs HTTPS, or type the barcode instead.",
         );
       });
-    return () => stop?.();
+    return () => {
+      cancelled = true;
+      stop?.();
+    };
   }, []);
 
   return (

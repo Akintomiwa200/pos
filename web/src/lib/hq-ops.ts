@@ -114,13 +114,23 @@ export type DocKind =
   | "purchase-return"
   | "sales-quote"
   | "sales-return";
-export type DocStatus = "draft" | "open" | "received" | "closed" | "cancelled";
+export type DocStatus =
+  | "draft"
+  | "pending_approval"
+  | "approved"
+  | "open"
+  | "partial"
+  | "received"
+  | "closed"
+  | "cancelled"
+  | "rejected";
 
 export type DocLine = {
   itemId: string;
   name: string;
   quantity: number;
   unitPriceMinor: number;
+  receivedQty?: number;
 };
 
 export type TradeDoc = {
@@ -134,6 +144,14 @@ export type TradeDoc = {
   lines: DocLine[];
   totalMinor: number;
   notes?: string;
+  createdBy?: string;
+  submittedAt?: string;
+  approvedAt?: string;
+  approvedBy?: string;
+  rejectedAt?: string;
+  rejectedBy?: string;
+  rejectionReason?: string;
+  receivedAt?: string;
 };
 
 export function listDocs(kind: DocKind): Promise<TradeDoc[]> {

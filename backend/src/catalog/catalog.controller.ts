@@ -33,6 +33,14 @@ export class CatalogController {
     return item;
   }
 
+  @Post("stock/bulk")
+  bulkStock(@Body() body: { deltas?: Array<{ itemId?: string; delta?: number }> }) {
+    if (!Array.isArray(body?.deltas) || body.deltas.length === 0) {
+      throw new NotFoundException("deltas array is required");
+    }
+    return this.catalog.applyStockDeltas(body.deltas);
+  }
+
   @Get("stats")
   stats() {
     return this.catalog.stats();

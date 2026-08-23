@@ -15,6 +15,9 @@ export type ConsoleAccount = {
   password: string;
   groupId: string;
   active: boolean;
+  /** Google subject id when linked / signed up with Google */
+  googleId?: string | null;
+  authProvider?: "password" | "google" | "both";
 };
 
 export type HqNotice = {

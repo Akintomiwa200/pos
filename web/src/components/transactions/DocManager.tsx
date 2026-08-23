@@ -36,12 +36,16 @@ type LineDraft = { itemId: string; name: string; quantity: string; unitPrice: st
 
 const emptyLine = (): LineDraft => ({ itemId: "", name: "", quantity: "1", unitPrice: "" });
 
-export const STATUS_TONE: Record<DocStatus, string> = {
+export const STATUS_TONE: Record<string, string> = {
   draft: "text-pos-ink-faint",
+  pending_approval: "text-amber-700 font-medium",
+  approved: "text-pos-primary font-medium",
   open: "text-pos-primary font-medium",
+  partial: "text-amber-700 font-medium",
   received: "text-pos-success font-medium",
   closed: "text-pos-ink-muted",
   cancelled: "text-pos-danger",
+  rejected: "text-pos-danger",
 };
 
 function statusTone(status: string) {

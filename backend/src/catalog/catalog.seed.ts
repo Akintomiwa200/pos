@@ -6,6 +6,7 @@ export type CatalogItem = {
   sku: string;
   barcode: string;
   batchNumber?: string;
+  brand?: string;
   costMinor: number;
   priceMinor: number;
   currency: "NGN";

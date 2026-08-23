@@ -18,7 +18,7 @@ import {
 } from "@/lib/hq-taxonomy";
 import { ManagerSkeleton } from "../Skeleton";
 import { SlideOver } from "../SlideOver";
-import { DataTable, Field, PrimaryButton, SetupHeader, ToggleField, fieldClass } from "./SetupChrome";
+import { DataTable, Field, PrimaryButton, ToggleField, fieldClass } from "./SetupChrome";
 
 const KINDS: UnitKind[] = ["count", "weight", "volume", "composite"];
 
@@ -71,6 +71,7 @@ export function UnitsManager({ kindFilter }: { kindFilter?: UnitKind }) {
 
   const isComposite = kindFilter === "composite";
   const newDraft = isComposite ? compositeBlank : blank;
+  const activeCount = sorted.filter((row) => row.active).length;
 
   if (!ready) return <ManagerSkeleton variant="table" />;
 
@@ -118,24 +119,43 @@ export function UnitsManager({ kindFilter }: { kindFilter?: UnitKind }) {
   }
 
   return (
-    <div>
-      <SetupHeader
-        kicker="Setup · Products"
-        title={isComposite ? "Pack & cartons" : "Units of measure"}
-        copy={
-          isComposite
-            ? "Carton, bag, packet, pack and other multi-piece units. Set how many pieces are in each pack on the product."
-            : "Single items, weight (kg) and volume (L). For cartons and packs, use Pack & Cartons."
-        }
-        action={
-          <PrimaryButton onClick={openNew}>
-            <span className="inline-flex items-center gap-2">
-              <Plus size={16} />
-              {isComposite ? "New pack unit" : "New unit"}
-            </span>
-          </PrimaryButton>
-        }
-      />
+    <div className="relative space-y-5 text-pos-ink">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="text-[clamp(1.5rem,3.5vw,2.25rem)] font-medium leading-none tracking-tight text-pos-ink-faint">
+            {isComposite ? "Pack & cartons" : "Units of measure"}
+          </h1>
+          <p className="mt-3 text-[14px] text-pos-ink-muted">
+            {isComposite
+              ? `Unit types for multi-piece selling (pack, carton, bag). Create the actual products — e.g. Chivita × 12 — under Pack & Cartons.`
+              : `Count, weight and volume · ${sorted.length} units · ${activeCount} active`}
+          </p>
+        </div>
+        <PrimaryButton onClick={openNew}>
+          <Plus size={16} strokeWidth={2.2} />
+          {isComposite ? "New pack unit" : "New unit"}
+        </PrimaryButton>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-[20px] bg-pos-surface p-4 shadow-pos-sm">
+          <p className="text-[13px] text-pos-ink-faint">
+            {isComposite ? "Pack units" : "Units"}
+          </p>
+          <p className="mt-2 text-[24px] font-semibold tabular-nums">{sorted.length}</p>
+        </div>
+        <div className="rounded-[20px] bg-pos-surface p-4 shadow-pos-sm">
+          <p className="text-[13px] text-pos-ink-faint">Active</p>
+          <p className="mt-2 text-[24px] font-semibold tabular-nums">{activeCount}</p>
+        </div>
+        <div className="rounded-[20px] bg-pos-surface p-4 shadow-pos-sm">
+          <p className="text-[13px] text-pos-ink-faint">Type</p>
+          <p className="mt-2 text-[16px] font-semibold leading-snug">
+            {isComposite ? "Composite packs" : "Count · weight · volume"}
+          </p>
+        </div>
+      </div>
+
       <DataTable
         columns={
           isComposite
@@ -145,7 +165,10 @@ export function UnitsManager({ kindFilter }: { kindFilter?: UnitKind }) {
       >
         {sorted.length === 0 ? (
           <tr>
-            <td colSpan={isComposite ? 4 : 5} className="px-4 py-8 text-center text-pos-ink-faint">
+            <td
+              className="px-4 py-12 text-center text-pos-ink-faint"
+              colSpan={isComposite ? 4 : 5}
+            >
               {isComposite ? "No pack units yet." : "No units yet."}
             </td>
           </tr>
@@ -157,20 +180,24 @@ export function UnitsManager({ kindFilter }: { kindFilter?: UnitKind }) {
             return (
               <tr
                 key={row.id}
-                className="cursor-pointer border-b border-pos-border/60 hover:bg-pos-surface-muted"
+                className="cursor-pointer transition hover:bg-pos-surface-muted/70"
                 onClick={() => openEdit(row)}
               >
-                <td className="px-4 py-3 font-medium">{row.name}</td>
-                <td className="px-4 py-3 font-mono text-sm text-pos-ink-muted">{code}</td>
+                <td className="px-4 py-3.5 font-semibold text-pos-ink">{row.name}</td>
+                <td className="px-4 py-3.5 font-mono text-[13px] text-pos-ink-muted">
+                  {code}
+                </td>
                 {!isComposite ? (
-                  <td className="px-4 py-3 text-pos-ink-muted">{unitKindLabel(kind)}</td>
+                  <td className="px-4 py-3.5 text-pos-ink-muted">{unitKindLabel(kind)}</td>
                 ) : null}
-                <td className="px-4 py-3">{productCount(usage, "units", code)}</td>
-                <td className="px-4 py-3">
+                <td className="px-4 py-3.5 tabular-nums text-pos-ink">
+                  {productCount(usage, "units", code)}
+                </td>
+                <td className="px-4 py-3.5">
                   <span
-                    className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                    className={`inline-flex rounded-full px-2.5 py-1 text-[12px] font-semibold ${
                       row.active
-                        ? "bg-pos-primary/10 text-pos-primary"
+                        ? "bg-pos-success/10 text-pos-success"
                         : "bg-pos-surface-muted text-pos-ink-faint"
                     }`}
                   >
@@ -185,7 +212,15 @@ export function UnitsManager({ kindFilter }: { kindFilter?: UnitKind }) {
 
       <SlideOver
         open={open}
-        title={draft.id ? (isComposite ? "Edit pack unit" : "Edit unit") : isComposite ? "New pack unit" : "New unit"}
+        title={
+          draft.id
+            ? isComposite
+              ? "Edit pack unit"
+              : "Edit unit"
+            : isComposite
+              ? "New pack unit"
+              : "New unit"
+        }
         subtitle={
           isComposite
             ? "Used when products are sold by carton, bag, packet or pack. Set pieces per pack on each product."
@@ -197,7 +232,7 @@ export function UnitsManager({ kindFilter }: { kindFilter?: UnitKind }) {
             {draft.id ? (
               <button
                 type="button"
-                className="rounded-xl border border-pos-border px-4 py-2.5 text-sm text-pos-ink hover:bg-pos-surface-muted"
+                className="rounded-full bg-pos-surface-muted px-4 py-2.5 text-sm text-pos-ink"
                 disabled={busy}
                 onClick={async () => {
                   const count = productCount(usage, "units", draft.code);

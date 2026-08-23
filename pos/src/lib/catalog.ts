@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ITEMS } from "./demo";
 import {
   SETTINGS_EVENT,
@@ -50,8 +50,11 @@ export function useCatalog() {
     if (mode === "both") setItems(ITEMS);
 
     fetch(apiUrl("/api/catalog/items"))
-      .then((response) => response.json())
-      .then((data: CatalogItem[]) => {
+      .then((response) => {
+        if (!response.ok) throw new Error(`Catalog request failed (${response.status})`);
+        return response.json() as Promise<CatalogItem[]>;
+      })
+      .then((data) => {
         if (!cancelled && Array.isArray(data) && data.length) setItems(data);
         else if (!cancelled && mode === "online") setItems([]);
       })
@@ -115,30 +118,80 @@ export function useCatalog() {
     [updateItem],
   );
 
-  const adjustOnHand = useCallback(
-    (id: string, delta: number) => {
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+
+  const adjustOnHand = useCallback((id: string, delta: number) => {
+    if (!delta) return;
+    const item = itemsRef.current.find((row) => row.id === id);
+    if (!item) return;
+    const onHand = Math.max(0, item.onHand + delta);
+    setItems((current) =>
+      current.map((row) =>
+        row.id === id ? { ...row, onHand, updatedAt: new Date().toISOString() } : row,
+      ),
+    );
+    if (readStockMode() === "offline") return;
+    void fetch(apiUrl(`/api/catalog/items/${id}`), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ onHand }),
+    }).catch(() => {
+      /* SSE stream or next snapshot reconciles the true level */
+    });
+  }, []);
+
+  /**
+   * Apply every stock decrement from one sale in a single optimistic update,
+   * then sync HQ with one bulk request (sequential PATCH fallback).
+   */
+  const applySaleDeltas = useCallback(
+    (deltas: Array<{ itemId: string; delta: number }>) => {
+      const usable = deltas.filter(({ delta }) => delta !== 0);
+      if (!usable.length) return;
       setItems((current) => {
-        const item = current.find((row) => row.id === id);
-        if (!item) return current;
-        const onHand = Math.max(0, item.onHand + delta);
-        if (readStockMode() !== "offline") {
-          void fetch(apiUrl(`/api/catalog/items/${id}`), {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ onHand }),
-          });
+        const byId = new Map(usable.map(({ itemId, delta }) => [itemId, delta]));
+        return current.map((row) => {
+          const delta = byId.get(row.id);
+          if (delta === undefined) return row;
+          return {
+            ...row,
+            onHand: Math.max(0, row.onHand + delta),
+            updatedAt: new Date().toISOString(),
+          };
+        });
+      });
+      if (readStockMode() === "offline") return;
+      const payload = usable.map(({ itemId, delta }) => ({
+        itemId,
+        delta: -Math.abs(delta),
+      }));
+      void fetch(apiUrl("/api/catalog/stock/bulk"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deltas: payload }),
+      }).catch(async () => {
+        for (const { itemId, delta } of payload) {
+          const item = itemsRef.current.find((row) => row.id === itemId);
+          if (!item) continue;
+          try {
+            await fetch(apiUrl(`/api/catalog/items/${itemId}`), {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                onHand: Math.max(0, item.onHand + delta),
+              }),
+            });
+          } catch {
+            /* reconciled by the next snapshot */
+          }
         }
-        return current.map((row) =>
-          row.id === id
-            ? { ...row, onHand, updatedAt: new Date().toISOString() }
-            : row,
-        );
       });
     },
     [],
   );
 
-  return { items, live, updatePrice, updateItem, adjustOnHand };
+  return { items, live, updatePrice, updateItem, adjustOnHand, applySaleDeltas };
 }
 
 export function findCatalogItem(items: CatalogItem[], query: string) {

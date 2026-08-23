@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, NotFoundException, Param, Post, Query } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Post, Query } from "@nestjs/common";
 import { OrdersService } from "./orders.service";
 import type { TradeDoc } from "./orders.types";
 
@@ -6,9 +6,13 @@ import type { TradeDoc } from "./orders.types";
 export class OrdersController {
   constructor(private readonly orders: OrdersService) {}
 
+  @Get("summary")
+  summary(@Query("kind") kind?: string) {
+    return this.orders.summary(kind || "purchase-order");
+  }
+
   @Get()
   list(@Query("kind") kind?: string) {
-    if (kind && !/^[a-z-]+$/.test(kind)) throw new NotFoundException("Unknown kind");
     return this.orders.list(kind);
   }
 
@@ -25,5 +29,46 @@ export class OrdersController {
   @Delete(":id")
   delete(@Param("id") id: string) {
     return this.orders.delete(id);
+  }
+
+  @Post(":id/submit")
+  submit(@Param("id") id: string) {
+    return this.orders.submit(id);
+  }
+
+  @Post(":id/approve")
+  approve(@Param("id") id: string, @Body() body?: { approvedBy?: string }) {
+    return this.orders.approve(id, body);
+  }
+
+  @Post(":id/reject")
+  reject(
+    @Param("id") id: string,
+    @Body() body?: { rejectedBy?: string; reason?: string },
+  ) {
+    return this.orders.reject(id, body);
+  }
+
+  @Post(":id/send")
+  send(@Param("id") id: string) {
+    return this.orders.send(id);
+  }
+
+  @Post(":id/receive")
+  receive(
+    @Param("id") id: string,
+    @Body() body?: { lines?: Array<{ index: number; receivedQty: number }>; full?: boolean },
+  ) {
+    return this.orders.receive(id, body);
+  }
+
+  @Post(":id/cancel")
+  cancel(@Param("id") id: string) {
+    return this.orders.cancel(id);
+  }
+
+  @Post(":id/close")
+  close(@Param("id") id: string) {
+    return this.orders.close(id);
   }
 }

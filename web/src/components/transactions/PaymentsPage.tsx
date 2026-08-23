@@ -26,11 +26,8 @@ export function PaymentsPage() {
       });
   }, []);
 
-  if (!feed) return <ManagerSkeleton variant="table" />;
-
-  const totalMinor = feed.settlements.reduce((sum, row) => sum + row.totalMinor, 0);
-
   const rows = useMemo(() => {
+    if (!feed) return [];
     const query = search.trim().toLowerCase();
     const sorted = [...feed.transactions].sort((a, b) => b.paidAt.localeCompare(a.paidAt));
     return query
@@ -40,7 +37,11 @@ export function PaymentsPage() {
           ),
         )
       : sorted;
-  }, [feed.transactions, search]);
+  }, [feed, search]);
+
+  if (!feed) return <ManagerSkeleton variant="table" />;
+
+  const totalMinor = feed.settlements.reduce((sum, row) => sum + row.totalMinor, 0);
 
   return (
     <div>

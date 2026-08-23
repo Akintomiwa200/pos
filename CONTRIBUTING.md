@@ -36,6 +36,8 @@ commit secrets.
 
 Packaged till and price-check builds: [docs/build](docs/build/README.md).
 
+Documentation: [User Guide](docs/user-guide.md) · [Developer Guide](docs/developer-guide.md) · [docs hub](docs/README.md)
+
 ## Branch and commit style
 
 - Branch from the default branch: `feat/short-name`, `fix/short-name`, or `docs/short-name`

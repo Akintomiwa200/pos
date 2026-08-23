@@ -13,6 +13,8 @@ http://localhost:1420 (API must be on :3001).
 
 Windows installer and Android APK: see **[docs/build](../docs/build/README.md)**.
 
+Further reading: [User Guide](../docs/user-guide.md) · [Developer Guide](../docs/developer-guide.md)
+
 ```bash
 pnpm tauri:build    # NSIS setup.exe
 pnpm tauri:apk      # after `pnpm tauri android init`

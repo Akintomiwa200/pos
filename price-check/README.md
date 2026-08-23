@@ -11,6 +11,8 @@ http://localhost:1430 — enter the API origin in the app (or set `VITE_API_URL`
 
 Windows installer and Android APK: see **[docs/build](../docs/build/README.md)**.
 
+Further reading: [User Guide](../docs/user-guide.md) · [Developer Guide](../docs/developer-guide.md)
+
 ```bash
 pnpm tauri:build
 pnpm tauri:apk

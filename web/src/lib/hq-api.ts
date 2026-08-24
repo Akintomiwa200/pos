@@ -138,10 +138,13 @@ export async function googleAuthConsole(input: {
 }
 
 export async function forgotPassword(email: string) {
-  return api<{ ok: true; resetToken?: string }>("/api/console/forgot-password", {
-    method: "POST",
-    body: JSON.stringify({ email }),
-  });
+  return api<{ ok: true; resetToken?: string; emailSent?: boolean }>(
+    "/api/console/forgot-password",
+    {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    },
+  );
 }
 
 export async function resetPassword(token: string, password: string) {

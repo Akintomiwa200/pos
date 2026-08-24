@@ -116,12 +116,12 @@ const faqs = [
 
 function PhoneStatus() {
   return (
-    <div className="flex items-center justify-between px-1 text-[9px] font-medium text-neutral-400">
+    <div className="flex items-center justify-between px-1 text-[9px] font-medium text-pos-ink-faint">
       <span>9:40 PM</span>
       <span className="flex gap-0.5">
-        <span className="h-1.5 w-3 rounded-sm bg-neutral-300" />
-        <span className="h-1.5 w-2 rounded-sm bg-neutral-300" />
-        <span className="h-1.5 w-4 rounded-sm bg-neutral-400" />
+        <span className="h-1.5 w-3 rounded-sm bg-pos-border" />
+        <span className="h-1.5 w-2 rounded-sm bg-pos-border" />
+        <span className="h-1.5 w-4 rounded-sm bg-pos-ink-faint" />
       </span>
     </div>
   );
@@ -130,7 +130,7 @@ function PhoneStatus() {
 function PhoneFrame({ children }: { children: React.ReactNode }) {
   return (
     <article
-      className="relative h-[28rem] overflow-hidden rounded-[24px] bg-white p-3 shadow-[0_10px_30px_rgba(28,28,30,0.06)] sm:h-[34rem] sm:rounded-[28px] sm:p-4"
+      className="relative h-[28rem] overflow-hidden rounded-[24px] bg-pos-surface p-3 shadow-pos-md sm:h-[34rem] sm:rounded-[28px] sm:p-4"
       style={{
         WebkitMaskImage: "linear-gradient(to bottom, #000 48%, transparent 88%)",
         maskImage: "linear-gradient(to bottom, #000 48%, transparent 88%)",
@@ -144,7 +144,7 @@ function PhoneFrame({ children }: { children: React.ReactNode }) {
 function MiniPhone({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
     <div
-      className={`overflow-hidden rounded-[22px] bg-white p-2.5 shadow-[0_14px_32px_rgba(28,28,30,0.12)] ${className}`}
+      className={`overflow-hidden rounded-[22px] bg-pos-surface p-2.5 text-pos-ink shadow-pos-md ${className}`}
     >
       <PhoneStatus />
       {children}
@@ -157,38 +157,38 @@ function TillMini() {
     <MiniPhone>
       <div className="mt-2 flex items-center justify-between">
         <div className="flex items-center gap-1.5">
-          <span className="grid h-6 w-6 place-items-center rounded-full bg-[#6d4aff] text-white">
+          <span className="grid h-6 w-6 place-items-center rounded-full bg-pos-primary text-white">
             <Store size={10} />
           </span>
           <div>
-            <p className="text-[8px] text-neutral-400">Ikeja branch</p>
+            <p className="text-[8px] text-pos-ink-faint">Ikeja branch</p>
             <p className="text-[10px] font-medium">Supermarket</p>
           </div>
         </div>
-        <span className="grid h-6 w-6 place-items-center rounded-full bg-[#f4f0ff] text-neutral-500">
+        <span className="grid h-6 w-6 place-items-center rounded-full bg-pos-primary-soft text-pos-ink-muted">
           <Search size={10} />
         </span>
       </div>
       <h3 className="mt-2.5 text-[13px] font-medium tracking-tight">Floor sales</h3>
       <div className="mt-2 grid grid-cols-2 gap-1.5">
-        <div className="rounded-xl bg-[#f7f5ff] px-2 py-1.5">
-          <p className="text-[8px] text-neutral-400">Today</p>
+        <div className="rounded-xl bg-pos-primary-soft px-2 py-1.5">
+          <p className="text-[8px] text-pos-ink-faint">Today</p>
           <p className="text-[11px] font-medium tabular-nums">₦184,200</p>
         </div>
-        <div className="rounded-xl bg-[#f7f5ff] px-2 py-1.5">
-          <p className="text-[8px] text-neutral-400">Tickets</p>
+        <div className="rounded-xl bg-pos-primary-soft px-2 py-1.5">
+          <p className="text-[8px] text-pos-ink-faint">Tickets</p>
           <p className="text-[11px] font-medium tabular-nums">42</p>
         </div>
       </div>
       <div className="relative mt-2">
         <div className="grid grid-cols-2 gap-1.5">
           {["Rice 5kg", "Peak milk", "Bread", "Palm oil"].map((name) => (
-            <div key={name} className="rounded-xl bg-[#f4f0ff] px-1.5 py-2 text-center text-[9px] font-medium">
+            <div key={name} className="rounded-xl bg-pos-primary-soft px-1.5 py-2 text-center text-[9px] font-medium">
               {name}
             </div>
           ))}
         </div>
-        <div className="absolute -bottom-3 -right-1 rounded-xl bg-[#1c1c1e] px-2 py-1.5 text-[8px] text-white shadow-[0_8px_18px_rgba(28,28,30,0.25)]">
+        <div className="absolute -bottom-3 -right-1 rounded-xl bg-pos-inverse px-2 py-1.5 text-[8px] text-white shadow-pos-md">
           Open · ₦11,750
         </div>
       </div>
@@ -200,26 +200,26 @@ function FoodMini() {
   return (
     <MiniPhone>
       <div className="mt-2 flex items-center justify-between">
-        <span className="grid h-6 w-6 place-items-center rounded-full bg-[#f4f0ff] text-neutral-500">
+        <span className="grid h-6 w-6 place-items-center rounded-full bg-pos-primary-soft text-pos-ink-muted">
           <ChevronLeft size={12} />
         </span>
         <p className="text-[10px] font-medium">Table 7</p>
-        <span className="grid h-6 w-6 place-items-center rounded-full bg-[#1c1c1e] text-[7px] font-medium text-white">
+        <span className="grid h-6 w-6 place-items-center rounded-full bg-pos-inverse text-[7px] font-medium text-white">
           CK
         </span>
       </div>
-      <div className="relative mt-2 overflow-hidden rounded-2xl bg-gradient-to-br from-[#ece6ff] to-[#d6ccff] p-2.5">
-        <p className="text-[8px] text-[#6d4aff]">Kitchen · food store</p>
+      <div className="relative mt-2 overflow-hidden rounded-2xl bg-gradient-to-br from-pos-primary-soft to-pos-primary-muted p-2.5">
+        <p className="text-[8px] text-pos-primary">Kitchen · food store</p>
         <p className="mt-0.5 text-[11px] font-medium">Courses in</p>
-        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/70">
-          <div className="h-full w-[72%] rounded-full bg-[#6d4aff]" />
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-pos-surface/70">
+          <div className="h-full w-[72%] rounded-full bg-pos-primary" />
         </div>
       </div>
       <div className="mt-2 space-y-1">
         {["Jollof rice", "Grilled chicken", "Zobo"].map((name) => (
-          <div key={name} className="flex items-center justify-between rounded-lg bg-[#faf9ff] px-2 py-1 text-[9px]">
+          <div key={name} className="flex items-center justify-between rounded-lg bg-pos-surface-muted px-2 py-1 text-[9px]">
             <span>{name}</span>
-            <span className="text-neutral-400">Firing</span>
+            <span className="text-pos-ink-faint">Firing</span>
           </div>
         ))}
       </div>
@@ -232,16 +232,16 @@ function HqMini() {
     <MiniPhone>
       <div className="mt-2 flex items-center justify-between">
         <p className="text-[10px] font-medium">HQ today</p>
-        <span className="grid h-6 w-6 place-items-center rounded-full bg-[#f4f0ff] text-neutral-500">
+        <span className="grid h-6 w-6 place-items-center rounded-full bg-pos-primary-soft text-pos-ink-muted">
           <Bell size={10} />
         </span>
       </div>
-      <p className="mt-1 text-[8px] text-neutral-400">All sales · supermarket, food, hotel</p>
+      <p className="mt-1 text-[8px] text-pos-ink-faint">All sales · supermarket, food, hotel</p>
       <div className="relative mx-auto mt-2 grid h-20 w-20 place-items-center">
-        <div className="absolute inset-0 rounded-full border-[7px] border-[#eee9ff]" />
-        <div className="absolute inset-0 rounded-full border-[7px] border-transparent border-t-[#6d4aff] border-r-[#6d4aff] border-b-[#c4b5fd]" />
+        <div className="absolute inset-0 rounded-full border-[7px] border-pos-primary-muted" />
+        <div className="absolute inset-0 rounded-full border-[7px] border-transparent border-t-pos-primary border-r-pos-primary border-b-pos-primary-muted" />
         <div className="text-center">
-          <p className="text-[7px] text-neutral-400">Net</p>
+          <p className="text-[7px] text-pos-ink-faint">Net</p>
           <p className="text-[12px] font-medium tabular-nums">₦2.1m</p>
         </div>
       </div>
@@ -252,11 +252,11 @@ function HqMini() {
           ["Hotel", "18%"],
         ].map(([label, width]) => (
           <div key={label}>
-            <div className="flex items-center justify-between text-[8px] text-neutral-500">
+            <div className="flex items-center justify-between text-[8px] text-pos-ink-muted">
               <span>{label}</span>
             </div>
-            <div className="mt-0.5 h-1 overflow-hidden rounded-full bg-[#f4f0ff]">
-              <div className="h-full rounded-full bg-[#6d4aff]" style={{ width }} />
+            <div className="mt-0.5 h-1 overflow-hidden rounded-full bg-pos-primary-soft">
+              <div className="h-full rounded-full bg-pos-primary" style={{ width }} />
             </div>
           </div>
         ))}
@@ -270,18 +270,18 @@ function ScanMini() {
     <MiniPhone>
       <div className="mt-2 flex items-center justify-between">
         <p className="text-[10px] font-medium">Price check</p>
-        <span className="grid h-6 w-6 place-items-center rounded-full bg-[#f4f0ff] text-neutral-500">
+        <span className="grid h-6 w-6 place-items-center rounded-full bg-pos-primary-soft text-pos-ink-muted">
           <ScanBarcode size={10} />
         </span>
       </div>
-      <div className="relative mt-2 grid h-24 place-items-center overflow-hidden rounded-2xl bg-[#efeaff]">
-        <div className="h-14 w-14 rounded-2xl border-2 border-[#6d4aff]/35" />
-        <ScanBarcode size={22} className="absolute text-[#6d4aff]" />
+      <div className="relative mt-2 grid h-24 place-items-center overflow-hidden rounded-2xl bg-pos-primary-soft">
+        <div className="h-14 w-14 rounded-2xl border-2 border-pos-primary/35" />
+        <ScanBarcode size={22} className="absolute text-pos-primary" />
       </div>
-      <div className="relative mt-2 rounded-2xl bg-white p-2 shadow-[0_8px_20px_rgba(28,28,30,0.06)] ring-1 ring-neutral-100">
-        <p className="text-[8px] text-neutral-400">In catalog</p>
+      <div className="relative mt-2 rounded-2xl bg-pos-surface p-2 shadow-pos-md ring-1 ring-pos-border">
+        <p className="text-[8px] text-pos-ink-faint">In catalog</p>
         <p className="text-[11px] font-medium">Rice 5kg</p>
-        <div className="absolute -bottom-2 -right-1 rounded-xl bg-[#6d4aff] px-2 py-1 text-[9px] font-medium text-white shadow-[0_8px_16px_rgba(109,74,255,0.35)]">
+        <div className="absolute -bottom-2 -right-1 rounded-xl bg-pos-primary px-2 py-1 text-[9px] font-medium text-white shadow-pos-primary">
           ₦4,200
         </div>
       </div>
@@ -293,15 +293,15 @@ function CodeMini() {
   return (
     <MiniPhone>
       <div className="mt-3 flex flex-col items-center">
-        <span className="grid h-8 w-8 place-items-center rounded-2xl bg-[#6d4aff] text-white">
+        <span className="grid h-8 w-8 place-items-center rounded-2xl bg-pos-primary text-white">
           <BrandMark className="h-4 w-4" />
         </span>
-        <p className="mt-2 text-[8px] text-neutral-400">Activate this till</p>
+        <p className="mt-2 text-[8px] text-pos-ink-faint">Activate this till</p>
         <p className="mt-1 font-mono text-[12px] font-semibold tracking-[0.14em]">7K2M-9Q4P</p>
-        <p className="mt-3 w-full rounded-full bg-[#6d4aff] py-1.5 text-center text-[9px] font-medium text-white">
+        <p className="mt-3 w-full rounded-full bg-pos-primary py-1.5 text-center text-[9px] font-medium text-white">
           Activate this device
         </p>
-        <p className="mt-2 text-[8px] text-neutral-400">One till, one device</p>
+        <p className="mt-2 text-[8px] text-pos-ink-faint">One till, one device</p>
       </div>
     </MiniPhone>
   );
@@ -312,15 +312,15 @@ function HotelMini() {
     <MiniPhone>
       <div className="mt-2 flex items-center justify-between">
         <p className="text-[10px] font-medium">Room 412</p>
-        <span className="grid h-6 w-6 place-items-center rounded-full bg-[#f4f0ff] text-neutral-500">
+        <span className="grid h-6 w-6 place-items-center rounded-full bg-pos-primary-soft text-pos-ink-muted">
           <Building2 size={10} />
         </span>
       </div>
       <div className="mt-2 space-y-1">
         {["Breakfast", "Minibar", "Laundry"].map((name) => (
-          <div key={name} className="flex items-center justify-between rounded-lg bg-[#faf9ff] px-2 py-1.5 text-[9px]">
+          <div key={name} className="flex items-center justify-between rounded-lg bg-pos-surface-muted px-2 py-1.5 text-[9px]">
             <span>{name}</span>
-            <span className="tabular-nums text-neutral-400">Open</span>
+            <span className="tabular-nums text-pos-ink-faint">Open</span>
           </div>
         ))}
       </div>
@@ -338,7 +338,7 @@ function StackLayers({
   right: ReactNode;
 }) {
   return (
-    <div className="relative h-[300px] overflow-hidden bg-[#f6f4fb] sm:h-[340px]">
+    <div className="relative h-[300px] overflow-hidden bg-pos-surface-muted sm:h-[340px]">
       <div className="pointer-events-none absolute -left-[38%] top-7 w-[68%] rotate-[-8deg] scale-90 opacity-40">
         {left}
       </div>
@@ -367,7 +367,7 @@ function HeroPreview() {
   return (
     <div className="relative mx-auto max-w-5xl">
       <div
-        className="rounded-[28px] bg-white/80 p-2 shadow-[0_24px_60px_rgba(85,56,224,0.16)] sm:rounded-[36px] sm:p-4"
+        className="rounded-[28px] bg-pos-surface/80 p-2 shadow-pos-primary sm:rounded-[36px] sm:p-4"
         style={{
           WebkitMaskImage: "linear-gradient(to bottom, #000 68%, transparent 92%)",
           maskImage: "linear-gradient(to bottom, #000 68%, transparent 92%)",
@@ -375,44 +375,44 @@ function HeroPreview() {
       >
         <div className="flex items-center justify-between px-3 py-1.5 sm:px-4">
           <div className="flex items-center gap-2">
-            <span className="grid h-7 w-7 place-items-center rounded-full bg-[#6d4aff] text-white">
+            <span className="grid h-7 w-7 place-items-center rounded-full bg-pos-primary text-white">
               <BrandMark className="h-4 w-4" />
             </span>
             <span className="text-sm font-medium">POS</span>
           </div>
-          <span className="text-sm text-neutral-400">Supermarket · Food · Hotel</span>
+          <span className="text-sm text-pos-ink-faint">Supermarket · Food · Hotel</span>
         </div>
         <div className="grid grid-cols-3 gap-2 sm:gap-4">
           <PhoneFrame>
             <PhoneStatus />
             <div className="mt-2 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="grid h-7 w-7 place-items-center rounded-full bg-[#6d4aff] text-white">
+                <span className="grid h-7 w-7 place-items-center rounded-full bg-pos-primary text-white">
                   <Store size={12} />
                 </span>
                 <div>
-                  <p className="text-[10px] text-neutral-400">Ikeja branch</p>
+                  <p className="text-[10px] text-pos-ink-faint">Ikeja branch</p>
                   <p className="text-[12px] font-medium">Supermarket</p>
                 </div>
               </div>
-              <span className="grid h-7 w-7 place-items-center rounded-full bg-[#f4f0ff] text-neutral-500">
+              <span className="grid h-7 w-7 place-items-center rounded-full bg-pos-primary-soft text-pos-ink-muted">
                 <Search size={12} />
               </span>
             </div>
             <h3 className="mt-4 text-[1.15rem] font-medium leading-tight tracking-tight">Floor sales</h3>
             <div className="mt-3 grid grid-cols-2 gap-2">
-              <div className="rounded-2xl bg-[#f7f5ff] px-3 py-2.5">
-                <p className="text-[10px] text-neutral-400">Today</p>
+              <div className="rounded-2xl bg-pos-primary-soft px-3 py-2.5">
+                <p className="text-[10px] text-pos-ink-faint">Today</p>
                 <p className="text-sm font-medium tabular-nums">₦184,200</p>
               </div>
-              <div className="rounded-2xl bg-[#f7f5ff] px-3 py-2.5">
-                <p className="text-[10px] text-neutral-400">Tickets</p>
+              <div className="rounded-2xl bg-pos-primary-soft px-3 py-2.5">
+                <p className="text-[10px] text-pos-ink-faint">Tickets</p>
                 <p className="text-sm font-medium tabular-nums">42</p>
               </div>
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2">
               {["Rice 5kg", "Peak milk", "Bread", "Palm oil"].map((name) => (
-                <div key={name} className="rounded-2xl bg-[#f4f0ff] px-2 py-3 text-center text-[11px] font-medium">
+                <div key={name} className="rounded-2xl bg-pos-primary-soft px-2 py-3 text-center text-[11px] font-medium">
                   {name}
                 </div>
               ))}
@@ -424,13 +424,13 @@ function HeroPreview() {
                 ["Water pack", "₦2,200"],
                 ["Soap 3-pack", "₦3,100"],
               ].map(([name, price]) => (
-                <div key={name} className="flex items-center justify-between rounded-xl bg-[#faf9ff] px-2.5 py-2 text-[11px]">
+                <div key={name} className="flex items-center justify-between rounded-xl bg-pos-surface-muted px-2.5 py-2 text-[11px]">
                   <span>{name}</span>
-                  <span className="tabular-nums text-neutral-500">{price}</span>
+                  <span className="tabular-nums text-pos-ink-muted">{price}</span>
                 </div>
               ))}
             </div>
-            <div className="mt-3 flex items-center justify-between rounded-xl bg-[#1c1c1e] px-3 py-2.5 text-white">
+            <div className="mt-3 flex items-center justify-between rounded-xl bg-pos-inverse px-3 py-2.5 text-white">
               <span className="text-[10px] text-white/55">Open ticket</span>
               <span className="text-sm font-medium tabular-nums">₦11,750</span>
             </div>
@@ -439,27 +439,27 @@ function HeroPreview() {
           <PhoneFrame>
             <PhoneStatus />
             <div className="mt-2 flex items-center justify-between">
-              <span className="grid h-7 w-7 place-items-center rounded-full bg-[#f4f0ff] text-neutral-500">
+              <span className="grid h-7 w-7 place-items-center rounded-full bg-pos-primary-soft text-pos-ink-muted">
                 <ChevronLeft size={14} />
               </span>
               <p className="text-[12px] font-medium">Table 7</p>
-              <span className="grid h-7 w-7 place-items-center rounded-full bg-[#1c1c1e] text-[8px] font-medium text-white">
+              <span className="grid h-7 w-7 place-items-center rounded-full bg-pos-inverse text-[8px] font-medium text-white">
                 CK
               </span>
             </div>
-            <div className="relative mt-3 overflow-hidden rounded-[22px] bg-gradient-to-br from-[#ece6ff] to-[#d6ccff] p-4">
-              <p className="text-[10px] text-[#6d4aff]">Kitchen · food store</p>
+            <div className="relative mt-3 overflow-hidden rounded-[22px] bg-gradient-to-br from-pos-primary-soft to-pos-primary-muted p-4">
+              <p className="text-[10px] text-pos-primary">Kitchen · food store</p>
               <p className="mt-1 text-sm font-medium">Courses in</p>
               <div className="mt-3">
                 <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-neutral-500">Firing</span>
-                  <span className="font-medium text-[#6d4aff]">2 / 3</span>
+                  <span className="text-pos-ink-muted">Firing</span>
+                  <span className="font-medium text-pos-primary">2 / 3</span>
                 </div>
-                <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-white/70">
-                  <div className="h-full w-[72%] rounded-full bg-[#6d4aff]" />
+                <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-pos-surface/70">
+                  <div className="h-full w-[72%] rounded-full bg-pos-primary" />
                 </div>
               </div>
-              <UtensilsCrossed className="absolute -right-2 -bottom-2 h-16 w-16 text-[#6d4aff]/20" />
+              <UtensilsCrossed className="absolute -right-2 -bottom-2 h-16 w-16 text-pos-primary/20" />
             </div>
             <div className="mt-3 space-y-1.5">
               {[
@@ -469,13 +469,13 @@ function HeroPreview() {
                 ["Asun", "Queued"],
                 ["Chapman", "Queued"],
               ].map(([name, state]) => (
-                <div key={name} className="flex items-center justify-between rounded-xl bg-[#faf9ff] px-2.5 py-2 text-[11px]">
+                <div key={name} className="flex items-center justify-between rounded-xl bg-pos-surface-muted px-2.5 py-2 text-[11px]">
                   <span>{name}</span>
-                  <span className={state === "Ready" ? "text-[#6d4aff]" : "text-neutral-400"}>{state}</span>
+                  <span className={state === "Ready" ? "text-pos-primary" : "text-pos-ink-faint"}>{state}</span>
                 </div>
               ))}
             </div>
-            <div className="mt-3 rounded-xl bg-[#6d4aff] px-3 py-2.5 text-center text-[12px] font-medium text-white">
+            <div className="mt-3 rounded-xl bg-pos-primary px-3 py-2.5 text-center text-[12px] font-medium text-white">
               Send to kitchen · ₦9,100
             </div>
           </PhoneFrame>
@@ -483,20 +483,20 @@ function HeroPreview() {
           <PhoneFrame>
             <PhoneStatus />
             <div className="mt-2 flex items-center justify-between">
-              <span className="grid h-7 w-7 place-items-center rounded-full bg-[#f4f0ff] text-neutral-500">
+              <span className="grid h-7 w-7 place-items-center rounded-full bg-pos-primary-soft text-pos-ink-muted">
                 <ChevronLeft size={14} />
               </span>
               <p className="text-[12px] font-medium">HQ today</p>
-              <span className="grid h-7 w-7 place-items-center rounded-full bg-[#f4f0ff] text-neutral-500">
+              <span className="grid h-7 w-7 place-items-center rounded-full bg-pos-primary-soft text-pos-ink-muted">
                 <Bell size={12} />
               </span>
             </div>
-            <p className="mt-3 text-[10px] text-neutral-400">All sales · supermarket, food, hotel</p>
+            <p className="mt-3 text-[10px] text-pos-ink-faint">All sales · supermarket, food, hotel</p>
             <div className="relative mx-auto mt-3 grid h-36 w-36 place-items-center">
-              <div className="absolute inset-0 rounded-full border-[10px] border-[#eee9ff]" />
-              <div className="absolute inset-0 rounded-full border-[10px] border-transparent border-t-[#6d4aff] border-r-[#6d4aff] border-b-[#c4b5fd]" />
+              <div className="absolute inset-0 rounded-full border-[10px] border-pos-primary-muted" />
+              <div className="absolute inset-0 rounded-full border-[10px] border-transparent border-t-pos-primary border-r-pos-primary border-b-pos-primary-muted" />
               <div className="text-center">
-                <p className="text-[10px] text-neutral-400">Net</p>
+                <p className="text-[10px] text-pos-ink-faint">Net</p>
                 <p className="text-lg font-medium tabular-nums">₦2.1m</p>
               </div>
             </div>
@@ -509,11 +509,11 @@ function HeroPreview() {
               ].map(([label, width, amount]) => (
                 <div key={label}>
                   <div className="flex items-center justify-between text-[11px]">
-                    <span className="text-neutral-600">{label}</span>
-                    <span className="tabular-nums text-neutral-500">{amount}</span>
+                    <span className="text-pos-ink-muted">{label}</span>
+                    <span className="tabular-nums text-pos-ink-muted">{amount}</span>
                   </div>
-                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[#f4f0ff]">
-                    <div className="h-full rounded-full bg-[#6d4aff]" style={{ width }} />
+                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-pos-primary-soft">
+                    <div className="h-full rounded-full bg-pos-primary" style={{ width }} />
                   </div>
                 </div>
               ))}
@@ -522,7 +522,7 @@ function HeroPreview() {
               {[32, 48, 40, 70, 58, 88, 64, 76, 52, 90].map((h, i) => (
                 <div
                   key={i}
-                  className="flex-1 rounded-t-md bg-gradient-to-t from-[#6d4aff] to-[#ddd6fe]"
+                  className="flex-1 rounded-t-md bg-gradient-to-t from-pos-primary to-pos-primary-muted"
                   style={{ height: `${h}%` }}
                 />
               ))}
@@ -530,7 +530,7 @@ function HeroPreview() {
           </PhoneFrame>
         </div>
       </div>
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-28 bg-[linear-gradient(to_top,#fff_0%,#fff_45%,transparent_100%)]" />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-28 marketing-fade-bottom" />
     </div>
   );
 }
@@ -538,17 +538,14 @@ function HeroPreview() {
 
 export default function HomePage() {
   return (
-    <div className="bg-white">
-      <section className="relative -mt-[4.5rem] min-h-[100vh] bg-white">
-        <div
-          aria-hidden
-          className="absolute inset-x-0 top-0 h-[100vh] bg-[linear-gradient(180deg,#5538e0_0%,#6d4aff_42%,#c4b5fd_78%,#ffffff_100%)]"
-        >
+    <div className="bg-pos-bg text-pos-ink">
+      <section className="relative -mt-[4.5rem] min-h-[100vh]">
+        <div aria-hidden className="marketing-hero-bg absolute inset-x-0 top-0 h-[100vh]">
           <div className="hero-matrix absolute inset-0" />
         </div>
         <div className="relative flex min-h-[100vh] flex-col px-4 pt-48 sm:px-6 sm:pt-56 md:pt-64">
           <div className="mx-auto max-w-2xl text-center">
-            <p className="inline-flex rounded-full bg-white/15 px-3 py-1 text-xs font-medium text-white/90 ring-1 ring-white/20">
+            <p className="inline-flex rounded-full bg-pos-surface/15 px-3 py-1 text-xs font-medium text-white/90 ring-1 ring-white/20">
               Sales POS for retail and hospitality
             </p>
             <h1 className="mt-4 text-[1.85rem] font-medium leading-[1.15] tracking-tight text-white sm:text-[2.35rem] lg:text-[2.65rem]">
@@ -561,7 +558,7 @@ export default function HomePage() {
             </p>
             <Link
               href="/register"
-              className="mt-6 inline-flex rounded-full bg-white px-5 py-2 text-sm font-medium text-[#6d4aff] shadow-[0_8px_24px_rgba(28,28,30,0.08)]"
+              className="mt-6 inline-flex rounded-full bg-pos-surface px-5 py-2 text-sm font-medium text-pos-primary shadow-pos-md"
             >
               Get started
             </Link>
@@ -575,32 +572,32 @@ export default function HomePage() {
       <PartnerMarquee />
 
       <section className="px-4 py-16 sm:px-6">
-        <h2 className="text-center text-[1.85rem] font-medium tracking-tight text-[#1c1c1e] sm:text-[2.15rem]">
+        <h2 className="text-center text-[1.85rem] font-medium tracking-tight text-pos-ink sm:text-[2.15rem]">
           Built for the floor you run
         </h2>
         <div className="mx-auto mt-10 grid max-w-5xl gap-4 md:grid-cols-3">
           {floors.map(({ icon: Icon, title, copy }) => (
             <article
               key={title}
-              className="rounded-[28px] bg-white px-6 py-10 text-center shadow-[0_8px_30px_rgba(28,28,30,0.06)]"
+              className="rounded-[28px] bg-pos-surface px-6 py-10 text-center shadow-pos-md"
             >
-              <span className="mx-auto grid h-14 w-14 place-items-center rounded-full border border-neutral-200">
-                <Icon size={22} strokeWidth={1.6} className="text-[#1c1c1e]" />
+              <span className="mx-auto grid h-14 w-14 place-items-center rounded-full border border-pos-border">
+                <Icon size={22} strokeWidth={1.6} className="text-pos-ink" />
               </span>
-              <h3 className="mt-5 text-base font-medium tracking-tight text-[#1c1c1e]">{title}</h3>
-              <p className="mt-2 text-sm leading-6 text-neutral-500">{copy}</p>
+              <h3 className="mt-5 text-base font-medium tracking-tight text-pos-ink">{title}</h3>
+              <p className="mt-2 text-sm leading-6 text-pos-ink-muted">{copy}</p>
             </article>
           ))}
         </div>
-        <p className="mt-8 text-center text-sm text-neutral-400">
+        <p className="mt-8 text-center text-sm text-pos-ink-faint">
           Restaurant and dark kitchen sit on the same catalog
         </p>
       </section>
 
-      <section className="relative z-20 bg-white px-4 pt-16 sm:px-6">
+      <section className="relative z-20 px-4 pt-16 sm:px-6">
         <div className="mx-auto grid max-w-5xl items-start gap-10 lg:grid-cols-[0.9fr_1.1fr]">
           <div className="relative z-20 lg:-mb-14">
-            <div className="overflow-hidden rounded-[32px] bg-[#ececec] shadow-[0_16px_40px_rgba(28,28,30,0.1)]">
+            <div className="overflow-hidden rounded-[32px] bg-pos-surface-muted shadow-pos-md">
               <img
                 src="/operator-portrait.png"
                 alt=""
@@ -609,37 +606,35 @@ export default function HomePage() {
             </div>
           </div>
           <div>
-            <p className="inline-flex rounded-full bg-neutral-200/70 px-3 py-1 text-xs font-medium text-[#1c1c1e]">
+            <p className="inline-flex rounded-full bg-pos-surface-muted px-3 py-1 text-xs font-medium text-pos-ink">
               One POS for every trade
             </p>
-            <h2 className="mt-4 max-w-md text-[1.85rem] font-semibold leading-[1.15] tracking-tight text-[#1c1c1e] sm:text-[2.15rem]">
+            <h2 className="mt-4 max-w-md text-[1.85rem] font-semibold leading-[1.15] tracking-tight text-pos-ink sm:text-[2.15rem]">
               Floor sales are high-volume but high-risk
             </h2>
-            <p className="mt-3 text-[15px] text-neutral-500">Running supermarket, food, and hotel without POS means</p>
+            <p className="mt-3 text-[15px] text-pos-ink-muted">Running supermarket, food, and hotel without POS means</p>
             <ul className="mt-5 space-y-2.5">
               {pains.map(({ icon: Icon, label }) => (
                 <li
                   key={label}
-                  className="flex items-center gap-3 rounded-2xl bg-white px-4 py-3.5 shadow-[0_8px_24px_rgba(28,28,30,0.04)]"
+                  className="flex items-center gap-3 rounded-2xl bg-pos-surface px-4 py-3.5 shadow-pos-md"
                 >
-                  <Icon size={18} strokeWidth={1.6} className="text-[#1c1c1e]" />
-                  <span className="text-sm font-semibold text-[#1c1c1e]">{label}</span>
+                  <Icon size={18} strokeWidth={1.6} className="text-pos-ink" />
+                  <span className="text-sm font-semibold text-pos-ink">{label}</span>
                 </li>
               ))}
             </ul>
-            <p className="mt-5 text-sm text-neutral-500">Saying no means lost tickets.</p>
+            <p className="mt-5 text-sm text-pos-ink-muted">Saying no means lost tickets.</p>
           </div>
         </div>
       </section>
 
-      <section className="relative z-0 min-h-[100vh]">
-        <div
-          aria-hidden
-          className="absolute inset-0 bg-[linear-gradient(180deg,#5538e0_0%,#6d4aff_42%,#8b74f0_82%,#c4b5fd_100%)]"
-        >
+      <section id="how" className="relative z-0 overflow-hidden">
+        <div aria-hidden className="marketing-hero-stack-bg absolute inset-0">
           <div className="hero-matrix absolute inset-0" />
         </div>
-        <div className="relative flex min-h-[100vh] flex-col justify-between px-4 py-16 sm:px-6 sm:py-20">
+
+        <div className="relative px-4 pt-16 sm:px-6 sm:pt-20">
           <div className="mx-auto w-full max-w-5xl text-center">
             <h2 className="text-[1.85rem] font-medium leading-[1.15] tracking-tight text-white sm:text-[2.15rem]">
               Till, HQ, and price check — one stack
@@ -652,10 +647,12 @@ export default function HomePage() {
             {stackApps.map((app) => (
               <article
                 key={app.title}
-                className="overflow-hidden rounded-[28px] bg-white shadow-[0_16px_40px_rgba(28,28,30,0.1)] sm:rounded-[32px]"
+                className="overflow-hidden rounded-[28px] bg-pos-surface shadow-pos-md sm:rounded-[32px]"
               >
                 <StackMock kind={app.screen} />
-                <p className="px-3 py-4 text-center text-sm font-semibold tracking-tight text-[#1c1c1e]">{app.title}</p>
+                <p className="px-3 py-4 text-center text-sm font-semibold tracking-tight text-pos-ink">
+                  {app.title}
+                </p>
               </article>
             ))}
           </div>
@@ -668,43 +665,35 @@ export default function HomePage() {
             </span>
           </div>
         </div>
-      </section>
 
-      <section id="how" className="relative overflow-hidden px-4 py-20 sm:px-6 sm:py-24">
-        <div
-          aria-hidden
-          className="absolute inset-0 bg-[linear-gradient(180deg,#c4b5fd_0%,#ddd6fe_32%,#f5f3ff_62%,#ffffff_100%)]"
-        >
-          <div className="hero-matrix absolute inset-0" />
-        </div>
-        <div className="relative mx-auto max-w-5xl text-center">
-          <h2 className="text-[1.85rem] font-semibold tracking-tight text-[#1c1c1e] sm:text-[2.15rem]">
+        <div className="relative mx-auto max-w-5xl px-4 pb-20 pt-16 text-center sm:px-6 sm:pb-24 sm:pt-20">
+          <h2 className="text-[1.85rem] font-semibold tracking-tight text-pos-ink sm:text-[2.15rem]">
             How it works
           </h2>
-          <p className="mt-2 text-[15px] text-neutral-500">
+          <p className="mt-2 text-[15px] text-pos-ink-muted">
             HQ issues the code. The floor activates. Sales show up without a second spreadsheet.
           </p>
           <div className="relative mt-12 flex flex-col items-center gap-5 md:mt-16 md:flex-row md:items-start md:justify-center md:pt-12">
             {steps.map(({ icon: Icon, title, copy, featured }) => (
               <article
                 key={title}
-                className={`w-full rounded-[28px] bg-white px-7 py-14 shadow-[0_16px_44px_rgba(28,28,30,0.08)] md:w-[31%] ${
+                className={`w-full rounded-[28px] bg-pos-surface px-7 py-14 shadow-pos-md md:w-[31%] ${
                   featured
                     ? "md:-translate-y-12"
                     : "md:box-border md:flex md:h-[calc(18.25rem-0.25em)] md:flex-col md:justify-center"
                 }`}
               >
                 <span className="relative mx-auto inline-flex">
-                  <Icon size={36} strokeWidth={1.45} className="text-[#1c1c1e]" />
-                  <span className="absolute -right-0.5 bottom-0.5 h-2 w-2 rounded-full bg-[#6d4aff]" />
+                  <Icon size={36} strokeWidth={1.45} className="text-pos-ink" />
+                  <span className="absolute -right-0.5 bottom-0.5 h-2 w-2 rounded-full bg-pos-primary" />
                 </span>
-                <h3 className="mt-6 text-base font-semibold tracking-tight text-[#1c1c1e]">{title}</h3>
-                <p className="mt-2 text-sm leading-6 text-neutral-500">{copy}</p>
+                <h3 className="mt-6 text-base font-semibold tracking-tight text-pos-ink">{title}</h3>
+                <p className="mt-2 text-sm leading-6 text-pos-ink-muted">{copy}</p>
               </article>
             ))}
-            <p className="mt-8 whitespace-nowrap text-sm text-neutral-400 md:absolute md:bottom-8 md:left-1/2 md:mt-0 md:-translate-x-1/2">
-              Clean <span className="mx-1.5 text-[#6d4aff]">•</span> One catalog{" "}
-              <span className="mx-1.5 text-[#6d4aff]">•</span> Naira
+            <p className="mt-8 whitespace-nowrap text-sm text-pos-ink-faint md:absolute md:bottom-8 md:left-1/2 md:mt-0 md:-translate-x-1/2">
+              Clean <span className="mx-1.5 text-pos-primary">•</span> One catalog{" "}
+              <span className="mx-1.5 text-pos-primary">•</span> Naira
             </p>
           </div>
         </div>
@@ -712,48 +701,48 @@ export default function HomePage() {
 
       <section className="px-4 py-16 sm:px-6 sm:py-20">
         <div className="mx-auto grid max-w-5xl items-stretch gap-5 lg:grid-cols-[1.2fr_0.88fr]">
-          <article className="flex h-full flex-col rounded-[28px] bg-white px-7 py-8 shadow-[0_8px_30px_rgba(28,28,30,0.04)] sm:px-8 sm:py-9">
-            <h2 className="text-[1.45rem] font-semibold tracking-tight text-[#1c1c1e] sm:text-[1.65rem]">
+          <article className="flex h-full flex-col rounded-[28px] bg-pos-surface px-7 py-8 shadow-pos-md sm:px-8 sm:py-9">
+            <h2 className="text-[1.45rem] font-semibold tracking-tight text-pos-ink sm:text-[1.65rem]">
               Why operators run on POS
             </h2>
-            <p className="mt-1.5 text-[15px] text-neutral-500">The till stays on the counter. HQ stays in the browser.</p>
+            <p className="mt-1.5 text-[15px] text-pos-ink-muted">The till stays on the counter. HQ stays in the browser.</p>
             <div className="mt-8 grid flex-1 grid-cols-2 gap-2.5">
               {whyItems.map(({ icon: Icon, label }) => (
                 <div
                   key={label}
-                  className="flex flex-col justify-center rounded-2xl border border-neutral-200 bg-white px-4 py-4"
+                  className="flex flex-col justify-center rounded-2xl border border-pos-border bg-pos-surface px-4 py-4"
                 >
-                  <Icon size={18} strokeWidth={1.6} className="text-neutral-400" />
-                  <span className="mt-2.5 text-[13px] font-medium leading-snug text-[#1c1c1e]">{label}</span>
+                  <Icon size={18} strokeWidth={1.6} className="text-pos-ink-faint" />
+                  <span className="mt-2.5 text-[13px] font-medium leading-snug text-pos-ink">{label}</span>
                 </div>
               ))}
             </div>
           </article>
 
           <div className="flex h-full flex-col items-center">
-            <article className="w-full rounded-[28px] bg-white px-7 py-8 shadow-[0_8px_30px_rgba(28,28,30,0.04)] sm:px-8 sm:py-9">
-              <h2 className="text-[1.45rem] font-semibold tracking-tight text-[#1c1c1e] sm:text-[1.65rem]">
+            <article className="w-full rounded-[28px] bg-pos-surface px-7 py-8 shadow-pos-md sm:px-8 sm:py-9">
+              <h2 className="text-[1.45rem] font-semibold tracking-tight text-pos-ink sm:text-[1.65rem]">
                 What you get
               </h2>
-              <p className="mt-1.5 text-[15px] text-neutral-500">Everything on one catalog.</p>
+              <p className="mt-1.5 text-[15px] text-pos-ink-muted">Everything on one catalog.</p>
               <ul className="mt-8 space-y-2.5">
                 {getItems.map((label) => (
                   <li
                     key={label}
-                    className="flex items-center gap-3 rounded-full border border-neutral-200 bg-white px-3 py-3"
+                    className="flex items-center gap-3 rounded-full border border-pos-border bg-pos-surface px-3 py-3"
                   >
-                    <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[#22c55e] text-white">
+                    <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-pos-success text-white">
                       <Check size={13} strokeWidth={2.4} />
                     </span>
-                    <span className="text-[13px] font-medium text-[#1c1c1e]">{label}</span>
+                    <span className="text-[13px] font-medium text-pos-ink">{label}</span>
                   </li>
                 ))}
               </ul>
             </article>
-            <span aria-hidden className="h-8 w-px bg-neutral-200" />
+            <span aria-hidden className="h-8 w-px bg-pos-border" />
             <Link
               href="/register"
-              className="rounded-full bg-[#6d4aff] px-6 py-3 text-sm font-medium text-white shadow-[0_8px_24px_rgba(109,74,255,0.28)]"
+              className="rounded-full bg-pos-primary px-6 py-3 text-sm font-medium text-white shadow-pos-primary"
             >
               Get started
             </Link>
@@ -763,27 +752,27 @@ export default function HomePage() {
 
       <section className="px-4 py-20 sm:px-6 sm:py-24">
         <div className="mx-auto max-w-2xl text-center">
-          <h2 className="text-[1.85rem] font-semibold tracking-tight text-[#1c1c1e] sm:text-[2.15rem]">
+          <h2 className="text-[1.85rem] font-semibold tracking-tight text-pos-ink sm:text-[2.15rem]">
             Frequently asked questions
           </h2>
-          <p className="mt-2 text-[15px] text-neutral-500">
+          <p className="mt-2 text-[15px] text-pos-ink-muted">
             HQ issues the code. The floor activates. Sales show up without a second spreadsheet.
           </p>
           <div className="mt-10 space-y-3 text-left">
             {faqs.map(({ q, a }) => (
               <details
                 key={q}
-                className="group rounded-full bg-white px-6 shadow-[0_8px_24px_rgba(28,28,30,0.04)] open:rounded-[28px]"
+                className="group rounded-full bg-pos-surface px-6 shadow-pos-md open:rounded-[28px]"
               >
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-4 text-[15px] font-medium text-[#1c1c1e] [&::-webkit-details-marker]:hidden">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-4 text-[15px] font-medium text-pos-ink [&::-webkit-details-marker]:hidden">
                   {q}
                   <ChevronDown
                     size={18}
                     strokeWidth={1.8}
-                    className="shrink-0 text-neutral-300 transition group-open:rotate-180"
+                    className="shrink-0 text-pos-ink-faint transition group-open:rotate-180"
                   />
                 </summary>
-                <p className="pb-4 pr-8 text-sm leading-6 text-neutral-500">{a}</p>
+                <p className="pb-4 pr-8 text-sm leading-6 text-pos-ink-muted">{a}</p>
               </details>
             ))}
           </div>
@@ -792,14 +781,11 @@ export default function HomePage() {
 
       <section className="px-4 pb-10 pt-6 sm:px-6">
         <div className="relative mx-auto max-w-5xl overflow-hidden rounded-[32px] px-6 py-20 text-center sm:rounded-[40px] sm:px-12 sm:py-24">
-          <div
-            aria-hidden
-            className="absolute inset-0 bg-[linear-gradient(180deg,#5538e0_0%,#6d4aff_42%,#c4b5fd_78%,#ffffff_100%)]"
-          >
+          <div aria-hidden className="marketing-hero-bg absolute inset-0">
             <div className="hero-matrix absolute inset-0" />
           </div>
           <div className="relative">
-            <p className="inline-flex rounded-full bg-white/15 px-3 py-1 text-xs font-medium text-white/90 ring-1 ring-white/25">
+            <p className="inline-flex rounded-full bg-pos-surface/15 px-3 py-1 text-xs font-medium text-white/90 ring-1 ring-white/25">
               Sales POS for retail and hospitality
             </p>
             <h2 className="mx-auto mt-5 max-w-xl text-[1.85rem] font-semibold leading-[1.15] tracking-tight text-white sm:text-[2.35rem]">
@@ -810,7 +796,7 @@ export default function HomePage() {
             </p>
             <Link
               href="/register"
-              className="mt-8 inline-flex rounded-full bg-white px-6 py-3 text-sm font-medium text-[#1c1c1e] shadow-[0_8px_24px_rgba(28,28,30,0.08)]"
+              className="mt-8 inline-flex rounded-full bg-pos-surface px-6 py-3 text-sm font-medium text-pos-ink shadow-pos-md"
             >
               Get started
             </Link>

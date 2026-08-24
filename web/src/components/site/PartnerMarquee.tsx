@@ -11,7 +11,7 @@ function PartnerMark({ src, label }: { src: string; label: string }) {
   return (
     <span className="inline-flex shrink-0 items-center gap-3 px-8">
       <img src={src} alt="" width={32} height={32} className="h-8 w-8" />
-      <span className="text-base font-medium tracking-tight text-neutral-600">{label}</span>
+      <span className="text-base font-medium tracking-tight text-pos-ink-muted">{label}</span>
     </span>
   );
 }
@@ -22,7 +22,7 @@ export function PartnerMarquee() {
 
   return (
     <section className="px-4 py-10 sm:px-6">
-      <p className="text-center text-sm leading-6 text-neutral-400">
+      <p className="text-center text-sm leading-6 text-pos-ink-faint">
         Trusted by supermarket, food store, and hotel operators
       </p>
       <div className="partner-mask mx-auto mt-6 max-w-3xl overflow-hidden">

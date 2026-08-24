@@ -40,6 +40,36 @@
   --pos-shadow-primary: 0 4px 14px rgb(109 74 255 / 0.24);
   --pos-scrollbar: rgb(28 28 30 / 0.14);
   --pos-scrollbar-hover: rgb(109 74 255 / 0.32);
+  --pos-marketing-hero: linear-gradient(
+    180deg,
+    #5538e0 0%,
+    #6d4aff 42%,
+    #c4b5fd 78%,
+    var(--pos-bg) 100%
+  );
+  --pos-marketing-hero-stack: linear-gradient(
+    180deg,
+    #5538e0 0%,
+    #6d4aff 22%,
+    #8b74f0 42%,
+    #c4b5fd 58%,
+    #ddd6fe 72%,
+    var(--pos-primary-soft) 88%,
+    var(--pos-bg) 100%
+  );
+  --pos-marketing-soft: linear-gradient(
+    180deg,
+    #c4b5fd 0%,
+    #ddd6fe 32%,
+    var(--pos-primary-soft) 62%,
+    var(--pos-bg) 100%
+  );
+  --pos-marketing-fade: linear-gradient(
+    to top,
+    var(--pos-bg) 0%,
+    var(--pos-bg) 45%,
+    transparent 100%
+  );
 }
 
 .dark {
@@ -80,6 +110,34 @@
   --pos-shadow-primary: 0 4px 14px rgb(139 124 255 / 0.22);
   --pos-scrollbar: rgb(243 244 246 / 0.14);
   --pos-scrollbar-hover: rgb(139 124 255 / 0.42);
+  --pos-marketing-hero: linear-gradient(
+    180deg,
+    #2a2540 0%,
+    #3d3560 38%,
+    #22252e 72%,
+    var(--pos-bg) 100%
+  );
+  --pos-marketing-hero-stack: linear-gradient(
+    180deg,
+    #2a2540 0%,
+    #3d3560 28%,
+    #2a2540 52%,
+    #22252e 72%,
+    var(--pos-bg) 100%
+  );
+  --pos-marketing-soft: linear-gradient(
+    180deg,
+    #3d3560 0%,
+    #2a2540 32%,
+    var(--pos-bg) 62%,
+    var(--pos-bg) 100%
+  );
+  --pos-marketing-fade: linear-gradient(
+    to top,
+    var(--pos-bg) 0%,
+    var(--pos-bg) 45%,
+    transparent 100%
+  );
 }
 
 @theme inline {
@@ -98,7 +156,8 @@
   --color-pos-sidebar-muted: var(--pos-sidebar-muted);
   --color-pos-success: var(--pos-success);
   --color-pos-success-soft: var(--pos-success-soft);
-  --color-pos-inverse: var(--pos-inverse);
+  --color-pos-warning: var(--pos-warning);
+  --color-pos-danger: var(--pos-danger);
   --color-pos-inverse: var(--pos-inverse);
   --shadow-pos-sm: var(--pos-shadow-sm);
   --shadow-pos-md: var(--pos-shadow-md);
@@ -262,6 +321,28 @@ textarea:hover::-webkit-scrollbar-thumb:hover,
     linear-gradient(to bottom, rgb(255 255 255 / 0.07) 1px, transparent 1px);
   background-size: min(24vw, 17rem) min(24vw, 17rem);
   mask-image: linear-gradient(to bottom, #000 62%, transparent 96%);
+}
+
+.dark .hero-matrix {
+  background-image:
+    linear-gradient(to right, rgb(255 255 255 / 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(255 255 255 / 0.04) 1px, transparent 1px);
+}
+
+.marketing-hero-bg {
+  background: var(--pos-marketing-hero);
+}
+
+.marketing-hero-stack-bg {
+  background: var(--pos-marketing-hero-stack);
+}
+
+.marketing-soft-bg {
+  background: var(--pos-marketing-soft);
+}
+
+.marketing-fade-bottom {
+  background: var(--pos-marketing-fade);
 }
 
 .partner-mask {

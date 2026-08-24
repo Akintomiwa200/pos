@@ -158,8 +158,20 @@ export class ConsoleController {
   }
 
   @Post("accounts")
-  saveAccount(@Body() body: Partial<ConsoleAccount>) {
-    return this.consoleService.saveAccount(body);
+  saveAccount(
+    @Body() body: Partial<ConsoleAccount>,
+    @Headers("authorization") authorization?: string,
+  ) {
+    let invitedBy: string | undefined;
+    try {
+      invitedBy = this.consoleService.me(bearer(authorization)).user.name;
+    } catch {
+      invitedBy = undefined;
+    }
+    return this.consoleService.saveAccount(body, {
+      invitedBy,
+      welcomePassword: body.password?.trim() || undefined,
+    });
   }
 
   @Delete("accounts/:id")

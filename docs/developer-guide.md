@@ -181,6 +181,12 @@ Copy examples per app:
 | `CLOUDINARY_CLOUD_NAME` | Product image uploads |
 | `CLOUDINARY_API_KEY` | Cloudinary API key |
 | `CLOUDINARY_API_SECRET` | Cloudinary secret (max upload 1 MB enforced in code) |
+| `HQ_APP_URL` | Public HQ URL for links in welcome and reset emails |
+| `SMTP_HOST` | Mail server host (Nodemailer) |
+| `SMTP_PORT` | Mail server port (default `587`) |
+| `SMTP_SECURE` | `true` for TLS on port 465 |
+| `SMTP_USER` / `SMTP_PASS` | SMTP credentials (optional for open relays) |
+| `SMTP_FROM` | From address, e.g. `POS HQ <noreply@yourdomain.com>` |
 
 ### Web (`web/.env`)
 
@@ -195,6 +201,17 @@ Copy examples per app:
 | `VITE_API_URL` | Base URL for packaged builds (e.g. `http://192.168.1.10:3001`) |
 
 Never commit real secrets or production `backend/data/` dumps.
+
+### Account welcome emails
+
+When SMTP is configured on the API, Nodemailer sends HTML emails for:
+
+- **Company registration** — owner welcome after `/api/console/register-company` or Google signup
+- **Admin-created accounts** — welcome with username, group, and temporary password
+- **Legacy personal register** — welcome for staff-style signup
+- **Forgot password** — reset link (dev fallback returns `resetToken` when SMTP is off)
+
+If SMTP is not set, messages are **logged to the API console** instead of sent.
 
 ---
 

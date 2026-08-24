@@ -71,7 +71,7 @@ export function AccountManager() {
       }
       await load();
       setDraft({ ...blank, groupId: groups[0]?.id ?? "" });
-      toast.success("Account saved. They will see menus from their group at next sign-in.");
+      toast.success("Account saved. A welcome email was sent when mail is configured.");
     } catch (err) {
       toast.error(err, "Could not save account");
     }

@@ -425,6 +425,10 @@ role can open. Privileges are organised by department:
 Assign each user to one or more groups. If a menu item is missing, your
 administrator needs to grant the matching privilege — not a bug.
 
+When an administrator creates your account, or when you register a new company,
+you receive a **welcome email** at the address on the account (if your
+organisation has configured SMTP on the API server).
+
 ### Till staff
 
 Till cashiers are managed under **Workspace → Staff** and sign in on the till

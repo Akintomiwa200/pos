@@ -18,6 +18,7 @@ import {
   type HqNotice,
 } from "./console.types";
 import { SetupService } from "./setup.service";
+import { EmailService } from "../email/email.service";
 import type { HqCompany } from "./setup.types";
 import {
   SEED_TILLS,
@@ -57,7 +58,10 @@ export class ConsoleService implements OnModuleInit {
   private readonly resetsFile = join(this.dir, "hq-resets.json");
   private readonly noticesFile = join(this.dir, "hq-notices.json");
 
-  constructor(private readonly setup: SetupService) {}
+  constructor(
+    private readonly setup: SetupService,
+    private readonly email: EmailService,
+  ) {}
 
   async onModuleInit() {
     await mkdir(this.dir, { recursive: true });
@@ -235,6 +239,46 @@ export class ConsoleService implements OnModuleInit {
     });
   }
 
+  private groupName(groupId: string) {
+    return this.groups.find((row) => row.id === groupId)?.name ?? "HQ User";
+  }
+
+  private async sendNewAccountEmail(
+    account: ConsoleAccount,
+    input: {
+      invitedBy?: string;
+      password?: string;
+    } = {},
+  ) {
+    const groupName = this.groupName(account.groupId);
+    const company = this.setup.getCompany();
+    await this.email.sendAccountWelcome({
+      to: account.email,
+      name: account.name,
+      username: account.username,
+      groupName,
+      companyName: company.name,
+      loginUrl: this.email.loginUrl(),
+      password: input.password,
+      invitedBy: input.invitedBy,
+      authProvider: account.authProvider,
+    });
+  }
+
+  private async sendCompanyOwnerEmail(
+    account: ConsoleAccount,
+    companyName: string,
+  ) {
+    await this.email.sendCompanyWelcome({
+      to: account.email,
+      name: account.name,
+      username: account.username,
+      companyName,
+      loginUrl: this.email.loginUrl(),
+      authProvider: account.authProvider,
+    });
+  }
+
   listGroups() {
     return this.groups;
   }
@@ -299,15 +343,18 @@ export class ConsoleService implements OnModuleInit {
       this.groups.find((row) => !row.privileges.includes("*")) ??
       this.groups[0];
     if (!group) throw new BadRequestException("No group available for new accounts");
-    await this.saveAccount({
-      name: input.name,
-      email: input.email,
-      username: input.username,
-      password,
-      groupId: group.id,
-      active: true,
-      authProvider: "password",
-    });
+    await this.saveAccount(
+      {
+        name: input.name,
+        email: input.email,
+        username: input.username,
+        password,
+        groupId: group.id,
+        active: true,
+        authProvider: "password",
+      },
+      { welcomePassword: password },
+    );
     return this.login(input.email ?? input.username ?? "", password);
   }
 
@@ -349,15 +396,18 @@ export class ConsoleService implements OnModuleInit {
       this.groups[0];
     if (!adminGroup) throw new BadRequestException("Administrator group is missing");
 
-    await this.saveAccount({
-      name,
-      email,
-      username,
-      password,
-      groupId: adminGroup.id,
-      active: true,
-      authProvider: "password",
-    });
+    await this.saveAccount(
+      {
+        name,
+        email,
+        username,
+        password,
+        groupId: adminGroup.id,
+        active: true,
+        authProvider: "password",
+      },
+      { skipWelcomeEmail: true },
+    );
 
     const company = await this.setup.saveCompany({
       name: companyName,
@@ -379,6 +429,13 @@ export class ConsoleService implements OnModuleInit {
       body: `${company.name} was created with owner ${name}.`,
       href: "/setup/others/company",
     });
+
+    const owner = this.accounts.find(
+      (row) => row.email === email && row.username === username,
+    );
+    if (owner) {
+      await this.sendCompanyOwnerEmail(owner, company.name);
+    }
 
     const session = await this.login(email, password);
     return { ...session, company, onboarding: "company" as const };
@@ -441,16 +498,19 @@ export class ConsoleService implements OnModuleInit {
       username = `${usernameBase.slice(0, 20)}${suffix}`;
     }
 
-    await this.saveAccount({
-      name: profile.name || companyName,
-      email: profile.email,
-      username,
-      password: generateSessionToken().slice(0, 24),
-      groupId: adminGroup.id,
-      active: true,
-      googleId: profile.sub,
-      authProvider: "google",
-    });
+    await this.saveAccount(
+      {
+        name: profile.name || companyName,
+        email: profile.email,
+        username,
+        password: generateSessionToken().slice(0, 24),
+        groupId: adminGroup.id,
+        active: true,
+        googleId: profile.sub,
+        authProvider: "google",
+      },
+      { skipWelcomeEmail: true },
+    );
 
     const company = await this.setup.saveCompany({
       name: companyName,
@@ -475,6 +535,7 @@ export class ConsoleService implements OnModuleInit {
 
     const account = this.accounts.find((row) => row.googleId === profile.sub);
     if (!account) throw new BadRequestException("Could not finish Google signup");
+    await this.sendCompanyOwnerEmail(account, company.name);
     return {
       ...(await this.issueSession(account)),
       company,
@@ -568,6 +629,15 @@ export class ConsoleService implements OnModuleInit {
       expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
     });
     await this.persist();
+    const resetUrl = `${this.email.hqAppUrl()}/reset-password?token=${encodeURIComponent(token)}`;
+    const mail = await this.email.sendPasswordReset({
+      to: account.email,
+      name: account.name,
+      resetUrl,
+    });
+    if (mail.sent) {
+      return { ok: true as const, emailSent: true as const };
+    }
     return { ok: true as const, resetToken: token };
   }
 
@@ -638,7 +708,14 @@ export class ConsoleService implements OnModuleInit {
     return { ok: true };
   }
 
-  async saveAccount(input: Partial<ConsoleAccount> & { id?: string }) {
+  async saveAccount(
+    input: Partial<ConsoleAccount> & { id?: string },
+    options?: {
+      invitedBy?: string;
+      welcomePassword?: string;
+      skipWelcomeEmail?: boolean;
+    },
+  ) {
     const name = input.name?.trim();
     const email = input.email?.trim().toLowerCase();
     const username = input.username?.trim().toLowerCase();
@@ -655,12 +732,13 @@ export class ConsoleService implements OnModuleInit {
         (row.email.toLowerCase() === email || row.username.toLowerCase() === username),
     );
     if (duplicate) throw new BadRequestException("Email or username already in use");
+    const plainPassword = input.password?.trim();
     const next: ConsoleAccount = {
       id: existing?.id ?? `a-${Date.now()}`,
       name,
       email,
       username,
-      password: input.password?.trim() || existing?.password || "demo",
+      password: plainPassword || existing?.password || "demo",
       groupId: input.groupId!,
       active: input.active ?? existing?.active ?? true,
       googleId: input.googleId !== undefined ? input.googleId : existing?.googleId ?? null,
@@ -683,6 +761,12 @@ export class ConsoleService implements OnModuleInit {
         body: `${next.name} (${next.username}) joined. Review the group in Setup → Users.`,
         href: "/setup/users/account",
       });
+      if (!options?.skipWelcomeEmail) {
+        await this.sendNewAccountEmail(next, {
+          invitedBy: options?.invitedBy,
+          password: options?.welcomePassword ?? plainPassword,
+        });
+      }
     }
     return publicAccount(next);
   }

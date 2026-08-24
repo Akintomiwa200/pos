@@ -325,6 +325,8 @@ Copy environment examples into each app you run. **Do not commit** real secrets 
 | `GOOGLE_CLIENT_ID` | backend | Verify Google tokens for HQ login/signup |
 | `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | web | Must match backend Google client ID |
 | `CLOUDINARY_*` | backend | Product image uploads (1 MB max) |
+| `HQ_APP_URL` | backend | Link base for welcome and password-reset emails |
+| `SMTP_*` | backend | Nodemailer — account welcome and password reset emails |
 | `VITE_API_URL` | pos, price-check | API base URL for packaged clients |
 
 Production examples: [`docs/build/examples/`](docs/build/examples/).

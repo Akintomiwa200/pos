@@ -19,10 +19,12 @@ import { SalesModule } from './sales/sales.module';
 import { ConsoleModule } from './console/console.module';
 import { CustomersModule } from './customers/customers.module';
 import { ChatModule } from './chat/chat.module';
+import { EmailModule } from './email/email.module';
 import { CrmModule } from './crm/crm.module';
 
 @Module({
   imports: [
+    EmailModule,
     HealthModule,
     AuthModule,
     TenantsModule,

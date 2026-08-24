@@ -1,49 +1,130 @@
-import Link from "next/link";
-import { PageHero } from "../../../components/site/PageHero";
+import {
+  ArrowLeftRight,
+  BarChart3,
+  ScanBarcode,
+  Server,
+  ShieldCheck,
+  Store,
+} from "lucide-react";
+import {
+  MarketingCard,
+  MarketingHero,
+  MarketingPrimaryLink,
+  MarketingSecondaryLink,
+  MarketingSection,
+  MarketingStat,
+} from "../../../components/site/MarketingChrome";
 
 const apps = [
   {
+    icon: Store,
     name: "Till",
+    badge: "Windows · Android",
     href: "/download",
-    copy: "Windows EXE or Android APK. One till per device. First launch asks for the HQ till code. After that, staff only sign in until the one-year subscription ends.",
+    cta: "Download till",
+    copy: "Cashier terminal for supermarket, food service, and hotel. One device per till code. Staff sign in after HQ activation — licence runs one year from first use.",
+    featured: true,
   },
   {
+    icon: BarChart3,
     name: "HQ console",
+    badge: "Browser",
     href: "/login",
-    copy: "This website after you log in: reports, purchases, items, users, billing, and till issue. Menus follow the departments on your group.",
+    cta: "Open HQ",
+    copy: "Reports, catalog, purchase orders, users, tills, and billing. Sidebar menus follow group privileges across Report, Transaction, and Setup.",
   },
   {
+    icon: ScanBarcode,
     name: "Price check",
+    badge: "Handheld",
     href: "/download",
-    copy: "Handheld lookup. Point the camera or scanner at a barcode and see the live price from the API.",
+    cta: "Get price check",
+    copy: "Floor staff scan a barcode and see live name and price from the same catalog the till sells — no duplicate database.",
   },
   {
+    icon: Server,
     name: "API",
+    badge: "Port 3001",
     href: "/support",
-    copy: "NestJS on port 3001. Catalog, staff, sales, hardware hex, and till activate/heartbeat. Run it as a Windows service next to HQ.",
+    cta: "Read setup docs",
+    copy: "NestJS service for catalog, sales, staff shifts, till activate/heartbeat, CRM, chat, and hardware. Run beside HQ or as a Windows service.",
+  },
+];
+
+const flows = [
+  {
+    icon: ShieldCheck,
+    title: "Issue & activate",
+    copy: "HQ creates a till and copies the 16-character code. The device binds on first activation.",
+  },
+  {
+    icon: ArrowLeftRight,
+    title: "Sell & sync",
+    copy: "Tickets close on the till and land in HQ for reports, tax, and inventory without a second spreadsheet.",
+  },
+  {
+    icon: BarChart3,
+    title: "Run the business",
+    copy: "Managers use Analytics, Workspace, and Settings — from Item Sales to Support and Chat.",
   },
 ];
 
 export default function ProductPage() {
   return (
     <>
-      <PageHero
+      <MarketingHero
         kicker="Product"
-        title="Four apps, one store."
-        copy="The till sells. HQ runs the business. Price check is for the floor. The API keeps them in sync."
-      />
-      <div className="mx-auto grid max-w-6xl gap-4 px-4 py-12 sm:px-6 md:grid-cols-2">
-        {apps.map((app) => (
-          <Link
-            key={app.name}
-            href={app.href}
-            className="rounded-2xl bg-white p-6 shadow-[0_8px_30px_rgba(28,28,30,0.06)]"
-          >
-            <h2 className="text-lg font-semibold">{app.name}</h2>
-            <p className="mt-2 text-sm leading-relaxed text-neutral-500">{app.copy}</p>
-          </Link>
-        ))}
-      </div>
+        title="Four apps. One catalog. One store."
+        copy="The till sells at the counter. HQ runs purchasing, users, and reports. Price check keeps the floor aligned. The API keeps every client on the same data."
+      >
+        <MarketingPrimaryLink href="/register">Sign up company</MarketingPrimaryLink>
+        <MarketingSecondaryLink href="/download">Download apps</MarketingSecondaryLink>
+      </MarketingHero>
+
+      <MarketingSection
+        title="The stack"
+        subtitle="Each app has a clear job. Together they cover front-of-house and back-office without duplicate product data."
+      >
+        <div className="grid gap-4 sm:grid-cols-2">
+          {apps.map((app) => (
+            <MarketingCard key={app.name} {...app} title={app.name} />
+          ))}
+        </div>
+      </MarketingSection>
+
+      <MarketingSection className="bg-pos-surface-muted/60">
+        <div className="grid gap-4 sm:grid-cols-3">
+          <MarketingStat label="Till licence" value="1 year" hint="From first device activation" />
+          <MarketingStat label="HQ access" value="By group" hint="Report · Transaction · Setup" />
+          <MarketingStat label="Catalog" value="Shared" hint="Till, HQ, and price check" />
+        </div>
+      </MarketingSection>
+
+      <MarketingSection
+        title="How operators use it"
+        subtitle="From issuing a till code to closing the day — one predictable flow."
+      >
+        <div className="grid gap-4 md:grid-cols-3">
+          {flows.map((item) => (
+            <MarketingCard key={item.title} {...item} />
+          ))}
+        </div>
+      </MarketingSection>
+
+      <MarketingSection className="pb-20">
+        <div className="overflow-hidden rounded-[32px] border border-pos-border/80 bg-pos-surface p-8 text-center shadow-pos-md sm:p-12">
+          <h2 className="text-[clamp(1.5rem,3vw,2rem)] font-semibold tracking-tight text-pos-ink">
+            Ready to issue your first till?
+          </h2>
+          <p className="mx-auto mt-3 max-w-lg text-[15px] leading-7 text-pos-ink-muted">
+            Create an HQ account, add products, then generate a till code under Point of Sales.
+          </p>
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+            <MarketingPrimaryLink href="/register">Get started</MarketingPrimaryLink>
+            <MarketingSecondaryLink href="/pricing">View pricing</MarketingSecondaryLink>
+          </div>
+        </div>
+      </MarketingSection>
     </>
   );
 }

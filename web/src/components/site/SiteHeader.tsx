@@ -80,7 +80,7 @@ export function SiteHeader() {
               <>
                 <Link
                   href="/login"
-                  className={`hidden rounded-full px-3 py-2 text-sm font-medium sm:inline-flex ${
+                  className={`hidden rounded-full px-3 py-2 text-sm font-medium md:inline-flex ${
                     pathname.startsWith("/login") ||
                     pathname.startsWith("/forgot-password") ||
                     pathname.startsWith("/reset-password")
@@ -92,7 +92,7 @@ export function SiteHeader() {
                 </Link>
                 <Link
                   href="/register"
-                  className="rounded-full bg-pos-primary px-4 py-2 text-sm font-medium text-white shadow-pos-primary sm:px-5"
+                  className="hidden rounded-full bg-pos-primary px-4 py-2 text-sm font-medium text-white shadow-pos-primary md:inline-flex md:px-5"
                 >
                   Sign up company
                 </Link>
@@ -101,7 +101,7 @@ export function SiteHeader() {
             {!loading && session ? (
               <Link
                 href="/dashboard"
-                className="rounded-full bg-pos-primary px-4 py-2 text-sm font-medium text-white shadow-pos-primary sm:px-5"
+                className="hidden rounded-full bg-pos-primary px-4 py-2 text-sm font-medium text-white shadow-pos-primary md:inline-flex md:px-5"
               >
                 My dashboard
               </Link>
@@ -122,28 +122,30 @@ export function SiteHeader() {
               <MobileBlock key={item.href} item={item} pathname={pathname} />
             ))}
             {!loading && !session ? (
-              <>
+              <div className="mt-2 space-y-1 border-t border-pos-border/80 pt-2">
                 <Link
                   href="/login"
-                  className="mt-1 block rounded-lg px-3 py-2.5 text-sm font-medium text-pos-ink"
+                  className="block rounded-lg px-3 py-2.5 text-sm font-medium text-pos-ink"
                 >
                   Sign in
                 </Link>
                 <Link
                   href="/register"
-                  className="mt-1 block rounded-lg bg-pos-primary-soft px-3 py-2.5 text-sm font-medium text-pos-primary"
+                  className="block rounded-lg bg-pos-primary px-3 py-2.5 text-center text-sm font-medium text-white shadow-pos-primary"
                 >
                   Sign up company
                 </Link>
-              </>
+              </div>
             ) : null}
             {!loading && session ? (
-              <Link
-                href="/dashboard"
-                className="mt-1 block rounded-lg bg-pos-primary-soft px-3 py-2.5 text-sm font-medium text-pos-primary"
-              >
-                My dashboard
-              </Link>
+              <div className="mt-2 border-t border-pos-border/80 pt-2">
+                <Link
+                  href="/dashboard"
+                  className="block rounded-lg bg-pos-primary px-3 py-2.5 text-center text-sm font-medium text-white shadow-pos-primary"
+                >
+                  My dashboard
+                </Link>
+              </div>
             ) : null}
           </div>
         ) : null}

@@ -21,12 +21,18 @@ export default function ForgotPasswordPage() {
     setBusy(true);
     try {
       const result = await forgotPassword(String(form.get("email") ?? ""));
+      if (result.emailSent) {
+        toast.success("If that account exists, we sent a reset link to its email.");
+        router.push("/login");
+        return;
+      }
       if (result.resetToken) {
         toast.success("Reset started. Set a new password next.");
         router.push(`/reset-password?token=${encodeURIComponent(result.resetToken)}`);
         return;
       }
-      toast.error("No matching HQ account for that email or username.");
+      toast.success("If that account exists, you can reset your password next.");
+      router.push("/login");
     } catch (err) {
       toast.error(err, "Could not start a reset");
     } finally {

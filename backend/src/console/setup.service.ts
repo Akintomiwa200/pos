@@ -1,7 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException, OnModuleInit } from "@nestjs/common";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
+import { DbService } from "../db/db.service";
 import {
   SEED_BRANCHES,
   SEED_COMPANY,
@@ -34,47 +35,49 @@ export class SetupService implements OnModuleInit {
   private gateways: HqGateway[] = [];
   private taxes: HqTax[] = [];
   private settings: HqOrgSettings = SEED_SETTINGS;
-  private readonly dir = join(process.cwd(), "data");
-  private readonly companyFile = join(this.dir, "hq-company.json");
-  private readonly branchesFile = join(this.dir, "hq-branches.json");
-  private readonly storesFile = join(this.dir, "hq-stores.json");
-  private readonly storefrontsFile = join(this.dir, "hq-storefronts.json");
-  private readonly gatewaysFile = join(this.dir, "hq-gateways.json");
-  private readonly taxesFile = join(this.dir, "hq-taxes.json");
-  private readonly settingsFile = join(this.dir, "hq-org-settings.json");
+
+  constructor(private readonly db: DbService) {}
 
   async onModuleInit() {
-    await mkdir(this.dir, { recursive: true });
-    this.company = await this.readJson(this.companyFile, SEED_COMPANY);
-    this.branches = await this.readJson(this.branchesFile, SEED_BRANCHES);
-    this.stores = await this.readJson(this.storesFile, SEED_STORES);
-    this.storefronts = await this.readJson(this.storefrontsFile, SEED_STOREFRONTS);
-    this.gateways = await this.readJson(this.gatewaysFile, SEED_GATEWAYS);
-    this.taxes = await this.readJson(this.taxesFile, SEED_TAXES);
-    this.settings = { ...SEED_SETTINGS, ...(await this.readJson(this.settingsFile, SEED_SETTINGS)) };
+    const rows = await this.db.query<{ key: string; data: unknown }>(
+      `select key, data from hq_org_kv`,
+    );
+    const stored = new Map(rows.rows.map((row) => [row.key, row.data]));
+    this.company = this.pick<HqCompany>(stored, "company", SEED_COMPANY);
+    this.branches = this.pick<HqBranch[]>(stored, "branches", SEED_BRANCHES);
+    this.stores = this.pick<HqStore[]>(stored, "stores", SEED_STORES);
+    this.storefronts = this.pick<HqStorefront[]>(stored, "storefronts", SEED_STOREFRONTS);
+    this.gateways = this.pick<HqGateway[]>(stored, "gateways", SEED_GATEWAYS);
+    this.taxes = this.pick<HqTax[]>(stored, "taxes", SEED_TAXES);
+    this.settings = {
+      ...SEED_SETTINGS,
+      ...this.pick<HqOrgSettings>(stored, "settings", SEED_SETTINGS),
+    };
     await this.persist();
   }
 
-  private async readJson<T>(file: string, fallback: T): Promise<T> {
-    try {
-      const raw = await readFile(file, "utf8");
-      return (JSON.parse(raw) as T) ?? structuredClone(fallback);
-    } catch {
-      return structuredClone(fallback);
-    }
+  private pick<T>(stored: Map<string, unknown>, key: string, fallback: T): T {
+    const value = stored.get(key);
+    return (value === undefined || value === null ? fallback : value) as T;
   }
 
   private async persist() {
-    await mkdir(this.dir, { recursive: true });
-    await Promise.all([
-      writeFile(this.companyFile, JSON.stringify(this.company, null, 2), "utf8"),
-      writeFile(this.branchesFile, JSON.stringify(this.branches, null, 2), "utf8"),
-      writeFile(this.storesFile, JSON.stringify(this.stores, null, 2), "utf8"),
-      writeFile(this.storefrontsFile, JSON.stringify(this.storefronts, null, 2), "utf8"),
-      writeFile(this.gatewaysFile, JSON.stringify(this.gateways, null, 2), "utf8"),
-      writeFile(this.taxesFile, JSON.stringify(this.taxes, null, 2), "utf8"),
-      writeFile(this.settingsFile, JSON.stringify(this.settings, null, 2), "utf8"),
-    ]);
+    const entries: Array<[string, unknown]> = [
+      ["company", this.company],
+      ["branches", this.branches],
+      ["stores", this.stores],
+      ["storefronts", this.storefronts],
+      ["gateways", this.gateways],
+      ["taxes", this.taxes],
+      ["settings", this.settings],
+    ];
+    for (const [key, data] of entries) {
+      await this.db.query(
+        `insert into hq_org_kv (key, data) values ($1, $2::jsonb)
+         on conflict (key) do update set data = excluded.data`,
+        [key, JSON.stringify(data)],
+      );
+    }
   }
 
   snapshot(): HqOrgSnapshot {
@@ -324,7 +327,7 @@ export class SetupService implements OnModuleInit {
   async counts() {
     let sales = 0;
     try {
-      const raw = await readFile(join(this.dir, "sales.json"), "utf8");
+      const raw = await readFile(join(process.cwd(), "data", "sales.json"), "utf8");
       const parsed = JSON.parse(raw) as unknown[];
       sales = Array.isArray(parsed) ? parsed.length : 0;
     } catch {

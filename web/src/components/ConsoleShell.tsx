@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { canAccessPath, filterNav } from "../lib/access";
 import { ConsoleHeader } from "./ConsoleHeader";
 import { useAuth } from "./AuthProvider";
+import { AiHelpModal } from "./help/AiHelpModal";
 import { Sidebar } from "./Sidebar";
 import { ConsoleChromeSkeleton } from "./Skeleton";
 
@@ -13,6 +14,7 @@ export function ConsoleShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [navOpen, setNavOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   useEffect(() => {
     if (!loading && !session) router.replace("/login");
@@ -46,6 +48,7 @@ export function ConsoleShell({ children }: { children: React.ReactNode }) {
           session={session}
           nav={nav}
           onOpenNav={() => setNavOpen(true)}
+          onOpenHelp={() => setHelpOpen(true)}
         />
         <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
           <div className="mx-auto w-full max-w-7xl p-4 sm:p-8">
@@ -65,6 +68,7 @@ export function ConsoleShell({ children }: { children: React.ReactNode }) {
           </div>
         </main>
       </div>
+      <AiHelpModal open={helpOpen} onOpenChange={setHelpOpen} />
     </div>
   );
 }

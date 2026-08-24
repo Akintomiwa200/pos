@@ -105,23 +105,23 @@ export class ConsoleController {
   }
 
   @Get("notifications")
-  notifications(@Headers("authorization") authorization?: string) {
-    this.consoleService.me(bearer(authorization));
+  async notifications(@Headers("authorization") authorization?: string) {
+    await this.consoleService.me(bearer(authorization));
     return this.consoleService.listNotifications();
   }
 
   @Post("notifications/read-all")
-  readAllNotifications(@Headers("authorization") authorization?: string) {
-    this.consoleService.me(bearer(authorization));
+  async readAllNotifications(@Headers("authorization") authorization?: string) {
+    await this.consoleService.me(bearer(authorization));
     return this.consoleService.markAllNoticesRead();
   }
 
   @Post("notifications/:id/read")
-  readNotification(
+  async readNotification(
     @Headers("authorization") authorization?: string,
     @Param("id") id?: string,
   ) {
-    this.consoleService.me(bearer(authorization));
+    await this.consoleService.me(bearer(authorization));
     return this.consoleService.markNoticeRead(id ?? "");
   }
 
@@ -158,13 +158,14 @@ export class ConsoleController {
   }
 
   @Post("accounts")
-  saveAccount(
+  async saveAccount(
     @Body() body: Partial<ConsoleAccount>,
     @Headers("authorization") authorization?: string,
   ) {
     let invitedBy: string | undefined;
     try {
-      invitedBy = this.consoleService.me(bearer(authorization)).user.name;
+      const me = await this.consoleService.me(bearer(authorization));
+      invitedBy = me.user.name;
     } catch {
       invitedBy = undefined;
     }
@@ -334,9 +335,10 @@ export class ConsoleController {
   @Get("setup/data")
   async data() {
     const counts = await this.setup.counts();
+    const tills = await this.consoleService.listTills();
     return {
       ...counts,
-      tills: this.consoleService.listTills().length,
+      tills: tills.length,
       catalog: this.catalog.list().length,
     };
   }

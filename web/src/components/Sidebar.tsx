@@ -308,7 +308,7 @@ export function Sidebar({
         }`}
         aria-label="Console navigation"
       >
-        <div className="flex items-center gap-2 border-b border-pos-border px-5 py-5">
+        <div className="flex items-center gap-2 px-5 py-5">
           <div className="min-w-0 flex-1">
             <BrandLogo href="/dashboard" size="sm" />
           </div>
@@ -434,7 +434,7 @@ export function Sidebar({
           </div>
         </nav>
 
-        <div className="border-t border-pos-border p-3">
+        <div className="p-3">
           <AccountSwitcher session={session} menu="up" layout="sidebar" />
         </div>
       </aside>

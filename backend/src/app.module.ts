@@ -1,6 +1,7 @@
 ﻿import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { DbModule } from './db/db.module';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
 import { TenantsModule } from './tenants/tenants.module';
@@ -24,6 +25,7 @@ import { CrmModule } from './crm/crm.module';
 
 @Module({
   imports: [
+    DbModule,
     EmailModule,
     HealthModule,
     AuthModule,

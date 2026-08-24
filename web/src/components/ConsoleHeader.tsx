@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronRight, Menu, Search } from "lucide-react";
+import { ChevronRight, HelpCircle, Menu, Search } from "lucide-react";
 import { AccountSwitcher } from "./AccountSwitcher";
 import { NotificationMenu } from "./NotificationMenu";
 import { filterAccessNav } from "../lib/access";
@@ -139,10 +139,12 @@ export function ConsoleHeader({
   session,
   nav,
   onOpenNav,
+  onOpenHelp,
 }: {
   session: ConsoleSession;
   nav: NavSection[];
   onOpenNav?: () => void;
+  onOpenHelp?: () => void;
 }) {
   const searchNav = filterAccessNav(session.departments, session.privileges);
   const pathname = usePathname();
@@ -160,6 +162,17 @@ export function ConsoleHeader({
       <ConsolePageTitle pathname={pathname} />
       <ConsoleSearch nav={searchNav} />
       <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
+        {onOpenHelp ? (
+          <button
+            type="button"
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-pos-surface text-pos-primary shadow-pos-sm transition hover:bg-pos-primary-soft"
+            aria-label="Open help"
+            title="Help"
+            onClick={onOpenHelp}
+          >
+            <HelpCircle size={18} strokeWidth={1.8} />
+          </button>
+        ) : null}
         <NotificationMenu token={session.token} />
         <div className="w-[min(100%,13rem)] sm:w-56">
           <AccountSwitcher session={session} layout="sidebar" menu="down" />

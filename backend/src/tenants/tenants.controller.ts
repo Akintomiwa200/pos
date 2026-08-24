@@ -14,7 +14,7 @@ export class TenantsController {
   @Get()
   async list() {
     const snapshot = await this.setup.snapshot();
-    const tills = this.console.listTills();
+    const tills = await this.console.listTills();
     return [
       {
         id: 'current',

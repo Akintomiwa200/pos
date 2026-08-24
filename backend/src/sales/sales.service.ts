@@ -1,6 +1,7 @@
 import { Injectable, OnModuleInit } from "@nestjs/common";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { Subject } from "rxjs";
 import { ConsoleService } from "../console/console.service";
 
 export type StoredSale = {
@@ -21,12 +22,17 @@ export type StoredSale = {
   receiptText?: string;
 };
 
+export type SaleEvent =
+  | { type: "snapshot"; sales: StoredSale[] }
+  | { type: "sale"; sale: StoredSale };
+
 @Injectable()
 export class SalesService implements OnModuleInit {
   private sales: StoredSale[] = [];
   private readonly dir = join(process.cwd(), "data");
   private readonly file = join(this.dir, "sales.json");
   private readonly receiptsDir = join(this.dir, "receipts");
+  private readonly events = new Subject<SaleEvent>();
 
   constructor(private readonly consoleService: ConsoleService) {}
 
@@ -49,6 +55,10 @@ export class SalesService implements OnModuleInit {
     return this.sales.find((sale) => sale.ticketId === ticketId) ?? null;
   }
 
+  salesEvents() {
+    return this.events.asObservable();
+  }
+
   async record(sale: StoredSale) {
     const next = {
       ...sale,
@@ -65,6 +75,7 @@ export class SalesService implements OnModuleInit {
       );
     }
     await this.consoleService.notifySale(next);
+    this.events.next({ type: "sale", sale: next });
     return next;
   }
 }

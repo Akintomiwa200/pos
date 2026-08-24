@@ -162,7 +162,6 @@ const OPEN_PATHS = new Set([
   "/password",
   "/admin",
   "/procurement",
-  "/audit",
   "/it",
   "/finance",
   "/hr",

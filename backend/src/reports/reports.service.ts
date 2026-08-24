@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { Observable, Subject, merge, interval, map, startWith } from "rxjs";
 import { CatalogService } from "../catalog/catalog.service";
 import { SetupService } from "../console/setup.service";
 import { OrdersService } from "../orders/orders.service";
@@ -34,16 +35,64 @@ export type TaxSummary = {
   byCategory: Array<{ category: string; netMinor: number; taxMinor: number }>;
 };
 
+export type AuditCashier = {
+  name: string;
+  tickets: number;
+  totalMinor: number;
+  lastAt: string;
+};
+
+export type AuditTicket = {
+  ticketId: string;
+  paidAt: string;
+  tender: string;
+  cashierName: string;
+  totalMinor: number;
+  lines: number;
+  units: number;
+};
+
+export type AuditException = {
+  id: string;
+  at: string;
+  kind: "zero" | "high" | "no-lines" | "refund-like";
+  ticketId: string;
+  detail: string;
+  amountMinor: number;
+};
+
+export type AuditSnapshot = {
+  day: string;
+  updatedAt: string;
+  x: DayReport;
+  z: DayReport;
+  tickets: AuditTicket[];
+  cashiers: AuditCashier[];
+  exceptions: AuditException[];
+  avgTicketMinor: number;
+  unitsSold: number;
+};
+
+export type AuditEvent =
+  | { type: "snapshot"; data: AuditSnapshot }
+  | { type: "ping"; at: string };
+
 const sameDay = (iso: string, day: string) => iso.slice(0, 10) === day;
 
 @Injectable()
 export class ReportsService {
+  private readonly auditEvents = new Subject<AuditEvent>();
+
   constructor(
     private readonly sales: SalesService,
     private readonly catalog: CatalogService,
     private readonly orders: OrdersService,
     private readonly setup: SetupService,
-  ) {}
+  ) {
+    this.sales.salesEvents().subscribe(() => {
+      this.auditEvents.next({ type: "snapshot", data: this.auditSnapshot() });
+    });
+  }
 
   private daySales(day: string): StoredSale[] {
     return this.sales.list().filter((sale) => sameDay(sale.paidAt, day));
@@ -55,7 +104,9 @@ export class ReportsService {
 
   zReport(day = new Date().toISOString().slice(0, 10)): DayReport {
     const report = this.dayReport("Z", day);
-    const closed = !this.daySales(day).some((sale) => sale.paidAt > new Date(Date.now() - 15 * 60_000).toISOString());
+    const closed = !this.daySales(day).some(
+      (sale) => sale.paidAt > new Date(Date.now() - 15 * 60_000).toISOString(),
+    );
     return { ...report, closed };
   }
 
@@ -82,6 +133,104 @@ export class ReportsService {
       cashExpectedMinor,
       tenders,
     };
+  }
+
+  auditSnapshot(day = new Date().toISOString().slice(0, 10)): AuditSnapshot {
+    const rows = this.daySales(day);
+    const x = this.xReport(day);
+    const z = this.zReport(day);
+
+    const tickets: AuditTicket[] = rows.map((sale) => ({
+      ticketId: sale.ticketId,
+      paidAt: sale.paidAt,
+      tender: sale.tender,
+      cashierName: sale.cashierName || "Unknown",
+      totalMinor: sale.totalMinor,
+      lines: sale.lines?.length ?? 0,
+      units: (sale.lines ?? []).reduce((sum, line) => sum + line.quantity, 0),
+    }));
+
+    const cashierMap = new Map<string, AuditCashier>();
+    for (const sale of rows) {
+      const name = sale.cashierName || "Unknown";
+      const row = cashierMap.get(name) ?? { name, tickets: 0, totalMinor: 0, lastAt: sale.paidAt };
+      row.tickets += 1;
+      row.totalMinor += sale.totalMinor;
+      if (sale.paidAt > row.lastAt) row.lastAt = sale.paidAt;
+      cashierMap.set(name, row);
+    }
+    const cashiers = [...cashierMap.values()].sort((a, b) => b.totalMinor - a.totalMinor);
+
+    const avgTicketMinor = rows.length
+      ? Math.round(rows.reduce((sum, sale) => sum + sale.totalMinor, 0) / rows.length)
+      : 0;
+    const unitsSold = tickets.reduce((sum, row) => sum + row.units, 0);
+    const highThreshold = Math.max(50_000_00, avgTicketMinor * 5);
+
+    const exceptions: AuditException[] = [];
+    for (const sale of rows) {
+      if (sale.totalMinor === 0) {
+        exceptions.push({
+          id: `zero-${sale.ticketId}`,
+          at: sale.paidAt,
+          kind: "zero",
+          ticketId: sale.ticketId,
+          detail: "Zero-value ticket",
+          amountMinor: 0,
+        });
+      }
+      if (!(sale.lines?.length > 0)) {
+        exceptions.push({
+          id: `nolines-${sale.ticketId}`,
+          at: sale.paidAt,
+          kind: "no-lines",
+          ticketId: sale.ticketId,
+          detail: "Ticket has no line items",
+          amountMinor: sale.totalMinor,
+        });
+      }
+      if (sale.totalMinor >= highThreshold) {
+        exceptions.push({
+          id: `high-${sale.ticketId}`,
+          at: sale.paidAt,
+          kind: "high",
+          ticketId: sale.ticketId,
+          detail: "Unusually high ticket vs day average",
+          amountMinor: sale.totalMinor,
+        });
+      }
+      if (sale.totalMinor < 0) {
+        exceptions.push({
+          id: `refund-${sale.ticketId}`,
+          at: sale.paidAt,
+          kind: "refund-like",
+          ticketId: sale.ticketId,
+          detail: "Negative total — treat as refund / adjustment",
+          amountMinor: sale.totalMinor,
+        });
+      }
+    }
+    exceptions.sort((a, b) => b.at.localeCompare(a.at));
+
+    return {
+      day,
+      updatedAt: new Date().toISOString(),
+      x,
+      z,
+      tickets,
+      cashiers,
+      exceptions,
+      avgTicketMinor,
+      unitsSold,
+    };
+  }
+
+  auditStream(): Observable<AuditEvent> {
+    const ticks = interval(8_000).pipe(
+      map(() => ({ type: "snapshot" as const, data: this.auditSnapshot() })),
+      startWith({ type: "snapshot" as const, data: this.auditSnapshot() }),
+    );
+    return merge(ticks, this.auditEvents.asObservable());
   }
 
   taxSummary(day?: string): TaxSummary {
@@ -112,12 +261,8 @@ export class ReportsService {
     const categoryOf = new Map(this.catalog.list().map((item) => [item.id, item.category] as const));
     const catMap = new Map<string, { category: string; grossMinor: number }>();
     for (const sale of salesRows) {
-      const lines = sale.lines ?? [];
-      const seenCategories =
-        categoriesOf(lines, categoryOf).size > 0
-          ? categoriesOf(lines, categoryOf)
-          : new Set(["General"]);
-      for (const line of lines) {
+      const saleLines = sale.lines ?? [];
+      for (const line of saleLines) {
         const lineGross = line.unitPriceMinor * line.quantity;
         if (!lineGross) continue;
         const category = categoryOf.get(line.itemId ?? "") ?? "General";
@@ -125,7 +270,6 @@ export class ReportsService {
         row.grossMinor += lineGross;
         catMap.set(category, row);
       }
-      void seenCategories;
     }
     const byCategory = [...catMap.values()].map((row) => {
       const net = inclusive ? Math.round(row.grossMinor / (1 + rate)) : row.grossMinor;
@@ -143,16 +287,4 @@ export class ReportsService {
       byCategory: byCategory.sort((a, b) => b.netMinor - a.netMinor),
     };
   }
-}
-
-function categoriesOf(
-  lines: Array<{ itemId?: string }>,
-  categoryOf: Map<string, string>,
-): Set<string> {
-  const out = new Set<string>();
-  for (const line of lines) {
-    const id = line.itemId ?? "";
-    if (categoryOf.has(id)) out.add(categoryOf.get(id)!);
-  }
-  return out;
 }

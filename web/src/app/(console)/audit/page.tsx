@@ -1,5 +1,5 @@
-import { AuditDashboard } from "@/components/departments/AuditDashboard";
+import { AuditPages } from "@/components/audit/AuditPages";
 
 export default function AuditPage() {
-  return <AuditDashboard />;
+  return <AuditPages variant="overview" />;
 }

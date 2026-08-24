@@ -11,118 +11,15 @@ import {
   Users,
 } from "lucide-react";
 import { SetupHeader } from "../setup/SetupChrome";
-
-type HelpTopic = {
-  id: string;
-  title: string;
-  summary: string;
-  href?: string;
-  external?: boolean;
-  section: string;
-  keywords: string[];
-};
-
-const TOPICS: HelpTopic[] = [
-  {
-    id: "start",
-    title: "Getting started",
-    summary: "Sign in with your HQ account. Sidebar menus follow your group privileges.",
-    href: "/dashboard",
-    section: "Basics",
-    keywords: ["login", "start", "dashboard"],
-  },
-  {
-    id: "products",
-    title: "Products & catalog",
-    summary: "Add items, categories, packs/cartons, brands, and barcodes under Products.",
-    href: "/setup/items/items",
-    section: "Modules",
-    keywords: ["catalog", "items", "barcode", "pack"],
-  },
-  {
-    id: "orders",
-    title: "Purchase orders",
-    summary: "Draft → approve → send → receive workflow under Analytics → Orders.",
-    href: "/orders/list",
-    section: "Modules",
-    keywords: ["purchase", "order", "receive"],
-  },
-  {
-    id: "customers",
-    title: "Customers & loyalty",
-    summary: "Directory, groups, credits, loyalty cards, and gift cards in Workspace.",
-    href: "/setup/customers/list",
-    section: "Modules",
-    keywords: ["customer", "loyalty", "gift"],
-  },
-  {
-    id: "support",
-    title: "Support workspace",
-    summary: "Contacts, deals, pipeline, tickets, activity, projects, and GitHub-style issues.",
-    href: "/crm/overview",
-    section: "Modules",
-    keywords: ["support", "deals", "pipeline", "issues", "tickets"],
-  },
-  {
-    id: "chat",
-    title: "Live chat",
-    summary: "Three-column inbox with customer profile. Updates in real time via SSE.",
-    href: "/chat",
-    section: "Modules",
-    keywords: ["chat", "message", "real-time"],
-  },
-  {
-    id: "transactions",
-    title: "Transactions",
-    summary: "Payments dashboard with spend analysis and tabbed history.",
-    href: "/transactions/payments",
-    section: "Modules",
-    keywords: ["payment", "transaction", "refund"],
-  },
-  {
-    id: "till",
-    title: "Till & store",
-    summary: "Issue till codes and manage store locations under Point of Sales.",
-    href: "/setup/others/till",
-    section: "Modules",
-    keywords: ["till", "store", "pos"],
-  },
-  {
-    id: "users",
-    title: "Users & access",
-    summary: "Accounts and groups control which sidebar items each user sees.",
-    href: "/setup/users/account",
-    section: "Settings",
-    keywords: ["user", "group", "privilege", "access"],
-  },
-  {
-    id: "support",
-    title: "Install & releases",
-    summary: "Build guides, releases, and troubleshooting on the public support page.",
-    href: "/support",
-    section: "Support",
-    keywords: ["install", "exe", "apk", "release"],
-  },
-  {
-    id: "github",
-    title: "Source on GitHub",
-    summary: "Report bugs and browse releases on the project repository.",
-    href: "https://github.com/Akintomiwa200/pos",
-    external: true,
-    section: "Support",
-    keywords: ["github", "source", "bug"],
-  },
-];
-
-const SECTIONS = ["Basics", "Modules", "Settings", "Support"] as const;
+import { HELP_SECTIONS, HELP_TOPICS } from "./help-topics";
 
 export function HelpCenter() {
   const [query, setQuery] = useState("");
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return TOPICS;
-    return TOPICS.filter(
+    if (!q) return HELP_TOPICS;
+    return HELP_TOPICS.filter(
       (t) =>
         t.title.toLowerCase().includes(q) ||
         t.summary.toLowerCase().includes(q) ||
@@ -181,7 +78,7 @@ export function HelpCenter() {
         </Link>
       </div>
 
-      {SECTIONS.map((section) => {
+      {HELP_SECTIONS.map((section) => {
         const items = filtered.filter((t) => t.section === section);
         if (!items.length) return null;
         return (
@@ -222,7 +119,7 @@ export function HelpCenter() {
                   );
                 }
                 return (
-                  <Link key={topic.id} href={topic.href ?? "/help"} className={shell}>
+                  <Link key={`${topic.id}-${topic.href ?? topic.title}`} href={topic.href ?? "/help"} className={shell}>
                     {inner}
                   </Link>
                 );

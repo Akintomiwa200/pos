@@ -3,25 +3,28 @@ import {
   Activity,
   ArrowLeftRight,
   Banknote,
+  BookOpen,
   Boxes,
   Building2,
   Calculator,
   CircleDollarSign,
-  ClipboardList,
   CreditCard,
+  FileSpreadsheet,
   FileText,
   Flag,
   HelpCircle,
   History,
   IdCard,
+  Landmark,
   LifeBuoy,
   Megaphone,
   MessageSquare,
   Package,
   RotateCcw,
   Scale,
-  ScanBarcode,
+  ScrollText,
   Settings,
+  ShieldCheck,
   ShoppingBasket,
   ShoppingCart,
   TrendingUp,
@@ -29,6 +32,7 @@ import {
   User,
   UserRound,
   Users,
+  Wallet,
 } from "lucide-react";
 
 export type NavLink = {
@@ -86,6 +90,108 @@ const PRODUCTS_NAV: NavNode[] = [
   { id: "scan-barcode", label: "Barcode Lookup", href: "/setup/items/barcode" },
   { id: "others-import", label: "Import Products", href: "/setup/items/import" },
   { id: "items-export", label: "Export Products", href: "/setup/items/export" },
+];
+
+const STOCK_REPORT_NAV: NavNode[] = [
+  { id: "stock-balance", label: "Balance", href: "/reports/stock/balance" },
+  { id: "stock-sheet", label: "Sheet", href: "/reports/stock/sheet" },
+  { id: "stock-movement", label: "Movement", href: "/reports/stock/movement" },
+  { id: "stock-bin-card", label: "Bin Card", href: "/reports/stock/bin-card" },
+  { id: "stock-expiry", label: "Expiry", href: "/reports/stock/expiry" },
+  { id: "stock-count", label: "Count", href: "/reports/stock/count" },
+];
+
+const BALANCE_REPORT_NAV: NavNode[] = [
+  { id: "balance-customer", label: "Customer", href: "/reports/balance/customer" },
+  { id: "balance-vendor", label: "Vendor", href: "/reports/balance/vendor" },
+  {
+    id: "balance-sales-rep",
+    label: "Sales Representative",
+    href: "/reports/balance/sales-representative",
+  },
+  { id: "balance-staff", label: "Staff", href: "/reports/balance/staff" },
+];
+
+const LEDGER_REPORT_NAV: NavNode[] = [
+  { id: "ledger-customer", label: "Customer", href: "/reports/ledger/customer" },
+  { id: "ledger-vendor", label: "Vendor", href: "/reports/ledger/vendor" },
+  {
+    id: "ledger-sales-rep",
+    label: "Sales Representative",
+    href: "/reports/ledger/sales-representative",
+  },
+  { id: "ledger-staff", label: "Staff", href: "/reports/ledger/staff" },
+];
+
+const TRAIL_REPORT_NAV: NavNode[] = [
+  { id: "trail-customer", label: "Customer", href: "/reports/trail/customer" },
+  { id: "trail-vendor", label: "Vendor", href: "/reports/trail/vendor" },
+  {
+    id: "trail-sales-rep",
+    label: "Sales Representative",
+    href: "/reports/trail/sales-representative",
+  },
+  { id: "trail-staff", label: "Staff", href: "/reports/trail/staff" },
+];
+
+const TAX_REPORT_NAV: NavNode[] = [
+  { id: "tax-output", label: "Output Tax", href: "/reports/tax/output-tax" },
+  { id: "tax-input", label: "Input Tax", href: "/reports/tax/input-tax" },
+  { id: "tax-liability", label: "Liability", href: "/reports/tax/liability" },
+  { id: "tax-detail", label: "Detail", href: "/reports/tax/detail" },
+  { id: "tax-by-category", label: "By Category", href: "/reports/tax/by-category" },
+];
+
+const BILLING_NAV: NavNode[] = [
+  {
+    id: "billing-subscriptions",
+    label: "Subscriptions",
+    href: "/setup/billing/subscriptions",
+  },
+  {
+    id: "billing-licences",
+    label: "Till Licences",
+    href: "/setup/billing/licences",
+  },
+];
+
+const ACCOUNTING_BOOKS_NAV: NavNode[] = [
+  {
+    id: "accounting-coa",
+    label: "Chart of Accounts",
+    href: "/reports/accounting/chart-of-accounts",
+  },
+  { id: "accounting-journal", label: "Journal", href: "/reports/accounting/journal" },
+  { id: "accounting-cash-book", label: "Cash Book", href: "/reports/accounting/cash-book" },
+  {
+    id: "accounting-trial-balance",
+    label: "Trial Balance",
+    href: "/reports/accounting/trial-balance",
+  },
+];
+
+const AUDIT_NAV: NavNode[] = [
+  { id: "audit-overview", label: "Today's Summary", href: "/audit" },
+  { id: "audit-x-report", label: "Mid-day Check", href: "/audit/x-report" },
+  { id: "audit-z-report", label: "End of Day", href: "/audit/z-report" },
+  { id: "audit-tenders", label: "Payment Methods", href: "/audit/tenders" },
+  { id: "audit-tickets", label: "Sales List", href: "/audit/tickets" },
+  { id: "audit-cashiers", label: "Staff Sales", href: "/audit/cashiers" },
+  { id: "audit-drawer", label: "Cash Count", href: "/audit/drawer" },
+  { id: "audit-exceptions", label: "Problems to Check", href: "/audit/exceptions" },
+];
+
+const ACCOUNTING_STATEMENTS_NAV: NavNode[] = [
+  {
+    id: "accounting-profit-loss",
+    label: "Profit & Loss",
+    href: "/reports/accounting/profit-loss",
+  },
+  {
+    id: "accounting-balance-sheet",
+    label: "Balance Sheet",
+    href: "/reports/accounting/balance-sheet",
+  },
 ];
 
 const ORDERS_NAV: NavNode[] = [
@@ -261,70 +367,57 @@ export const ACCESS_NAV: NavSection[] = [
         id: "stock-report",
         label: "Stock",
         icon: Boxes,
-        children: [
-          { id: "stock-balance", label: "Balance", href: "/reports/stock/balance" },
-          { id: "stock-sheet", label: "Sheet", href: "/reports/stock/sheet" },
-          { id: "stock-movement", label: "Movement", href: "/reports/stock/movement" },
-          { id: "stock-bin-card", label: "Bin Card", href: "/reports/stock/bin-card" },
-          { id: "stock-expiry", label: "Expiry", href: "/reports/stock/expiry" },
-          { id: "stock-count", label: "Count", href: "/reports/stock/count" },
-        ],
+        children: STOCK_REPORT_NAV,
       },
       {
         id: "balance",
         label: "Balance",
         icon: Scale,
-        children: [
-          { id: "balance-customer", label: "Customer", href: "/reports/balance/customer" },
-          { id: "balance-vendor", label: "Vendor", href: "/reports/balance/vendor" },
-          {
-            id: "balance-sales-rep",
-            label: "Sales Representative",
-            href: "/reports/balance/sales-representative",
-          },
-          { id: "balance-staff", label: "Staff", href: "/reports/balance/staff" },
-        ],
+        children: BALANCE_REPORT_NAV,
+      },
+      {
+        id: "accounting-books",
+        label: "Books",
+        icon: ScrollText,
+        children: ACCOUNTING_BOOKS_NAV,
+      },
+      {
+        id: "accounting-statements",
+        label: "Statements",
+        icon: FileSpreadsheet,
+        children: ACCOUNTING_STATEMENTS_NAV,
       },
       {
         id: "ledger",
         label: "Ledger",
         icon: FileText,
-        children: [
-          { id: "ledger-customer", label: "Customer", href: "/reports/ledger/customer" },
-          { id: "ledger-vendor", label: "Vendor", href: "/reports/ledger/vendor" },
-          {
-            id: "ledger-sales-rep",
-            label: "Sales Representative",
-            href: "/reports/ledger/sales-representative",
-          },
-          { id: "ledger-staff", label: "Staff", href: "/reports/ledger/staff" },
-        ],
+        children: LEDGER_REPORT_NAV,
       },
       {
         id: "trail",
         label: "Trail",
         icon: History,
-        children: [
-          { id: "trail-customer", label: "Customer", href: "/reports/trail/customer" },
-          { id: "trail-vendor", label: "Vendor", href: "/reports/trail/vendor" },
-          {
-            id: "trail-sales-rep",
-            label: "Sales Representative",
-            href: "/reports/trail/sales-representative",
-          },
-        ],
+        children: TRAIL_REPORT_NAV,
       },
       {
         id: "tax",
         label: "Tax",
         icon: CircleDollarSign,
-        children: [
-          { id: "tax-output", label: "Output Tax", href: "/reports/tax/output-tax" },
-          { id: "tax-input", label: "Input Tax", href: "/reports/tax/input-tax" },
-          { id: "tax-liability", label: "Liability", href: "/reports/tax/liability" },
-          { id: "tax-detail", label: "Detail", href: "/reports/tax/detail" },
-          { id: "tax-by-category", label: "By Category", href: "/reports/tax/by-category" },
-        ],
+        children: TAX_REPORT_NAV,
+      },
+      { id: "audit", label: "Audit", icon: ShieldCheck, children: AUDIT_NAV },
+      { id: "finance", label: "Finance", icon: Landmark, href: "/finance" },
+      {
+        id: "expense-account",
+        label: "Expense Account",
+        icon: Calculator,
+        href: "/setup/expense-account",
+      },
+      {
+        id: "billing",
+        label: "Billing",
+        icon: FileText,
+        children: BILLING_NAV,
       },
     ],
   },
@@ -458,24 +551,6 @@ export const ACCESS_NAV: NavSection[] = [
         href: "/setup/sales-promotion",
       },
       {
-        id: "expense-account",
-        label: "Expense Account",
-        icon: Calculator,
-        href: "/setup/expense-account",
-      },
-      {
-        id: "billing",
-        label: "Billing",
-        icon: FileText,
-        children: [
-          {
-            id: "billing-subscriptions",
-            label: "Subscriptions",
-            href: "/setup/billing/subscriptions",
-          },
-        ],
-      },
-      {
         id: "users",
         label: "Users",
         icon: Users,
@@ -577,22 +652,10 @@ export const NAV: NavSection[] = [
         href: "/reports/sales/return/list",
       },
       {
-        id: "tax",
-        label: "Taxes",
-        icon: CircleDollarSign,
-        children: [
-          { id: "tax-output", label: "Output Tax", href: "/reports/tax/output-tax" },
-          { id: "tax-input", label: "Input Tax", href: "/reports/tax/input-tax" },
-        ],
-      },
-      {
         id: "stock-report",
         label: "Stock",
-        icon: ClipboardList,
-        children: [
-          { id: "stock-balance", label: "Balance", href: "/reports/stock/balance" },
-          { id: "stock-movement", label: "Movement", href: "/reports/stock/movement" },
-        ],
+        icon: Boxes,
+        children: STOCK_REPORT_NAV,
       },
       {
         id: "sales-invoice-list",
@@ -601,6 +664,62 @@ export const NAV: NavSection[] = [
         href: "/reports/sales/invoice/list",
       },
       { id: "payments", label: "Transactions", icon: Activity, href: "/transactions/payments" },
+    ],
+  },
+  {
+    heading: "Account",
+    department: "Report",
+    items: [
+      { id: "audit", label: "Audit", icon: ShieldCheck, children: AUDIT_NAV },
+      { id: "finance", label: "Finance", icon: Landmark, href: "/finance" },
+      {
+        id: "accounting-books",
+        label: "Books",
+        icon: ScrollText,
+        children: ACCOUNTING_BOOKS_NAV,
+      },
+      {
+        id: "accounting-statements",
+        label: "Statements",
+        icon: FileSpreadsheet,
+        children: ACCOUNTING_STATEMENTS_NAV,
+      },
+      {
+        id: "balance",
+        label: "Balances",
+        icon: Scale,
+        children: BALANCE_REPORT_NAV,
+      },
+      {
+        id: "ledger",
+        label: "Ledger",
+        icon: BookOpen,
+        children: LEDGER_REPORT_NAV,
+      },
+      {
+        id: "trail",
+        label: "Trail",
+        icon: History,
+        children: TRAIL_REPORT_NAV,
+      },
+      {
+        id: "tax",
+        label: "Tax",
+        icon: CircleDollarSign,
+        children: TAX_REPORT_NAV,
+      },
+      {
+        id: "expense-account",
+        label: "Expense Accounts",
+        icon: Calculator,
+        href: "/setup/expense-account",
+      },
+      {
+        id: "billing",
+        label: "Billing",
+        icon: Wallet,
+        children: BILLING_NAV,
+      },
     ],
   },
   {
@@ -629,24 +748,6 @@ export const NAV: NavSection[] = [
         label: "Sales Promotions",
         icon: Megaphone,
         href: "/setup/sales-promotion",
-      },
-      {
-        id: "expense-account",
-        label: "Expense Accounts",
-        icon: Calculator,
-        href: "/setup/expense-account",
-      },
-      {
-        id: "billing",
-        label: "Billing",
-        icon: FileText,
-        children: [
-          {
-            id: "billing-subscriptions",
-            label: "Subscriptions",
-            href: "/setup/billing/subscriptions",
-          },
-        ],
       },
     ],
   },

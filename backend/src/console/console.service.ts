@@ -4,25 +4,21 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
-  OnModuleInit,
   UnauthorizedException,
 } from "@nestjs/common";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { DbService } from "../db/db.service";
 import {
-  SEED_ACCOUNTS,
-  SEED_GROUPS,
   publicAccount,
   type ConsoleAccount,
   type ConsoleGroup,
+  type DepartmentName,
   type HqNotice,
 } from "./console.types";
+import { hashPassword, isHashedPassword, verifyPassword } from "./password.util";
 import { SetupService } from "./setup.service";
 import { EmailService } from "../email/email.service";
 import type { HqCompany } from "./setup.types";
 import {
-  SEED_TILLS,
-  DEMO_TILL,
   addOneYear,
   generateSessionToken,
   generateTillCode,
@@ -32,6 +28,7 @@ import {
   normalizeTillProduct,
   tillProductLabel,
   type HqTill,
+  type TillProduct,
 } from "./till-code";
 
 type GoogleProfile = {
@@ -42,277 +39,246 @@ type GoogleProfile = {
   picture?: string;
 };
 
-@Injectable()
-export class ConsoleService implements OnModuleInit {
-  private groups: ConsoleGroup[] = [];
-  private accounts: ConsoleAccount[] = [];
-  private tills: HqTill[] = [];
-  private sessions: { token: string; accountId: string }[] = [];
-  private resets: { token: string; accountId: string; expiresAt: string }[] = [];
-  private notices: HqNotice[] = [];
-  private readonly dir = join(process.cwd(), "data");
-  private readonly groupsFile = join(this.dir, "hq-groups.json");
-  private readonly accountsFile = join(this.dir, "hq-accounts.json");
-  private readonly tillsFile = join(this.dir, "hq-tills.json");
-  private readonly sessionsFile = join(this.dir, "hq-sessions.json");
-  private readonly resetsFile = join(this.dir, "hq-resets.json");
-  private readonly noticesFile = join(this.dir, "hq-notices.json");
+type GroupRow = {
+  id: string;
+  name: string;
+  departments: Array<DepartmentName | "*">;
+  privileges: string[];
+};
 
+type AccountRow = {
+  id: string;
+  name: string;
+  email: string;
+  username: string;
+  password_hash: string;
+  group_id: string;
+  active: boolean;
+  google_id: string | null;
+  auth_provider: string;
+};
+
+function isoOrNull(value: Date | string | null): string | null {
+  if (value === null) return null;
+  return value instanceof Date ? value.toISOString() : String(value);
+}
+
+type NoticeRow = {
+  id: string;
+  key: string | null;
+  type: string;
+  title: string;
+  body: string;
+  href: string;
+  derived: boolean;
+  read_at: Date | null;
+  created_at: Date;
+};
+
+type TillRow = {
+  id: string;
+  name: string;
+  code: string;
+  branch_name: string;
+  product: string;
+  active: boolean;
+  hardware_hex: string | null;
+  session_token: string | null;
+  paired_at: Date | null;
+  last_seen_at: Date | null;
+  subscription_expires_at: Date | null;
+};
+
+@Injectable()
+export class ConsoleService {
   constructor(
+    private readonly db: DbService,
     private readonly setup: SetupService,
     private readonly email: EmailService,
   ) {}
 
-  async onModuleInit() {
-    await mkdir(this.dir, { recursive: true });
-    this.groups = await this.readJson(this.groupsFile, SEED_GROUPS);
-    this.accounts = await this.readJson(this.accountsFile, SEED_ACCOUNTS);
-    this.tills = (await this.readJson(this.tillsFile, SEED_TILLS)).map((row) => ({
-      ...row,
-      product: normalizeTillProduct(row.product),
-      sessionToken: row.sessionToken ?? null,
-      subscriptionExpiresAt: row.subscriptionExpiresAt ?? null,
-    }));
-    if (!this.tills.some((row) => row.id === DEMO_TILL.id || row.code === DEMO_TILL.code)) {
-      this.tills.unshift({ ...DEMO_TILL });
-    }
-    this.sessions = await this.readJson(this.sessionsFile, []);
-    this.resets = await this.readJson(this.resetsFile, []);
-    this.notices = await this.readJson(this.noticesFile, []);
-    await this.persist();
-  }
-
-  private async readJson<T>(file: string, fallback: T): Promise<T> {
-    try {
-      const raw = await readFile(file, "utf8");
-      const parsed = JSON.parse(raw) as T;
-      return parsed ?? fallback;
-    } catch {
-      return structuredClone(fallback);
-    }
-  }
-
-  private async persist() {
-    await mkdir(this.dir, { recursive: true });
-    await writeFile(this.groupsFile, JSON.stringify(this.groups, null, 2), "utf8");
-    await writeFile(this.accountsFile, JSON.stringify(this.accounts, null, 2), "utf8");
-    await writeFile(this.tillsFile, JSON.stringify(this.tills, null, 2), "utf8");
-    await writeFile(this.sessionsFile, JSON.stringify(this.sessions, null, 2), "utf8");
-    await writeFile(this.resetsFile, JSON.stringify(this.resets, null, 2), "utf8");
-    await writeFile(this.noticesFile, JSON.stringify(this.notices, null, 2), "utf8");
-  }
-
-  private async pushNotice(
-    input: Omit<HqNotice, "id" | "createdAt" | "readAt"> & { derived?: boolean },
-  ) {
-    if (this.notices.some((row) => row.key === input.key && !row.readAt)) return;
-    this.notices.unshift({
-      id: `n-${generateSessionToken().slice(0, 16)}`,
-      createdAt: new Date().toISOString(),
-      readAt: null,
-      derived: Boolean(input.derived),
-      ...input,
-    });
-    this.notices = this.notices.slice(0, 100);
-    await this.persist();
-  }
-
-  private ensureDerived(
-    key: string,
-    input: Pick<HqNotice, "type" | "title" | "body" | "href">,
-  ) {
-    if (this.notices.some((row) => row.key === key)) return false;
-    this.notices.unshift({
-      id: `n-${generateSessionToken().slice(0, 16)}`,
-      key,
-      derived: true,
-      createdAt: new Date().toISOString(),
-      readAt: null,
-      ...input,
-    });
-    this.notices = this.notices.slice(0, 100);
-    return true;
-  }
-
-  private async syncDerivedNotices() {
-    const live = new Set<string>();
-    const fortnight = 14 * 24 * 60 * 60 * 1000;
-    const offlineMs = 2 * 60 * 1000;
-    let changed = false;
-
-    for (const till of this.tills) {
-      if (!till.active) continue;
-      if (till.subscriptionExpiresAt && isSubscriptionExpired(till.subscriptionExpiresAt)) {
-        const key = `till.expired:${till.id}:${till.subscriptionExpiresAt}`;
-        live.add(key);
-        changed =
-          this.ensureDerived(key, {
-            type: "till.expired",
-            title: `${till.name} subscription ended`,
-            body: `Renew ${till.name} at ${till.branchName || "HQ"} to keep the till licensed.`,
-            href: "/setup/others/till",
-          }) || changed;
-      } else if (till.subscriptionExpiresAt) {
-        const at = Date.parse(till.subscriptionExpiresAt);
-        if (Number.isFinite(at) && at > Date.now() && at - Date.now() <= fortnight) {
-          const key = `till.expiring:${till.id}:${till.subscriptionExpiresAt}`;
-          live.add(key);
-          const days = Math.max(1, Math.ceil((at - Date.now()) / (24 * 60 * 60 * 1000)));
-          changed =
-            this.ensureDerived(key, {
-              type: "till.expiring",
-              title: `${till.name} expires in ${days} day${days === 1 ? "" : "s"}`,
-              body: `Renew the subscription in Setup → Till before it locks the device.`,
-              href: "/setup/others/till",
-            }) || changed;
-        }
-      }
-      if (till.hardwareHex && till.lastSeenAt) {
-        const last = Date.parse(till.lastSeenAt);
-        if (Number.isFinite(last) && Date.now() - last >= offlineMs) {
-          const key = `till.offline:${till.id}`;
-          live.add(key);
-          changed =
-            this.ensureDerived(key, {
-              type: "till.offline",
-              title: `${till.name} is offline`,
-              body: `No heartbeat from ${till.branchName || till.name} for over two minutes.`,
-              href: "/setup/others/till",
-            }) || changed;
-        }
-      }
-    }
-
-    const next = this.notices.filter((row) => {
-      if (!row.derived || row.readAt) return true;
-      return live.has(row.key);
-    });
-    if (next.length !== this.notices.length) {
-      this.notices = next;
-      changed = true;
-    }
-    if (changed) await this.persist();
-  }
-
-  async listNotifications() {
-    await this.syncDerivedNotices();
+  private mapGroup(row: {
+    id: string;
+    name: string;
+    departments: unknown;
+    privileges: unknown;
+  }): ConsoleGroup {
     return {
-      unread: this.notices.filter((row) => !row.readAt).length,
-      items: this.notices,
+      id: row.id,
+      name: row.name,
+      departments: (row.departments ?? []) as Array<DepartmentName | "*">,
+      privileges: (row.privileges ?? []) as string[],
     };
   }
 
-  async markNoticeRead(id: string) {
-    const row = this.notices.find((item) => item.id === id);
-    if (!row) throw new NotFoundException("Notification not found");
-    if (!row.readAt) {
-      row.readAt = new Date().toISOString();
-      await this.persist();
+  private mapAccount(row: AccountRow): ConsoleAccount {
+    return {
+      id: row.id,
+      name: row.name,
+      email: row.email,
+      username: row.username,
+      password: row.password_hash,
+      groupId: row.group_id,
+      active: row.active,
+      googleId: row.google_id,
+      authProvider:
+        row.auth_provider === "google" || row.auth_provider === "both"
+          ? row.auth_provider
+          : "password",
+    };
+  }
+
+  private mapNotice(row: NoticeRow): HqNotice {
+    return {
+      id: row.id,
+      key: row.key ?? "",
+      type: row.type,
+      title: row.title,
+      body: row.body,
+      href: row.href,
+      derived: row.derived,
+      createdAt: isoOrNull(row.created_at)!,
+      readAt: isoOrNull(row.read_at),
+    };
+  }
+
+  private mapTill(row: TillRow): HqTill {
+    return {
+      id: row.id,
+      name: row.name,
+      code: row.code,
+      branchName: row.branch_name,
+      product: normalizeTillProduct(row.product),
+      active: row.active,
+      hardwareHex: row.hardware_hex,
+      sessionToken: row.session_token,
+      pairedAt: isoOrNull(row.paired_at),
+      lastSeenAt: isoOrNull(row.last_seen_at),
+      subscriptionExpiresAt: isoOrNull(row.subscription_expires_at),
+    };
+  }
+
+  // ---------- groups ----------
+
+  async listGroups(): Promise<ConsoleGroup[]> {
+    const result = await this.db.query<GroupRow>(
+      `select id, name, departments, privileges from hq_groups order by created_at, id`,
+    );
+    return result.rows.map((row) => this.mapGroup(row));
+  }
+
+  private async findGroup(id: string): Promise<ConsoleGroup | undefined> {
+    const result = await this.db.query<GroupRow>(
+      `select id, name, departments, privileges from hq_groups where id = $1`,
+      [id],
+    );
+    return result.rows[0] ? this.mapGroup(result.rows[0]) : undefined;
+  }
+
+  async saveGroup(group: ConsoleGroup) {
+    const name = group.name?.trim();
+    if (!name) throw new BadRequestException("Group name is required");
+    const next: ConsoleGroup = {
+      id: group.id || `g-${Date.now()}`,
+      name,
+      departments: group.departments?.length ? group.departments : [],
+      privileges: group.privileges ?? [],
+    };
+    await this.db.query(
+      `insert into hq_groups (id, name, departments, privileges)
+       values ($1, $2, $3::jsonb, $4::jsonb)
+       on conflict (id) do update
+       set name = excluded.name,
+           departments = excluded.departments,
+           privileges = excluded.privileges`,
+      [
+        next.id,
+        next.name,
+        JSON.stringify(next.departments),
+        JSON.stringify(next.privileges),
+      ],
+    );
+    return next;
+  }
+
+  async deleteGroup(id: string) {
+    const inUse = await this.db.query(
+      `select 1 from hq_accounts where group_id = $1 limit 1`,
+      [id],
+    );
+    if (inUse.rowCount) {
+      throw new BadRequestException("Reassign accounts before deleting this group");
     }
-    return row;
+    const result = await this.db.query(`delete from hq_groups where id = $1`, [id]);
+    if (!result.rowCount) throw new NotFoundException("Group not found");
+    return { ok: true };
   }
 
-  async markAllNoticesRead() {
-    const now = new Date().toISOString();
-    let changed = false;
-    for (const row of this.notices) {
-      if (!row.readAt) {
-        row.readAt = now;
-        changed = true;
-      }
-    }
-    if (changed) await this.persist();
-    return { ok: true as const };
+  // ---------- accounts ----------
+
+  private static ACCOUNT_COLUMNS =
+    "id, name, email, username, password_hash, group_id, active, google_id, auth_provider";
+
+  private async findAccount(where: string, params: unknown[]): Promise<ConsoleAccount | undefined> {
+    const result = await this.db.query<AccountRow>(
+      `select ${ConsoleService.ACCOUNT_COLUMNS} from hq_accounts where ${where} limit 1`,
+      params,
+    );
+    return result.rows[0] ? this.mapAccount(result.rows[0]) : undefined;
   }
 
-  async notifySale(sale: { ticketId: string; cashierName?: string; totalMinor?: number }) {
-    const naira = ((sale.totalMinor ?? 0) / 100).toLocaleString("en-NG", {
-      style: "currency",
-      currency: "NGN",
-    });
-    await this.pushNotice({
-      key: `sale:${sale.ticketId}`,
-      type: "sale.recorded",
-      title: "Sale recorded",
-      body: `${sale.cashierName || "Till"} closed ticket ${sale.ticketId} for ${naira}.`,
-      href: "/reports/sales/invoice/list",
-    });
-  }
-
-  private groupName(groupId: string) {
-    return this.groups.find((row) => row.id === groupId)?.name ?? "HQ User";
-  }
-
-  private async sendNewAccountEmail(
-    account: ConsoleAccount,
-    input: {
-      invitedBy?: string;
-      password?: string;
-    } = {},
-  ) {
-    const groupName = this.groupName(account.groupId);
-    const company = this.setup.getCompany();
-    await this.email.sendAccountWelcome({
-      to: account.email,
-      name: account.name,
-      username: account.username,
-      groupName,
-      companyName: company.name,
-      loginUrl: this.email.loginUrl(),
-      password: input.password,
-      invitedBy: input.invitedBy,
-      authProvider: account.authProvider,
-    });
-  }
-
-  private async sendCompanyOwnerEmail(
-    account: ConsoleAccount,
-    companyName: string,
-  ) {
-    await this.email.sendCompanyWelcome({
-      to: account.email,
-      name: account.name,
-      username: account.username,
-      companyName,
-      loginUrl: this.email.loginUrl(),
-      authProvider: account.authProvider,
-    });
-  }
-
-  listGroups() {
-    return this.groups;
-  }
-
-  listAccounts() {
-    return this.accounts.map(publicAccount);
+  async listAccounts() {
+    const result = await this.db.query<AccountRow>(
+      `select ${ConsoleService.ACCOUNT_COLUMNS} from hq_accounts order by created_at, id`,
+    );
+    return result.rows.map((row) => publicAccount(this.mapAccount(row)));
   }
 
   async login(emailOrUsername: string, password: string) {
     const key = emailOrUsername.trim().toLowerCase();
-    const account = this.accounts.find(
-      (row) =>
-        row.active &&
-        (row.email.toLowerCase() === key || row.username.toLowerCase() === key) &&
-        row.password === password,
+    const account = await this.findAccount(
+      "active and (lower(email) = $1 or lower(username) = $1)",
+      [key],
     );
-    if (!account) throw new UnauthorizedException("Invalid email or password");
+    if (!account || !verifyPassword(password, account.password)) {
+      throw new UnauthorizedException("Invalid email or password");
+    }
+    if (!isHashedPassword(account.password)) {
+      await this.setPassword(account.id, password);
+    }
     return this.issueSession(account);
   }
 
-  private sessionPayload(token: string) {
-    const row = this.sessions.find((item) => item.token === token);
+  private async setPassword(accountId: string, password: string) {
+    await this.db.query(`update hq_accounts set password_hash = $2 where id = $1`, [
+      accountId,
+      hashPassword(password),
+    ]);
+  }
+
+  private async sessionPayload(token: string) {
+    const result = await this.db.query<
+      AccountRow & { group_name: string; departments: unknown; privileges: unknown }
+    >(
+      `select a.id, a.name, a.email, a.username, a.password_hash, a.group_id, a.active,
+              a.google_id, a.auth_provider,
+              g.name as group_name, g.departments, g.privileges
+       from hq_sessions s
+       join hq_accounts a on a.id = s.account_id and a.active
+       join hq_groups g on g.id = a.group_id
+       where s.token = $1
+       limit 1`,
+      [token],
+    );
+    const row = result.rows[0];
     if (!row) throw new UnauthorizedException("Sign in again");
-    const account = this.accounts.find((item) => item.id === row.accountId && item.active);
-    if (!account) throw new UnauthorizedException("Sign in again");
-    const group = this.groups.find((item) => item.id === account.groupId);
-    if (!group) throw new UnauthorizedException("Account has no group");
     return {
       token,
       user: {
-        ...publicAccount(account),
-        groupName: group.name,
-        departments: group.departments,
-        privileges: group.privileges,
+        ...publicAccount(this.mapAccount(row)),
+        groupName: row.group_name,
+        departments: row.departments as Array<DepartmentName | "*">,
+        privileges: row.privileges as string[],
       },
     };
   }
@@ -322,9 +288,28 @@ export class ConsoleService implements OnModuleInit {
   }
 
   async logout(token: string) {
-    this.sessions = this.sessions.filter((row) => row.token !== token.trim());
-    await this.persist();
+    await this.db.query(`delete from hq_sessions where token = $1`, [token.trim()]);
     return { ok: true };
+  }
+
+  async issueSession(account: ConsoleAccount) {
+    const group = await this.findGroup(account.groupId);
+    if (!group) throw new UnauthorizedException("Account has no group");
+    const token = generateSessionToken();
+    await this.db.query(`delete from hq_sessions where account_id = $1`, [account.id]);
+    await this.db.query(`insert into hq_sessions (token, account_id) values ($1, $2)`, [
+      token,
+      account.id,
+    ]);
+    return {
+      token,
+      user: {
+        ...publicAccount(account),
+        groupName: group.name,
+        departments: group.departments,
+        privileges: group.privileges,
+      },
+    };
   }
 
   async register(input: {
@@ -338,10 +323,11 @@ export class ConsoleService implements OnModuleInit {
     if (password.length < 6) {
       throw new BadRequestException("Password must be at least 6 characters");
     }
+    const groups = await this.listGroups();
     const group =
-      this.groups.find((row) => row.id === "g-sales") ??
-      this.groups.find((row) => !row.privileges.includes("*")) ??
-      this.groups[0];
+      groups.find((row) => row.id === "g-sales") ??
+      groups.find((row) => !row.privileges.includes("*")) ??
+      groups[0];
     if (!group) throw new BadRequestException("No group available for new accounts");
     await this.saveAccount(
       {
@@ -390,10 +376,11 @@ export class ConsoleService implements OnModuleInit {
       throw new BadRequestException("Password must be at least 6 characters");
     }
 
+    const groups = await this.listGroups();
     const adminGroup =
-      this.groups.find((row) => row.id === "g-admin") ??
-      this.groups.find((row) => row.privileges.includes("*")) ??
-      this.groups[0];
+      groups.find((row) => row.id === "g-admin") ??
+      groups.find((row) => row.privileges.includes("*")) ??
+      groups[0];
     if (!adminGroup) throw new BadRequestException("Administrator group is missing");
 
     await this.saveAccount(
@@ -430,8 +417,9 @@ export class ConsoleService implements OnModuleInit {
       href: "/setup/others/company",
     });
 
-    const owner = this.accounts.find(
-      (row) => row.email === email && row.username === username,
+    const owner = await this.findAccount(
+      "lower(email) = $1 and lower(username) = $2",
+      [email.toLowerCase(), username.toLowerCase()],
     );
     if (owner) {
       await this.sendCompanyOwnerEmail(owner, company.name);
@@ -451,10 +439,8 @@ export class ConsoleService implements OnModuleInit {
 
     if (intent === "login") {
       let account =
-        this.accounts.find((row) => row.active && row.googleId === profile.sub) ??
-        this.accounts.find(
-          (row) => row.active && row.email.toLowerCase() === profile.email.toLowerCase(),
-        );
+        (await this.findAccount("active and google_id = $1", [profile.sub])) ??
+        (await this.findAccount("active and lower(email) = $1", [profile.email]));
       if (!account) {
         throw new UnauthorizedException(
           "No HQ account for this Google email. Ask an admin for access, or Sign up as a company.",
@@ -463,8 +449,13 @@ export class ConsoleService implements OnModuleInit {
       if (!account.googleId) {
         account.googleId = profile.sub;
         account.authProvider =
-          account.authProvider === "password" || !account.authProvider ? "both" : account.authProvider;
-        await this.persist();
+          account.authProvider === "password" || !account.authProvider
+            ? "both"
+            : account.authProvider;
+        await this.db.query(
+          `update hq_accounts set google_id = $2, auth_provider = $3 where id = $1`,
+          [account.id, profile.sub, account.authProvider],
+        );
       }
       return { ...(await this.issueSession(account)), linked: true as const };
     }
@@ -474,26 +465,27 @@ export class ConsoleService implements OnModuleInit {
       throw new BadRequestException("Company name is required for Google signup");
     }
 
-    const existing = this.accounts.find(
-      (row) =>
-        row.email.toLowerCase() === profile.email.toLowerCase() || row.googleId === profile.sub,
-    );
+    const existing =
+      (await this.findAccount("lower(email) = $1", [profile.email])) ??
+      (await this.findAccount("google_id = $1", [profile.sub]));
     if (existing) {
       throw new ConflictException(
         "This Google account already has HQ access. Use Login instead.",
       );
     }
 
+    const groups = await this.listGroups();
     const adminGroup =
-      this.groups.find((row) => row.id === "g-admin") ??
-      this.groups.find((row) => row.privileges.includes("*")) ??
-      this.groups[0];
+      groups.find((row) => row.id === "g-admin") ??
+      groups.find((row) => row.privileges.includes("*")) ??
+      groups[0];
     if (!adminGroup) throw new BadRequestException("Administrator group is missing");
 
-    const usernameBase = profile.email.split("@")[0].replace(/[^a-z0-9]+/gi, "").toLowerCase() || "owner";
+    const usernameBase =
+      profile.email.split("@")[0].replace(/[^a-z0-9]+/gi, "").toLowerCase() || "owner";
     let username = usernameBase.slice(0, 24);
     let suffix = 0;
-    while (this.accounts.some((row) => row.username === username)) {
+    while (await this.findAccount("lower(username) = $1", [username])) {
       suffix += 1;
       username = `${usernameBase.slice(0, 20)}${suffix}`;
     }
@@ -533,7 +525,7 @@ export class ConsoleService implements OnModuleInit {
       href: "/setup/others/company",
     });
 
-    const account = this.accounts.find((row) => row.googleId === profile.sub);
+    const account = await this.findAccount("google_id = $1", [profile.sub]);
     if (!account) throw new BadRequestException("Could not finish Google signup");
     await this.sendCompanyOwnerEmail(account, company.name);
     return {
@@ -595,40 +587,22 @@ export class ConsoleService implements OnModuleInit {
     };
   }
 
-  private async issueSession(account: ConsoleAccount) {
-    const group = this.groups.find((row) => row.id === account.groupId);
-    if (!group) throw new UnauthorizedException("Account has no group");
-    const token = generateSessionToken();
-    this.sessions = this.sessions.filter((row) => row.accountId !== account.id);
-    this.sessions.push({ token, accountId: account.id });
-    await this.persist();
-    return {
-      token,
-      user: {
-        ...publicAccount(account),
-        groupName: group.name,
-        departments: group.departments,
-        privileges: group.privileges,
-      },
-    };
-  }
-
   async forgotPassword(emailOrUsername: string) {
     const key = emailOrUsername.trim().toLowerCase();
-    const account = this.accounts.find(
-      (row) =>
-        row.active &&
-        (row.email.toLowerCase() === key || row.username.toLowerCase() === key),
+    const account = await this.findAccount(
+      "active and (lower(email) = $1 or lower(username) = $1)",
+      [key],
     );
     if (!account) return { ok: true as const };
-    this.resets = this.resets.filter((row) => row.accountId !== account.id);
+    await this.db.query(`delete from hq_password_resets where account_id = $1`, [
+      account.id,
+    ]);
     const token = generateSessionToken();
-    this.resets.push({
-      token,
-      accountId: account.id,
-      expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-    });
-    await this.persist();
+    await this.db.query(
+      `insert into hq_password_resets (token, account_id, expires_at)
+       values ($1, $2, now() + interval '1 hour')`,
+      [token, account.id],
+    );
     const resetUrl = `${this.email.hqAppUrl()}/reset-password?token=${encodeURIComponent(token)}`;
     const mail = await this.email.sendPasswordReset({
       to: account.email,
@@ -646,16 +620,18 @@ export class ConsoleService implements OnModuleInit {
     if (next.length < 6) {
       throw new BadRequestException("Password must be at least 6 characters");
     }
-    const row = this.resets.find(
-      (item) => item.token === token.trim() && Date.parse(item.expiresAt) > Date.now(),
+    const result = await this.db.query<{ id: string; name: string; email: string }>(
+      `select a.id, a.name, a.email
+       from hq_password_resets r
+       join hq_accounts a on a.id = r.account_id
+       where r.token = $1 and r.expires_at > now()`,
+      [token.trim()],
     );
-    if (!row) throw new BadRequestException("Reset link is invalid or has expired");
-    const account = this.accounts.find((item) => item.id === row.accountId);
+    const account = result.rows[0];
     if (!account) throw new BadRequestException("Reset link is invalid or has expired");
-    account.password = next;
-    this.resets = this.resets.filter((item) => item.token !== row.token);
-    this.sessions = this.sessions.filter((item) => item.accountId !== account.id);
-    await this.persist();
+    await this.setPassword(account.id, next);
+    await this.db.query(`delete from hq_password_resets where token = $1`, [token.trim()]);
+    await this.db.query(`delete from hq_sessions where account_id = $1`, [account.id]);
     await this.pushNotice({
       key: `account.reset:${account.id}:${Date.now()}`,
       type: "account.reset",
@@ -667,45 +643,17 @@ export class ConsoleService implements OnModuleInit {
   }
 
   async changePassword(token: string, current: string, nextPassword: string) {
-    const { user } = this.sessionPayload(token);
-    const account = this.accounts.find((row) => row.id === user.id);
-    if (!account || account.password !== current) {
+    const { user } = await this.sessionPayload(token);
+    const account = await this.findAccount("id = $1", [user.id]);
+    if (!account || !verifyPassword(current, account.password)) {
       throw new UnauthorizedException("Current password is wrong");
     }
     const next = nextPassword.trim();
     if (next.length < 6) {
       throw new BadRequestException("Password must be at least 6 characters");
     }
-    account.password = next;
-    await this.persist();
+    await this.setPassword(account.id, next);
     return { ok: true as const };
-  }
-
-  async saveGroup(group: ConsoleGroup) {
-    const name = group.name?.trim();
-    if (!name) throw new BadRequestException("Group name is required");
-    const next: ConsoleGroup = {
-      id: group.id || `g-${Date.now()}`,
-      name,
-      departments: group.departments?.length ? group.departments : [],
-      privileges: group.privileges ?? [],
-    };
-    const index = this.groups.findIndex((row) => row.id === next.id);
-    if (index >= 0) this.groups[index] = next;
-    else this.groups.push(next);
-    await this.persist();
-    return next;
-  }
-
-  async deleteGroup(id: string) {
-    if (this.accounts.some((row) => row.groupId === id)) {
-      throw new BadRequestException("Reassign accounts before deleting this group");
-    }
-    const exists = this.groups.some((row) => row.id === id);
-    if (!exists) throw new NotFoundException("Group not found");
-    this.groups = this.groups.filter((row) => row.id !== id);
-    await this.persist();
-    return { ok: true };
   }
 
   async saveAccount(
@@ -722,37 +670,59 @@ export class ConsoleService implements OnModuleInit {
     if (!name || !email || !username) {
       throw new BadRequestException("Name, email, and username are required");
     }
-    if (!this.groups.some((row) => row.id === input.groupId)) {
+    if (!(await this.findGroup(String(input.groupId)))) {
       throw new BadRequestException("Select a group");
     }
-    const existing = input.id ? this.accounts.find((row) => row.id === input.id) : undefined;
-    const duplicate = this.accounts.find(
-      (row) =>
-        row.id !== existing?.id &&
-        (row.email.toLowerCase() === email || row.username.toLowerCase() === username),
+    const existing = input.id
+      ? await this.findAccount("id = $1", [input.id])
+      : undefined;
+    const duplicate = await this.findAccount(
+      "($1::text is null or id <> $1) and (lower(email) = $2 or lower(username) = $3)",
+      [existing?.id ?? null, email, username],
     );
     if (duplicate) throw new BadRequestException("Email or username already in use");
+
     const plainPassword = input.password?.trim();
+    const passwordHash = existing
+      ? plainPassword
+        ? hashPassword(plainPassword)
+        : existing.password
+      : hashPassword(plainPassword || "demo");
+    const id = existing?.id ?? `a-${Date.now()}`;
+    const authProvider =
+      input.authProvider ??
+      existing?.authProvider ??
+      (input.googleId ? "google" : "password");
+    const googleId =
+      input.googleId !== undefined ? input.googleId : existing?.googleId ?? null;
+
+    await this.db.query(
+      `insert into hq_accounts (id, name, email, username, password_hash, group_id, active, google_id, auth_provider)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       on conflict (id) do update
+       set name = excluded.name,
+           email = excluded.email,
+           username = excluded.username,
+           password_hash = excluded.password_hash,
+           group_id = excluded.group_id,
+           active = excluded.active,
+           google_id = excluded.google_id,
+           auth_provider = excluded.auth_provider`,
+      [id, name, email, username, passwordHash, input.groupId, input.active ?? existing?.active ?? true, googleId, authProvider],
+    );
+
     const next: ConsoleAccount = {
-      id: existing?.id ?? `a-${Date.now()}`,
+      id,
       name,
       email,
       username,
-      password: plainPassword || existing?.password || "demo",
-      groupId: input.groupId!,
+      password: passwordHash,
+      groupId: String(input.groupId),
       active: input.active ?? existing?.active ?? true,
-      googleId: input.googleId !== undefined ? input.googleId : existing?.googleId ?? null,
-      authProvider:
-        input.authProvider ??
-        existing?.authProvider ??
-        (input.googleId ? "google" : "password"),
+      googleId,
+      authProvider: authProvider === "google" || authProvider === "both" ? authProvider : "password",
     };
-    if (existing) {
-      this.accounts = this.accounts.map((row) => (row.id === existing.id ? next : row));
-    } else {
-      this.accounts.push(next);
-    }
-    await this.persist();
+
     if (!existing) {
       await this.pushNotice({
         key: `account.created:${next.id}`,
@@ -772,32 +742,312 @@ export class ConsoleService implements OnModuleInit {
   }
 
   async deleteAccount(id: string) {
-    const account = this.accounts.find((row) => row.id === id);
-    if (!account) throw new NotFoundException("Account not found");
-    const group = this.groups.find((row) => row.id === account.groupId);
+    const admins = await this.db.query<{ count: string }>(
+      `select count(*)::text as count
+       from hq_accounts a
+       join hq_groups g on g.id = a.group_id
+       where g.privileges @> '["*"]'::jsonb or g.departments @> '["*"]'::jsonb`,
+    );
+    const target = await this.findAccount("id = $1", [id]);
+    if (!target) throw new NotFoundException("Account not found");
+    const group = await this.findGroup(target.groupId);
     const isAdmin =
       group?.privileges.includes("*") || group?.departments.includes("*");
-    const adminCount = this.accounts.filter((row) => {
-      const g = this.groups.find((item) => item.id === row.groupId);
-      return g?.privileges.includes("*") || g?.departments.includes("*");
-    }).length;
-    if (isAdmin && adminCount <= 1) {
+    if (isAdmin && Number(admins.rows[0]?.count ?? 0) <= 1) {
       throw new BadRequestException("Keep at least one administrator account");
     }
-    this.accounts = this.accounts.filter((row) => row.id !== id);
-    await this.persist();
+    await this.db.query(`delete from hq_accounts where id = $1`, [id]);
     return { ok: true };
   }
 
+  // ---------- notices ----------
+
+  private async pushNotice(
+    input: Omit<HqNotice, "id" | "createdAt" | "readAt"> & { derived?: boolean },
+  ) {
+    if (
+      input.key &&
+      (
+        await this.db.query(
+          `select 1 from hq_notices where key = $1 and read_at is null limit 1`,
+          [input.key],
+        )
+      ).rowCount
+    ) {
+      return;
+    }
+    await this.db.query(
+      `insert into hq_notices (id, key, type, title, body, href, derived)
+       values ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        `n-${generateSessionToken().slice(0, 16)}`,
+        input.key ?? null,
+        input.type,
+        input.title,
+        input.body,
+        input.href,
+        Boolean(input.derived),
+      ],
+    );
+    await this.db.query(
+      `delete from hq_notices where id in (
+         select id from hq_notices order by created_at desc offset 100
+       )`,
+    );
+  }
+
+  private async ensureDerived(
+    key: string,
+    input: Pick<HqNotice, "type" | "title" | "body" | "href">,
+  ): Promise<boolean> {
+    const exists = await this.db.query(
+      `select 1 from hq_notices where key = $1 limit 1`,
+      [key],
+    );
+    if (exists.rowCount) return false;
+    await this.db.query(
+      `insert into hq_notices (id, key, type, title, body, href, derived)
+       values ($1, $2, $3, $4, $5, $6, true)`,
+      [
+        `n-${generateSessionToken().slice(0, 16)}`,
+        key,
+        input.type,
+        input.title,
+        input.body,
+        input.href,
+      ],
+    );
+    return true;
+  }
+
+  private async syncDerivedNotices() {
+    const tills = await this.listRawTills();
+    const live = new Set<string>();
+    const fortnight = 14 * 24 * 60 * 60 * 1000;
+    const offlineMs = 2 * 60 * 1000;
+
+    for (const till of tills) {
+      if (!till.active) continue;
+      if (till.subscriptionExpiresAt && isSubscriptionExpired(till.subscriptionExpiresAt)) {
+        const key = `till.expired:${till.id}:${till.subscriptionExpiresAt}`;
+        live.add(key);
+        await this.ensureDerived(key, {
+          type: "till.expired",
+          title: `${till.name} subscription ended`,
+          body: `Renew ${till.name} at ${till.branchName || "HQ"} to keep the till licensed.`,
+          href: "/setup/others/till",
+        });
+      } else if (till.subscriptionExpiresAt) {
+        const at = Date.parse(till.subscriptionExpiresAt);
+        if (Number.isFinite(at) && at > Date.now() && at - Date.now() <= fortnight) {
+          const key = `till.expiring:${till.id}:${till.subscriptionExpiresAt}`;
+          live.add(key);
+          const days = Math.max(1, Math.ceil((at - Date.now()) / (24 * 60 * 60 * 1000)));
+          await this.ensureDerived(key, {
+            type: "till.expiring",
+            title: `${till.name} expires in ${days} day${days === 1 ? "" : "s"}`,
+            body: `Renew the subscription in Setup → Till before it locks the device.`,
+            href: "/setup/others/till",
+          });
+        }
+      }
+      if (till.hardwareHex && till.lastSeenAt) {
+        const last = Date.parse(till.lastSeenAt);
+        if (Number.isFinite(last) && Date.now() - last >= offlineMs) {
+          const key = `till.offline:${till.id}`;
+          live.add(key);
+          await this.ensureDerived(key, {
+            type: "till.offline",
+            title: `${till.name} is offline`,
+            body: `No heartbeat from ${till.branchName || till.name} for over two minutes.`,
+            href: "/setup/others/till",
+          });
+        }
+      }
+    }
+
+    const stale = await this.db.query<{ id: string; key: string | null }>(
+      `select id, key from hq_notices where derived and read_at is null`,
+    );
+    for (const row of stale.rows) {
+      if (!live.has(row.key ?? "")) {
+        await this.db.query(`delete from hq_notices where id = $1`, [row.id]);
+      }
+    }
+  }
+
+  async listNotifications() {
+    await this.syncDerivedNotices();
+    const result = await this.db.query<NoticeRow>(
+      `select id, key, type, title, body, href, derived, read_at, created_at
+       from hq_notices order by created_at desc`,
+    );
+    const items = result.rows.map((row) => this.mapNotice(row));
+    return {
+      unread: items.filter((row) => !row.readAt).length,
+      items,
+    };
+  }
+
+  async markNoticeRead(id: string) {
+    const existing = await this.db.query<NoticeRow>(
+      `select id, key, type, title, body, href, derived, read_at, created_at from hq_notices where id = $1`,
+      [id],
+    );
+    const row = existing.rows[0];
+    if (!row) throw new NotFoundException("Notification not found");
+    if (!row.read_at) {
+      await this.db.query(`update hq_notices set read_at = now() where id = $1`, [id]);
+      row.read_at = new Date();
+    }
+    return this.mapNotice(row);
+  }
+
+  async markAllNoticesRead() {
+    await this.db.query(`update hq_notices set read_at = now() where read_at is null`);
+    return { ok: true as const };
+  }
+
+  async notifySale(sale: { ticketId: string; cashierName?: string; totalMinor?: number }) {
+    const naira = ((sale.totalMinor ?? 0) / 100).toLocaleString("en-NG", {
+      style: "currency",
+      currency: "NGN",
+    });
+    await this.pushNotice({
+      key: `sale:${sale.ticketId}`,
+      type: "sale.recorded",
+      title: "Sale recorded",
+      body: `${sale.cashierName || "Till"} closed ticket ${sale.ticketId} for ${naira}.`,
+      href: "/reports/sales/invoice/list",
+    });
+  }
+
+  // ---------- emails ----------
+
+  private groupName(groupId: string, groups: ConsoleGroup[]) {
+    return groups.find((row) => row.id === groupId)?.name ?? "HQ User";
+  }
+
+  private async sendNewAccountEmail(
+    account: ConsoleAccount,
+    input: {
+      invitedBy?: string;
+      password?: string;
+    } = {},
+  ) {
+    const groupName = this.groupName(account.groupId, await this.listGroups());
+    const company = this.setup.getCompany();
+    await this.email.sendAccountWelcome({
+      to: account.email,
+      name: account.name,
+      username: account.username,
+      groupName,
+      companyName: company.name,
+      loginUrl: this.email.loginUrl(),
+      password: input.password,
+      invitedBy: input.invitedBy,
+      authProvider: account.authProvider,
+    });
+  }
+
+  private async sendCompanyOwnerEmail(
+    account: ConsoleAccount,
+    companyName: string,
+  ) {
+    await this.email.sendCompanyWelcome({
+      to: account.email,
+      name: account.name,
+      username: account.username,
+      companyName,
+      loginUrl: this.email.loginUrl(),
+      authProvider: account.authProvider,
+    });
+  }
+
+  // ---------- tills ----------
+
+  private async listRawTills(): Promise<HqTill[]> {
+    const result = await this.db.query(
+      `select id, name, code, branch_name, product, active, hardware_hex, session_token,
+              paired_at, last_seen_at, subscription_expires_at
+       from hq_tills order by created_at, id`,
+    );
+    return result.rows.map((row) =>
+      this.mapTill(row as TillRow),
+    );
+  }
+
   listTills() {
-    return this.tills.map(({ sessionToken: _token, ...row }) => ({
-      ...row,
-      product: normalizeTillProduct(row.product),
-      online: Boolean(
-        row.lastSeenAt && Date.now() - new Date(row.lastSeenAt).getTime() < 12_000,
-      ),
-      expired: isSubscriptionExpired(row.subscriptionExpiresAt),
-    }));
+    return (async () => {
+      const tills = await this.listRawTills();
+      return tills.map(({ sessionToken: _token, ...row }) => ({
+        ...row,
+        online: Boolean(
+          row.lastSeenAt && Date.now() - new Date(row.lastSeenAt).getTime() < 12_000,
+        ),
+        expired: isSubscriptionExpired(row.subscriptionExpiresAt),
+      }));
+    })();
+  }
+
+  private async getRawTill(id: string): Promise<HqTill | undefined> {
+    const result = await this.db.query(
+      `select id, name, code, branch_name, product, active, hardware_hex, session_token,
+              paired_at, last_seen_at, subscription_expires_at
+       from hq_tills where id = $1 limit 1`,
+      [id],
+    );
+    return result.rows[0]
+      ? this.mapTill(result.rows[0] as TillRow)
+      : undefined;
+  }
+
+  private async getTillByName(name: string): Promise<HqTill | undefined> {
+    const result = await this.db.query(
+      `select id, name, code, branch_name, product, active, hardware_hex, session_token,
+              paired_at, last_seen_at, subscription_expires_at
+       from hq_tills where upper(name) = $1 limit 1`,
+      [name.toUpperCase()],
+    );
+    return result.rows[0]
+      ? this.mapTill(result.rows[0] as TillRow)
+      : undefined;
+  }
+
+  private async getTillByCode(code: string): Promise<HqTill | undefined> {
+    const result = await this.db.query(
+      `select id, name, code, branch_name, product, active, hardware_hex, session_token,
+              paired_at, last_seen_at, subscription_expires_at
+       from hq_tills where code = $1 limit 1`,
+      [code],
+    );
+    return result.rows[0]
+      ? this.mapTill(result.rows[0] as TillRow)
+      : undefined;
+  }
+
+  private async updateTillFields(
+    id: string,
+    fields: Partial<{
+      code: string;
+      branch_name: string;
+      product: string;
+      active: boolean;
+      hardware_hex: string | null;
+      session_token: string | null;
+      paired_at: string | null;
+      last_seen_at: string | null;
+      subscription_expires_at: string | null;
+    }>,
+  ) {
+    const keys = Object.keys(fields);
+    if (!keys.length) return;
+    const sets = keys.map((key, index) => `${key} = $${index + 2}`);
+    const values = keys.map((key) => (fields as Record<string, unknown>)[key]);
+    await this.db.query(`update hq_tills set ${sets.join(", ")} where id = $1`, [
+      id,
+      ...values,
+    ]);
   }
 
   async saveTill(input: {
@@ -809,67 +1059,67 @@ export class ConsoleService implements OnModuleInit {
   }) {
     const name = input.name?.trim().toUpperCase();
     if (!name) throw new BadRequestException("Till name is required");
-    const existing = input.id ? this.tills.find((row) => row.id === input.id) : undefined;
-    const duplicate = this.tills.find(
-      (row) => row.id !== existing?.id && row.name.toUpperCase() === name,
-    );
-    if (duplicate) throw new BadRequestException("That till name is already issued");
-    const next: HqTill = {
-      id: existing?.id ?? `till-${Date.now()}`,
-      name,
-      code: existing?.code ?? generateTillCode(),
-      branchName: input.branchName?.trim() || existing?.branchName || "",
-      product: normalizeTillProduct(input.product ?? existing?.product),
-      active: input.active ?? existing?.active ?? true,
-      hardwareHex: existing?.hardwareHex ?? null,
-      sessionToken: existing?.sessionToken ?? null,
-      pairedAt: existing?.pairedAt ?? null,
-      lastSeenAt: existing?.lastSeenAt ?? null,
-      subscriptionExpiresAt: existing?.subscriptionExpiresAt ?? null,
-    };
-    if (existing) {
-      this.tills = this.tills.map((row) => (row.id === existing.id ? next : row));
-    } else {
-      this.tills.push(next);
+    const existing = input.id ? await this.getRawTill(input.id) : undefined;
+    const duplicate = await this.getTillByName(name);
+    if (duplicate && duplicate.id !== existing?.id) {
+      throw new BadRequestException("That till name is already issued");
     }
-    await this.persist();
+    const id = existing?.id ?? `till-${Date.now()}`;
+    const code = existing?.code ?? generateTillCode();
+    const product = normalizeTillProduct(input.product ?? existing?.product);
+    await this.db.query(
+      `insert into hq_tills (id, name, code, branch_name, product, active)
+       values ($1, $2, $3, $4, $5, $6)
+       on conflict (id) do update
+       set name = excluded.name,
+           branch_name = excluded.branch_name,
+           product = excluded.product,
+           active = excluded.active`,
+      [
+        id,
+        name,
+        code,
+        input.branchName?.trim() || existing?.branchName || "",
+        product,
+        input.active ?? existing?.active ?? true,
+      ],
+    );
     if (!existing) {
       await this.pushNotice({
-        key: `till.issued:${next.id}`,
+        key: `till.issued:${id}`,
         type: "till.issued",
-        title: `${next.name} issued`,
-        body: `Enter the till code on that device at ${next.branchName || "the branch"} to activate ${tillProductLabel(next.product)} for one year.`,
+        title: `${name} issued`,
+        body: `Enter the till code on that device at ${input.branchName?.trim() || "the branch"} to activate ${tillProductLabel(product)} for one year.`,
         href: "/setup/others/till",
       });
     }
-    return next;
+    return (await this.getRawTill(id))!;
   }
 
   async regenerateTillCode(id: string) {
-    const till = this.tills.find((row) => row.id === id);
+    const till = await this.getRawTill(id);
     if (!till) throw new NotFoundException("Till not found");
-    till.code = generateTillCode();
-    till.hardwareHex = null;
-    till.sessionToken = null;
-    till.pairedAt = null;
-    till.lastSeenAt = null;
-    await this.persist();
+    const code = generateTillCode();
+    await this.updateTillFields(id, {
+      code,
+      hardware_hex: null,
+      session_token: null,
+      paired_at: null,
+      last_seen_at: null,
+    });
     await this.pushNotice({
-      key: `till.regenerated:${till.id}:${till.code}`,
+      key: `till.regenerated:${till.id}:${code}`,
       type: "till.regenerated",
       title: `${till.name} code regenerated`,
       body: "The previous code no longer works. Enter the new code on that till.",
       href: "/setup/others/till",
     });
-    return till;
+    return (await this.getRawTill(id))!;
   }
 
   async deleteTill(id: string) {
-    if (!this.tills.some((row) => row.id === id)) {
-      throw new NotFoundException("Till not found");
-    }
-    this.tills = this.tills.filter((row) => row.id !== id);
-    await this.persist();
+    const result = await this.db.query(`delete from hq_tills where id = $1`, [id]);
+    if (!result.rowCount) throw new NotFoundException("Till not found");
     return { ok: true };
   }
 
@@ -880,87 +1130,101 @@ export class ConsoleService implements OnModuleInit {
     }
     const hex = hardwareHex.trim().toUpperCase();
     if (!hex) throw new BadRequestException("This device has no hardware hex");
-    const till = this.tills.find((row) => row.active && row.code === normalized);
-    if (!till) throw new UnauthorizedException("Invalid till code");
-    till.hardwareHex = hex;
-    till.sessionToken = generateSessionToken();
-    till.pairedAt = till.pairedAt ?? new Date().toISOString();
-    till.lastSeenAt = new Date().toISOString();
-    if (isSubscriptionExpired(till.subscriptionExpiresAt)) {
-      till.subscriptionExpiresAt = addOneYear().toISOString();
-    }
-    await this.persist();
+    const till = await this.getTillByCode(normalized);
+    if (!till || !till.active) throw new UnauthorizedException("Invalid till code");
+    const pairedAt = till.pairedAt ?? new Date().toISOString();
+    const subscriptionExpiresAt = isSubscriptionExpired(till.subscriptionExpiresAt)
+      ? addOneYear().toISOString()
+      : till.subscriptionExpiresAt;
+    await this.updateTillFields(till.id, {
+      hardware_hex: hex,
+      session_token: generateSessionToken(),
+      paired_at: pairedAt,
+      last_seen_at: new Date().toISOString(),
+      subscription_expires_at: subscriptionExpiresAt ?? null,
+    });
     await this.pushNotice({
-      key: `till.activated:${till.id}:${till.pairedAt}`,
+      key: `till.activated:${till.id}:${pairedAt}`,
       type: "till.activated",
       title: `${till.name} activated`,
-      body: `The till at ${till.branchName || "the branch"} is licensed until ${new Date(till.subscriptionExpiresAt!).toLocaleDateString("en-NG")}.`,
+      body: `The till at ${till.branchName || "the branch"} is licensed until ${new Date(subscriptionExpiresAt!).toLocaleDateString("en-NG")}.`,
       href: "/setup/others/till",
     });
-    return till;
+    return (await this.getRawTill(till.id))!;
   }
 
   async heartbeatTill(code: string, hardwareHex: string, sessionToken: string) {
-    const till = this.tills.find(
-      (row) => row.active && row.code === normalizeTillCode(code),
-    );
-    if (!till) {
+    const till = await this.getTillByCode(normalizeTillCode(code));
+    if (!till || !till.active) {
       throw new ConflictException(
         "This till is no longer licensed on this device.",
       );
     }
     const hex = hardwareHex.trim().toUpperCase();
     const token = sessionToken.trim();
+    const nowIso = new Date().toISOString();
+
     if (!till.sessionToken && hex && (!till.hardwareHex || till.hardwareHex === hex)) {
-      till.sessionToken = generateSessionToken();
-      till.hardwareHex = hex;
-      till.lastSeenAt = new Date().toISOString();
-      if (!till.subscriptionExpiresAt) {
-        till.subscriptionExpiresAt = addOneYear().toISOString();
-      } else if (isSubscriptionExpired(till.subscriptionExpiresAt)) {
-        await this.persist();
+      if (till.subscriptionExpiresAt && isSubscriptionExpired(till.subscriptionExpiresAt)) {
+        await this.updateTillFields(till.id, {
+          session_token: generateSessionToken(),
+          hardware_hex: hex,
+          last_seen_at: nowIso,
+        });
         throw new ForbiddenException(
           "Till subscription has ended. Enter the till code to renew for another year.",
         );
       }
-      await this.persist();
-      return till;
+      await this.updateTillFields(till.id, {
+        session_token: generateSessionToken(),
+        hardware_hex: hex,
+        last_seen_at: nowIso,
+        subscription_expires_at:
+          till.subscriptionExpiresAt ?? addOneYear().toISOString(),
+      });
+      return (await this.getRawTill(till.id))!;
     }
+
     if (!token || till.sessionToken !== token || (till.hardwareHex && till.hardwareHex !== hex)) {
       throw new ConflictException(
         "This till is in use on another device. You have been signed out.",
       );
     }
-    till.hardwareHex = hex || till.hardwareHex;
-    till.lastSeenAt = new Date().toISOString();
-    if (!till.subscriptionExpiresAt) {
-      till.subscriptionExpiresAt = addOneYear().toISOString();
-    } else if (isSubscriptionExpired(till.subscriptionExpiresAt)) {
-      await this.persist();
+
+    if (till.subscriptionExpiresAt && isSubscriptionExpired(till.subscriptionExpiresAt)) {
+      await this.updateTillFields(till.id, {
+        hardware_hex: hex || till.hardwareHex,
+        last_seen_at: nowIso,
+      });
       throw new ForbiddenException(
         "Till subscription has ended. Enter the till code to renew for another year.",
       );
     }
-    await this.persist();
-    return till;
+    await this.updateTillFields(till.id, {
+      hardware_hex: hex || till.hardwareHex,
+      last_seen_at: nowIso,
+      subscription_expires_at:
+        till.subscriptionExpiresAt ?? addOneYear().toISOString(),
+    });
+    return (await this.getRawTill(till.id))!;
   }
 
   async renewTill(id: string) {
-    const till = this.tills.find((row) => row.id === id);
+    const till = await this.getRawTill(id);
     if (!till) throw new NotFoundException("Till not found");
     const from =
       till.subscriptionExpiresAt && !isSubscriptionExpired(till.subscriptionExpiresAt)
         ? new Date(till.subscriptionExpiresAt)
         : new Date();
-    till.subscriptionExpiresAt = addOneYear(from).toISOString();
-    await this.persist();
+    const subscriptionExpiresAt = addOneYear(from).toISOString();
+    await this.updateTillFields(id, { subscription_expires_at: subscriptionExpiresAt });
     await this.pushNotice({
-      key: `till.renewed:${till.id}:${till.subscriptionExpiresAt}`,
+      key: `till.renewed:${till.id}:${subscriptionExpiresAt}`,
       type: "till.renewed",
       title: `${till.name} renewed`,
-      body: `Subscription now runs until ${new Date(till.subscriptionExpiresAt).toLocaleDateString("en-NG")}.`,
+      body: `Subscription now runs until ${new Date(subscriptionExpiresAt).toLocaleDateString("en-NG")}.`,
       href: "/setup/others/till",
     });
-    return till;
+    return (await this.getRawTill(id))!;
   }
 }

@@ -18,9 +18,16 @@ const STATIC_CRUMBS: Record<string, string[]> = {
   "/catalog": ["Products", "Scan Barcode"],
   "/admin": ["Admin"],
   "/procurement": ["Procurement"],
-  "/audit": ["Audit"],
+  "/audit": ["Account", "Audit", "Today's Summary"],
+  "/audit/x-report": ["Account", "Audit", "Mid-day Check"],
+  "/audit/z-report": ["Account", "Audit", "End of Day"],
+  "/audit/tenders": ["Account", "Audit", "Payment Methods"],
+  "/audit/tickets": ["Account", "Audit", "Sales List"],
+  "/audit/cashiers": ["Account", "Audit", "Staff Sales"],
+  "/audit/drawer": ["Account", "Audit", "Cash Count"],
+  "/audit/exceptions": ["Account", "Audit", "Problems to Check"],
   "/it": ["IT"],
-  "/finance": ["Finance"],
+  "/finance": ["Account", "Finance"],
   "/hr": ["HR"],
 };
 

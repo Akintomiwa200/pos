@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "@/lib/toast";
 import { listTills, renewTill, tillProductLabel, type HqTill } from "@/lib/hq-api";
 import { ManagerSkeleton } from "../Skeleton";
@@ -14,7 +14,11 @@ function licenceState(till: HqTill) {
   return { label: `${days}d left`, tone: "text-pos-success" };
 }
 
-export function SubscriptionManager() {
+export function SubscriptionManager({
+  variant = "subscriptions",
+}: {
+  variant?: "subscriptions" | "licences";
+}) {
   const [tills, setTills] = useState<HqTill[] | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -29,9 +33,22 @@ export function SubscriptionManager() {
     });
   }, []);
 
+  const rows = useMemo(() => {
+    if (!tills) return [];
+    if (variant === "licences") {
+      return [...tills].sort((a, b) => {
+        const aAt = a.subscriptionExpiresAt ?? "";
+        const bAt = b.subscriptionExpiresAt ?? "";
+        return aAt.localeCompare(bAt);
+      });
+    }
+    return tills;
+  }, [tills, variant]);
+
   if (!tills) return <ManagerSkeleton variant="list" />;
 
   const active = tills.filter((till) => !till.expired).length;
+  const expired = tills.filter((till) => till.expired || licenceState(till).label.startsWith("Expired")).length;
 
   async function renew(id: string) {
     setBusyId(id);
@@ -46,12 +63,18 @@ export function SubscriptionManager() {
     }
   }
 
+  const isLicences = variant === "licences";
+
   return (
     <div>
       <SetupHeader
-        kicker="Setup · Billing"
-        title="Subscriptions"
-        copy={`Each till carries a one-year licence from activation. ${active} of ${tills.length} tills are within their licence window.`}
+        kicker="Account · Billing"
+        title={isLicences ? "Till licences" : "Subscriptions"}
+        copy={
+          isLicences
+            ? `${expired} till${expired === 1 ? "" : "s"} need attention · ${active} active of ${tills.length}.`
+            : `Each till carries a one-year licence from activation. ${active} of ${tills.length} tills are within their licence window.`
+        }
         action={
           <a
             href="/setup/others/till"
@@ -62,14 +85,14 @@ export function SubscriptionManager() {
         }
       />
       <DataTable columns={["Till", "Product", "Branch", "Status", "Renews / expires", ""]}>
-        {tills.length === 0 ? (
+        {rows.length === 0 ? (
           <tr>
             <td className="px-4 py-6 text-pos-ink-faint" colSpan={6}>
-              No tills registered yet — issue one under Setup → Others → Till.
+              No tills registered yet — issue one under Settings → Organization or Point of Sales → Till.
             </td>
           </tr>
         ) : (
-          tills.map((till) => {
+          rows.map((till) => {
             const state = licenceState(till);
             return (
               <tr key={till.id} className="border-b border-pos-border/60">

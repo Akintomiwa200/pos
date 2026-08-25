@@ -62,6 +62,27 @@ export type StoreSettings = {
   receiptHeader: string;
   receiptShowCashier: boolean;
   receiptShowBarcode: boolean;
+  receiptShowTicketNumber: boolean;
+  receiptShowDate: boolean;
+  receiptShowCustomer: boolean;
+  receiptShowCustomerPhone: boolean;
+  receiptShowTill: boolean;
+  receiptShowTender: boolean;
+  receiptShowChange: boolean;
+  receiptShowLoyalty: boolean;
+  receiptShowLoyaltyBalance: boolean;
+  receiptShowLoyaltyRedeemed: boolean;
+  receiptShowLoyaltyEarned: boolean;
+  receiptShowGiftCard: boolean;
+  receiptShowGiftCardBalance: boolean;
+  receiptShowTitle: boolean;
+  receiptShowAddress: boolean;
+  receiptShowEmail: boolean;
+  receiptShowPhone: boolean;
+  receiptShowHeader: boolean;
+  receiptShowFooter: boolean;
+  receiptShowDiscount: boolean;
+  receiptShowPoweredBy: boolean;
   receiptPaper: ReceiptPaper;
   storeName: string;
   storeAddress: string;
@@ -160,6 +181,27 @@ export function defaultStoreSettings(): StoreSettings {
     receiptHeader: "Goods sold are not returnable after 24 hours.",
     receiptShowCashier: true,
     receiptShowBarcode: false,
+    receiptShowTicketNumber: true,
+    receiptShowDate: true,
+    receiptShowCustomer: true,
+    receiptShowCustomerPhone: true,
+    receiptShowTill: true,
+    receiptShowTender: true,
+    receiptShowChange: true,
+    receiptShowLoyalty: true,
+    receiptShowLoyaltyBalance: true,
+    receiptShowLoyaltyRedeemed: true,
+    receiptShowLoyaltyEarned: true,
+    receiptShowGiftCard: true,
+    receiptShowGiftCardBalance: true,
+    receiptShowTitle: true,
+    receiptShowAddress: true,
+    receiptShowEmail: true,
+    receiptShowPhone: true,
+    receiptShowHeader: true,
+    receiptShowFooter: true,
+    receiptShowDiscount: true,
+    receiptShowPoweredBy: true,
     receiptPaper: "80mm",
     storeName: "The Place — Victoria Island",
     storeAddress: "14 Adeola Odeku Street, Victoria Island, Lagos",

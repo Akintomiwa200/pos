@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import { Clock, Mail, MessageSquare, Shield } from "lucide-react";
 import {
+  MarketingCtaBand,
   MarketingField,
   MarketingHero,
   MarketingPanel,
@@ -43,7 +44,7 @@ export default function ContactPage() {
         <MarketingSecondaryLink href="/support">Browse support</MarketingSecondaryLink>
       </MarketingHero>
 
-      <MarketingSection className="pb-20">
+      <MarketingSection>
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
           <MarketingPanel>
             {sent ? (
@@ -143,6 +144,11 @@ export default function ContactPage() {
           </aside>
         </div>
       </MarketingSection>
+
+      <MarketingCtaBand
+        title="Prefer to start in HQ first?"
+        copy="Create an account, explore the console, then come back when you are ready to talk rollout."
+      />
     </>
   );
 }

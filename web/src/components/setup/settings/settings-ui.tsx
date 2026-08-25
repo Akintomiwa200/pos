@@ -5,6 +5,7 @@ import type { HqCompany, HqOrgSettings } from "@/lib/hq-setup";
 import { Field, PrimaryButton, fieldClass } from "@/components/setup/SetupChrome";
 import { settingsFieldClass, type SettingsFieldErrors } from "@/lib/settings-validation";
 import { ReceiptLivePreview } from "./DocumentPreviews";
+import { ReceiptPrintPreviewButton } from "./ReceiptPrintPreview";
 
 const RECEIPT_TEMPLATES: {
   id: HqOrgSettings["receiptTemplate"];
@@ -184,46 +185,98 @@ export function ReceiptStudio({
         <div className="space-y-4">
           <SettingsCard
             title="Store identity on ticket"
-            copy="Title, branch address, and email printed at the top of every receipt."
+            copy="Each line is optional — turn a toggle off to hide it on printed tickets."
           >
-            <div className="space-y-3 px-5 py-5 sm:px-6">
-              <Field label="Title name" error={errors.receiptTitle}>
-                <input
-                  className={settingsFieldClass(fieldClass, errors.receiptTitle)}
-                  value={draft.receiptTitle ?? ""}
-                  aria-invalid={Boolean(errors.receiptTitle)}
-                  placeholder="Store or brand name"
-                  onChange={(e) => patchField({ receiptTitle: e.target.value })}
-                />
-              </Field>
-              <Field label="Branch address" error={errors.receiptAddress}>
-                <textarea
-                  className={`${settingsFieldClass(fieldClass, errors.receiptAddress)} min-h-[64px] resize-y`}
-                  value={draft.receiptAddress ?? ""}
-                  aria-invalid={Boolean(errors.receiptAddress)}
-                  placeholder="Street, city"
-                  onChange={(e) => patchField({ receiptAddress: e.target.value })}
-                />
-              </Field>
-              <Field label="Email" error={errors.receiptEmail}>
-                <input
-                  className={settingsFieldClass(fieldClass, errors.receiptEmail)}
-                  type="email"
-                  value={draft.receiptEmail ?? ""}
-                  aria-invalid={Boolean(errors.receiptEmail)}
-                  placeholder="store@example.com"
-                  onChange={(e) => patchField({ receiptEmail: e.target.value })}
-                />
-              </Field>
+            <div className="space-y-1 px-5 py-2 sm:px-6">
+              <SettingRow
+                title="Show title name"
+                description="Brand / store name at the top of the ticket."
+                control={
+                  <Switch
+                    checked={draft.receiptShowTitle !== false}
+                    onChange={(receiptShowTitle) => patchField({ receiptShowTitle })}
+                  />
+                }
+              />
+              {draft.receiptShowTitle !== false ? (
+                <div className="border-t border-pos-border/50 px-0 py-3">
+                  <Field label="Title name" error={errors.receiptTitle}>
+                    <input
+                      className={settingsFieldClass(fieldClass, errors.receiptTitle)}
+                      value={draft.receiptTitle ?? ""}
+                      aria-invalid={Boolean(errors.receiptTitle)}
+                      placeholder="Store or brand name"
+                      onChange={(e) => patchField({ receiptTitle: e.target.value })}
+                    />
+                  </Field>
+                </div>
+              ) : null}
+              <SettingRow
+                title="Show branch address"
+                description="Street address under the title."
+                control={
+                  <Switch
+                    checked={draft.receiptShowAddress !== false}
+                    onChange={(receiptShowAddress) => patchField({ receiptShowAddress })}
+                  />
+                }
+              />
+              {draft.receiptShowAddress !== false ? (
+                <div className="border-t border-pos-border/50 py-3">
+                  <Field label="Branch address" error={errors.receiptAddress}>
+                    <textarea
+                      className={`${settingsFieldClass(fieldClass, errors.receiptAddress)} min-h-[64px] resize-y`}
+                      value={draft.receiptAddress ?? ""}
+                      aria-invalid={Boolean(errors.receiptAddress)}
+                      placeholder="Street, city"
+                      onChange={(e) => patchField({ receiptAddress: e.target.value })}
+                    />
+                  </Field>
+                </div>
+              ) : null}
+              <SettingRow
+                title="Show email"
+                description="Contact email on the ticket."
+                control={
+                  <Switch
+                    checked={draft.receiptShowEmail !== false}
+                    onChange={(receiptShowEmail) => patchField({ receiptShowEmail })}
+                  />
+                }
+              />
+              {draft.receiptShowEmail !== false ? (
+                <div className="border-t border-pos-border/50 py-3">
+                  <Field label="Email" error={errors.receiptEmail}>
+                    <input
+                      className={settingsFieldClass(fieldClass, errors.receiptEmail)}
+                      type="email"
+                      value={draft.receiptEmail ?? ""}
+                      aria-invalid={Boolean(errors.receiptEmail)}
+                      placeholder="store@example.com"
+                      onChange={(e) => patchField({ receiptEmail: e.target.value })}
+                    />
+                  </Field>
+                </div>
+              ) : null}
+              <SettingRow
+                title="Show phone"
+                description="Company phone under the address."
+                control={
+                  <Switch
+                    checked={draft.receiptShowPhone !== false}
+                    onChange={(receiptShowPhone) => patchField({ receiptShowPhone })}
+                  />
+                }
+              />
             </div>
           </SettingsCard>
 
           <SettingsCard
             title="Ticket content"
-            copy="Header and footer edit live — type here or directly on the receipt preview."
+            copy="Header and footer are optional. Edit live here or on the receipt preview."
           >
-            <div className="space-y-3 px-5 py-5 sm:px-6">
-              <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1 px-5 py-2 sm:px-6">
+              <div className="grid gap-3 border-b border-pos-border/50 py-3 sm:grid-cols-2">
                 <Field label="Paper width">
                   <select
                     className={fieldClass}
@@ -242,22 +295,50 @@ export function ReceiptStudio({
                   <input className={fieldClass} value={draft.currency} readOnly />
                 </Field>
               </div>
-              <Field label="Header note" error={errors.receiptHeader}>
-                <textarea
-                  className={`${settingsFieldClass(fieldClass, errors.receiptHeader)} min-h-[72px] resize-y`}
-                  value={draft.receiptHeader}
-                  aria-invalid={Boolean(errors.receiptHeader)}
-                  onChange={(e) => patchField({ receiptHeader: e.target.value })}
-                />
-              </Field>
-              <Field label="Footer message" error={errors.receiptFooter}>
-                <textarea
-                  className={`${settingsFieldClass(fieldClass, errors.receiptFooter)} min-h-[72px] resize-y`}
-                  value={draft.receiptFooter}
-                  aria-invalid={Boolean(errors.receiptFooter)}
-                  onChange={(e) => patchField({ receiptFooter: e.target.value })}
-                />
-              </Field>
+              <SettingRow
+                title="Show header note"
+                description="Policy / message under the store identity."
+                control={
+                  <Switch
+                    checked={draft.receiptShowHeader !== false}
+                    onChange={(receiptShowHeader) => patchField({ receiptShowHeader })}
+                  />
+                }
+              />
+              {draft.receiptShowHeader !== false ? (
+                <div className="border-t border-pos-border/50 py-3">
+                  <Field label="Header note" error={errors.receiptHeader}>
+                    <textarea
+                      className={`${settingsFieldClass(fieldClass, errors.receiptHeader)} min-h-[72px] resize-y`}
+                      value={draft.receiptHeader}
+                      aria-invalid={Boolean(errors.receiptHeader)}
+                      onChange={(e) => patchField({ receiptHeader: e.target.value })}
+                    />
+                  </Field>
+                </div>
+              ) : null}
+              <SettingRow
+                title="Show footer message"
+                description="Closing message before the barcode."
+                control={
+                  <Switch
+                    checked={draft.receiptShowFooter !== false}
+                    onChange={(receiptShowFooter) => patchField({ receiptShowFooter })}
+                  />
+                }
+              />
+              {draft.receiptShowFooter !== false ? (
+                <div className="border-t border-pos-border/50 py-3">
+                  <Field label="Footer message" error={errors.receiptFooter}>
+                    <textarea
+                      className={`${settingsFieldClass(fieldClass, errors.receiptFooter)} min-h-[72px] resize-y`}
+                      value={draft.receiptFooter}
+                      aria-invalid={Boolean(errors.receiptFooter)}
+                      onChange={(e) => patchField({ receiptFooter: e.target.value })}
+                    />
+                  </Field>
+                </div>
+              ) : null}
             </div>
           </SettingsCard>
 
@@ -285,14 +366,27 @@ export function ReceiptStudio({
             </div>
           </SettingsCard>
 
-          <SettingsCard title="Lines on the ticket" copy="Choose what cashiers and customers see.">
+          <SettingsCard
+            title="Lines on the ticket"
+            copy="Every optional line has its own toggle. Nested options appear when a parent line is on."
+          >
             <SettingRow
-              title="Show tax line"
-              description="Print VAT / service charge breakdown."
+              title="Receipt number"
+              description="Print the ticket / receipt id."
               control={
                 <Switch
-                  checked={draft.receiptShowTax}
-                  onChange={(receiptShowTax) => patchField({ receiptShowTax })}
+                  checked={draft.receiptShowTicketNumber !== false}
+                  onChange={(receiptShowTicketNumber) => patchField({ receiptShowTicketNumber })}
+                />
+              }
+            />
+            <SettingRow
+              title="Date & time"
+              description="Sale date and time on the ticket."
+              control={
+                <Switch
+                  checked={draft.receiptShowDate !== false}
+                  onChange={(receiptShowDate) => patchField({ receiptShowDate })}
                 />
               }
             />
@@ -306,6 +400,190 @@ export function ReceiptStudio({
                 />
               }
             />
+            <SettingRow
+              title="Show till"
+              description="Print the till / register name."
+              control={
+                <Switch
+                  checked={Boolean(draft.receiptShowTill)}
+                  onChange={(receiptShowTill) => patchField({ receiptShowTill })}
+                />
+              }
+            />
+            <SettingRow
+              title="Show customer"
+              description="Customer name when attached to the sale."
+              control={
+                <Switch
+                  checked={Boolean(draft.receiptShowCustomer)}
+                  onChange={(receiptShowCustomer) =>
+                    patchField({
+                      receiptShowCustomer,
+                      receiptShowCustomerPhone: receiptShowCustomer
+                        ? draft.receiptShowCustomerPhone !== false
+                        : false,
+                    })
+                  }
+                />
+              }
+            />
+            {draft.receiptShowCustomer ? (
+              <SettingRow
+                title="Show customer phone"
+                description="Phone under the customer name."
+                control={
+                  <Switch
+                    checked={draft.receiptShowCustomerPhone !== false}
+                    onChange={(receiptShowCustomerPhone) =>
+                      patchField({ receiptShowCustomerPhone })
+                    }
+                  />
+                }
+              />
+            ) : null}
+            <SettingRow
+              title="Show discount"
+              description="Discount amount when a sale discount is applied."
+              control={
+                <Switch
+                  checked={draft.receiptShowDiscount !== false}
+                  onChange={(receiptShowDiscount) => patchField({ receiptShowDiscount })}
+                />
+              }
+            />
+            <SettingRow
+              title="Show tax line"
+              description="Print VAT / service charge breakdown."
+              control={
+                <Switch
+                  checked={draft.receiptShowTax}
+                  onChange={(receiptShowTax) => patchField({ receiptShowTax })}
+                />
+              }
+            />
+            <SettingRow
+              title="Show tender"
+              description="Payment method and amount tendered."
+              control={
+                <Switch
+                  checked={Boolean(draft.receiptShowTender)}
+                  onChange={(receiptShowTender) =>
+                    patchField({
+                      receiptShowTender,
+                      receiptShowChange: receiptShowTender
+                        ? draft.receiptShowChange !== false
+                        : false,
+                    })
+                  }
+                />
+              }
+            />
+            {draft.receiptShowTender ? (
+              <SettingRow
+                title="Show change"
+                description="Print change given after cash tender."
+                control={
+                  <Switch
+                    checked={draft.receiptShowChange !== false}
+                    onChange={(receiptShowChange) => patchField({ receiptShowChange })}
+                  />
+                }
+              />
+            ) : null}
+            <SettingRow
+              title="Show loyalty"
+              description="Loyalty block when a member is on the sale."
+              control={
+                <Switch
+                  checked={Boolean(draft.receiptShowLoyalty)}
+                  onChange={(receiptShowLoyalty) =>
+                    patchField({
+                      receiptShowLoyalty,
+                      receiptShowLoyaltyBalance: receiptShowLoyalty
+                        ? draft.receiptShowLoyaltyBalance !== false
+                        : false,
+                      receiptShowLoyaltyRedeemed: receiptShowLoyalty
+                        ? draft.receiptShowLoyaltyRedeemed !== false
+                        : false,
+                      receiptShowLoyaltyEarned: receiptShowLoyalty
+                        ? draft.receiptShowLoyaltyEarned !== false
+                        : false,
+                    })
+                  }
+                />
+              }
+            />
+            {draft.receiptShowLoyalty ? (
+              <>
+                <SettingRow
+                  title="Show loyalty balance"
+                  description="Points balance before and after the sale."
+                  control={
+                    <Switch
+                      checked={draft.receiptShowLoyaltyBalance !== false}
+                      onChange={(receiptShowLoyaltyBalance) =>
+                        patchField({ receiptShowLoyaltyBalance })
+                      }
+                    />
+                  }
+                />
+                <SettingRow
+                  title="Show points used"
+                  description="Points redeemed and value on this sale."
+                  control={
+                    <Switch
+                      checked={draft.receiptShowLoyaltyRedeemed !== false}
+                      onChange={(receiptShowLoyaltyRedeemed) =>
+                        patchField({ receiptShowLoyaltyRedeemed })
+                      }
+                    />
+                  }
+                />
+                <SettingRow
+                  title="Show points earned"
+                  description="Points earned from this sale."
+                  control={
+                    <Switch
+                      checked={draft.receiptShowLoyaltyEarned !== false}
+                      onChange={(receiptShowLoyaltyEarned) =>
+                        patchField({ receiptShowLoyaltyEarned })
+                      }
+                    />
+                  }
+                />
+              </>
+            ) : null}
+            <SettingRow
+              title="Show gift card"
+              description="Gift card code and amount charged when used."
+              control={
+                <Switch
+                  checked={Boolean(draft.receiptShowGiftCard)}
+                  onChange={(receiptShowGiftCard) =>
+                    patchField({
+                      receiptShowGiftCard,
+                      receiptShowGiftCardBalance: receiptShowGiftCard
+                        ? draft.receiptShowGiftCardBalance !== false
+                        : false,
+                    })
+                  }
+                />
+              }
+            />
+            {draft.receiptShowGiftCard ? (
+              <SettingRow
+                title="Show gift card balance"
+                description="Remaining balance after this charge."
+                control={
+                  <Switch
+                    checked={draft.receiptShowGiftCardBalance !== false}
+                    onChange={(receiptShowGiftCardBalance) =>
+                      patchField({ receiptShowGiftCardBalance })
+                    }
+                  />
+                }
+              />
+            ) : null}
             <SettingRow
               title="Show barcode"
               description="Print a real Code 128 barcode for the ticket id at the bottom."
@@ -385,6 +663,9 @@ export function ReceiptStudio({
             company={company}
             onChange={patchField}
           />
+          <div className="flex justify-center">
+            <ReceiptPrintPreviewButton draft={draft} company={company} />
+          </div>
         </div>
       </div>
 
@@ -413,23 +694,26 @@ export function ReceiptStudio({
               errors.receiptBarcodeValue ||
               "Header, identity, and barcode update the preview and save as you type."}
         </p>
-        <PrimaryButton
-          disabled={
-            busy ||
-            Boolean(
-              errors.receiptHeader ||
-                errors.receiptFooter ||
-                errors.receiptBrandColor ||
-                errors.receiptTitle ||
-                errors.receiptAddress ||
-                errors.receiptEmail ||
-                errors.receiptBarcodeValue,
-            )
-          }
-          onClick={onSave}
-        >
-          {busy ? "Saving…" : "Save now"}
-        </PrimaryButton>
+        <div className="flex flex-wrap items-center gap-2">
+          <ReceiptPrintPreviewButton draft={draft} company={company} />
+          <PrimaryButton
+            disabled={
+              busy ||
+              Boolean(
+                errors.receiptHeader ||
+                  errors.receiptFooter ||
+                  errors.receiptBrandColor ||
+                  errors.receiptTitle ||
+                  errors.receiptAddress ||
+                  errors.receiptEmail ||
+                  errors.receiptBarcodeValue,
+              )
+            }
+            onClick={onSave}
+          >
+            {busy ? "Saving…" : "Save now"}
+          </PrimaryButton>
+        </div>
       </div>
     </div>
   );

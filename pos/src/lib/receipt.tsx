@@ -25,39 +25,88 @@ export type SaleReceipt = {
   lines: CartLine[];
   totalMinor: number;
   cashierName: string;
-  loyaltyNumber?: string | null;
   tillKey?: string | null;
+  customerName?: string | null;
+  customerPhone?: string | null;
+  loyaltyNumber?: string | null;
+  loyaltyBalanceBefore?: number | null;
+  loyaltyBalanceAfter?: number | null;
+  loyaltyPointsEarned?: number | null;
+  loyaltyPointsRedeemed?: number | null;
+  loyaltyRedeemMinor?: number | null;
+  giftCardCode?: string | null;
+  giftCardChargedMinor?: number | null;
+  giftCardBalanceAfterMinor?: number | null;
+  amountTenderedMinor?: number | null;
+  changeMinor?: number | null;
+  discountMinor?: number | null;
 };
+
+function maskGiftCard(code: string) {
+  const clean = code.replace(/\s+/g, "");
+  if (clean.length <= 4) return clean;
+  return `${clean.slice(0, 2)}-····${clean.slice(-4)}`;
+}
 
 export function formatReceiptText(
   sale: SaleReceipt,
   settings: StoreSettings = loadStoreSettings(),
 ) {
-  const totals = computeTotals(
-    sale.lines.reduce((sum, line) => sum + line.unitPriceMinor * line.quantity, 0),
-    settings,
+  const lineSum = sale.lines.reduce(
+    (sum, line) => sum + line.unitPriceMinor * line.quantity,
+    0,
   );
+  const totals = computeTotals(lineSum, settings);
   const till = findTill();
-  const points = sale.loyaltyNumber
-    ? loyaltyPointsEarned(sale.totalMinor, settings)
-    : 0;
+  const earned =
+    sale.loyaltyPointsEarned ??
+    (sale.loyaltyNumber ? loyaltyPointsEarned(sale.totalMinor, settings) : 0);
   const when = new Date(sale.paidAt);
+  const showTicket = settings.receiptShowTicketNumber !== false;
+  const showDate = settings.receiptShowDate !== false;
+
+  const showTitle = settings.receiptShowTitle !== false;
+  const showAddress = settings.receiptShowAddress !== false;
+  const showEmail = settings.receiptShowEmail !== false;
+  const showPhone = settings.receiptShowPhone !== false;
+  const showHeader = settings.receiptShowHeader !== false;
+  const showFooter = settings.receiptShowFooter !== false;
+  const showDiscount = settings.receiptShowDiscount !== false;
+  const showCustomerPhone = settings.receiptShowCustomerPhone !== false;
+  const showLoyaltyBalance = settings.receiptShowLoyaltyBalance !== false;
+  const showLoyaltyRedeemed = settings.receiptShowLoyaltyRedeemed !== false;
+  const showLoyaltyEarned = settings.receiptShowLoyaltyEarned !== false;
+  const showGiftBalance = settings.receiptShowGiftCardBalance !== false;
+
   const lines = [
-    settings.storeName,
-    settings.companyLegalName && settings.companyLegalName !== settings.storeName
-      ? settings.companyLegalName
-      : "",
-    settings.storeAddress,
-    settings.storePhone,
-    settings.storeEmail,
+    ...(showTitle ? [settings.storeName] : []),
+    ...(showTitle &&
+    settings.companyLegalName &&
+    settings.companyLegalName !== settings.storeName
+      ? [settings.companyLegalName]
+      : []),
+    ...(showAddress ? [settings.storeAddress] : []),
+    ...(showPhone ? [settings.storePhone] : []),
+    ...(showEmail ? [settings.storeEmail] : []),
     ...(settings.showTinOnReceipt ? [`TIN ${settings.storeTin}`] : []),
-    settings.receiptHeader,
+    ...(showHeader ? [settings.receiptHeader] : []),
     "--------------------------------",
-    `Ticket ${sale.ticketId}`,
-    `${when.toLocaleDateString("en-NG")} ${when.toLocaleTimeString("en-NG")}`,
+    ...(showTicket ? [`Receipt # ${sale.ticketId}`] : []),
+    ...(showDate
+      ? [`${when.toLocaleDateString("en-NG")} ${when.toLocaleTimeString("en-NG")}`]
+      : []),
     ...(settings.receiptShowCashier ? [`Cashier: ${sale.cashierName}`] : []),
-    ...(till ? [`Till: ${tillLabel(till)}`] : []),
-    `Paper ${settings.receiptPaper}`,
+    ...(settings.receiptShowTill && (sale.tillKey || till)
+      ? [`Till: ${sale.tillKey || (till ? tillLabel(till) : "")}`]
+      : []),
+    ...(settings.receiptShowCustomer && sale.customerName
+      ? [
+          `Customer: ${sale.customerName}`,
+          showCustomerPhone && sale.customerPhone
+            ? `Phone: ${sale.customerPhone}`
+            : "",
+        ]
+      : []),
     "--------------------------------",
     ...sale.lines.map(
       (line) =>
@@ -65,23 +114,76 @@ export function formatReceiptText(
     ),
     "--------------------------------",
     `Subtotal     ${formatMoney(totals.subtotalMinor)}`,
+    ...(showDiscount && sale.discountMinor && sale.discountMinor > 0
+      ? [`Discount     -${formatMoney(sale.discountMinor)}`]
+      : []),
     ...(settings.applyServiceCharge
       ? [`Service ${settings.servicePercent}%  ${formatMoney(totals.serviceMinor)}`]
       : []),
     ...(settings.includeVatBreakdown
       ? [`VAT ${settings.vatPercent}%     ${formatMoney(totals.vatMinor)}`]
       : []),
+    ...(showLoyaltyRedeemed && sale.loyaltyRedeemMinor && sale.loyaltyRedeemMinor > 0
+      ? [`Loyalty      -${formatMoney(sale.loyaltyRedeemMinor)}`]
+      : []),
     `TOTAL        ${formatMoney(sale.totalMinor)}`,
-    `Paid by ${TENDER_LABEL[sale.tender]}`,
-    ...(sale.loyaltyNumber
+    ...(settings.receiptShowTender
       ? [
-          `Loyalty ${sale.loyaltyNumber}`,
-          points > 0 ? `Points earned ${points}` : "",
+          `Paid by ${TENDER_LABEL[sale.tender]}`,
+          ...(sale.amountTenderedMinor != null
+            ? [`Tendered     ${formatMoney(sale.amountTenderedMinor)}`]
+            : []),
+          ...(settings.receiptShowChange !== false && sale.changeMinor != null
+            ? [`Change       ${formatMoney(sale.changeMinor)}`]
+            : []),
+        ]
+      : [`Paid by ${TENDER_LABEL[sale.tender]}`]),
+    ...(settings.receiptShowLoyalty && sale.loyaltyNumber
+      ? [
+          "--------------------------------",
+          "Loyalty",
+          `No. ${sale.loyaltyNumber}`,
+          ...(showLoyaltyBalance && sale.loyaltyBalanceBefore != null
+            ? [`Balance before ${sale.loyaltyBalanceBefore} pts`]
+            : []),
+          ...(showLoyaltyRedeemed &&
+          sale.loyaltyPointsRedeemed &&
+          sale.loyaltyPointsRedeemed > 0
+            ? [`Points used  -${sale.loyaltyPointsRedeemed} pts`]
+            : []),
+          ...(showLoyaltyEarned && earned > 0
+            ? [`Points earned +${earned} pts`]
+            : []),
+          ...(showLoyaltyBalance && sale.loyaltyBalanceAfter != null
+            ? [`Balance after ${sale.loyaltyBalanceAfter} pts`]
+            : showLoyaltyBalance && sale.loyaltyBalanceBefore != null
+              ? [
+                  `Balance after ${
+                    sale.loyaltyBalanceBefore -
+                    (sale.loyaltyPointsRedeemed ?? 0) +
+                    earned
+                  } pts`,
+                ]
+              : []),
+        ]
+      : []),
+    ...(settings.receiptShowGiftCard && sale.giftCardCode
+      ? [
+          "--------------------------------",
+          "Gift card",
+          `Card ${maskGiftCard(sale.giftCardCode)}`,
+          ...(sale.giftCardChargedMinor != null
+            ? [`Charged      ${formatMoney(sale.giftCardChargedMinor)}`]
+            : []),
+          ...(showGiftBalance && sale.giftCardBalanceAfterMinor != null
+            ? [`Balance left ${formatMoney(sale.giftCardBalanceAfterMinor)}`]
+            : []),
         ]
       : []),
     ...(settings.receiptShowBarcode ? [`*${sale.ticketId}*`] : []),
     "--------------------------------",
-    settings.receiptFooter,
+    ...(showFooter ? [settings.receiptFooter] : []),
+    ...(settings.receiptShowPoweredBy ? ["Powered by Herkintormiwer"] : []),
     "",
   ].filter((line) => line !== "");
   return lines.join("\n");

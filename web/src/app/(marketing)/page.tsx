@@ -1,7 +1,5 @@
-import Link from "next/link";
-import type { ReactNode } from "react";
-import { BrandMark } from "../../components/site/BrandLogo";
 import { PartnerMarquee } from "../../components/site/PartnerMarquee";
+import { MarketingCtaBand } from "../../components/site/MarketingChrome";
 import {
   Bell,
   Briefcase,
@@ -26,6 +24,9 @@ import {
   UtensilsCrossed,
   Wrench,
 } from "lucide-react";
+import Link from "next/link";
+import type { ReactNode } from "react";
+import { BrandMark } from "../../components/site/BrandLogo";
 
 const steps = [
   {
@@ -779,30 +780,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="px-4 pb-10 pt-6 sm:px-6">
-        <div className="relative mx-auto max-w-5xl overflow-hidden rounded-[32px] px-6 py-20 text-center sm:rounded-[40px] sm:px-12 sm:py-24">
-          <div aria-hidden className="marketing-hero-bg absolute inset-0">
-            <div className="hero-matrix absolute inset-0" />
-          </div>
-          <div className="relative">
-            <p className="inline-flex rounded-full bg-pos-surface/15 px-3 py-1 text-xs font-medium text-white/90 ring-1 ring-white/25">
-              Sales POS for retail and hospitality
-            </p>
-            <h2 className="mx-auto mt-5 max-w-xl text-[1.85rem] font-semibold leading-[1.15] tracking-tight text-white sm:text-[2.35rem]">
-              Ready to run the till without sharing a PC?
-            </h2>
-            <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-white/85 sm:text-[15px]">
-              Create an HQ account. Issue a till. No pressure. No second spreadsheet.
-            </p>
-            <Link
-              href="/register"
-              className="mt-8 inline-flex rounded-full bg-pos-surface px-6 py-3 text-sm font-medium text-pos-ink shadow-pos-md"
-            >
-              Get started
-            </Link>
-          </div>
-        </div>
-      </section>
+      <MarketingCtaBand />
     </div>
   );
 }

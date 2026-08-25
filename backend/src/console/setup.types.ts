@@ -96,11 +96,23 @@ export type HqOrgSettings = {
   receiptShowTicketNumber: boolean;
   receiptShowDate: boolean;
   receiptShowCustomer: boolean;
+  receiptShowCustomerPhone: boolean;
   receiptShowTill: boolean;
   receiptShowTender: boolean;
   receiptShowChange: boolean;
   receiptShowLoyalty: boolean;
+  receiptShowLoyaltyBalance: boolean;
+  receiptShowLoyaltyRedeemed: boolean;
+  receiptShowLoyaltyEarned: boolean;
   receiptShowGiftCard: boolean;
+  receiptShowGiftCardBalance: boolean;
+  receiptShowTitle: boolean;
+  receiptShowAddress: boolean;
+  receiptShowEmail: boolean;
+  receiptShowPhone: boolean;
+  receiptShowHeader: boolean;
+  receiptShowFooter: boolean;
+  receiptShowDiscount: boolean;
   invoicePrefix: string;
   invoiceNextNumber: number;
   invoiceTemplate: "modern" | "letterhead" | "classic" | "sapphire" | "ivory";
@@ -310,11 +322,23 @@ export const SEED_SETTINGS: HqOrgSettings = {
   receiptShowTicketNumber: true,
   receiptShowDate: true,
   receiptShowCustomer: true,
+  receiptShowCustomerPhone: true,
   receiptShowTill: true,
   receiptShowTender: true,
   receiptShowChange: true,
   receiptShowLoyalty: true,
+  receiptShowLoyaltyBalance: true,
+  receiptShowLoyaltyRedeemed: true,
+  receiptShowLoyaltyEarned: true,
   receiptShowGiftCard: true,
+  receiptShowGiftCardBalance: true,
+  receiptShowTitle: true,
+  receiptShowAddress: true,
+  receiptShowEmail: true,
+  receiptShowPhone: true,
+  receiptShowHeader: true,
+  receiptShowFooter: true,
+  receiptShowDiscount: true,
   invoicePrefix: "INV",
   invoiceNextNumber: 1001,
   invoiceTemplate: "sapphire",

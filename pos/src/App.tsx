@@ -41,6 +41,7 @@ import {
 } from "./lib/boards";
 import {
   loadStoreSettings,
+  loyaltyPointsEarned,
   normalizeBarcode,
   takeNextTicketId,
 } from "./lib/store-settings";
@@ -794,6 +795,9 @@ export default function App() {
       tender: method,
       cashierName: session.name,
       loyaltyNumber: loyalty,
+      loyaltyPointsEarned: loyalty
+        ? loyaltyPointsEarned(totalMinor, settings)
+        : null,
       tillKey: till?.name ?? null,
     };
     if (settings.trackStockOnTill) {

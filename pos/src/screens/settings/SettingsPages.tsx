@@ -406,7 +406,22 @@ export function ReceiptSettings() {
       paidAt: new Date().toISOString(),
       tender: "cash",
       cashierName: "Tosin Adeyemi",
-      loyaltyNumber: settings.loyaltyEnabled ? "08031234567" : null,
+      tillKey: "TILL-01",
+      customerName: "Chioma Adeyemi",
+      customerPhone: "0803 123 4567",
+      loyaltyNumber: settings.loyaltyEnabled ? "LY-88421" : null,
+      loyaltyBalanceBefore: settings.loyaltyEnabled ? 1240 : null,
+      loyaltyPointsRedeemed: settings.loyaltyEnabled ? 100 : null,
+      loyaltyRedeemMinor: settings.loyaltyEnabled ? 1000_00 : null,
+      loyaltyPointsEarned: settings.loyaltyEnabled
+        ? loyaltyPointsEarned(350000, settings)
+        : null,
+      giftCardCode: "GC48219901",
+      giftCardChargedMinor: 2000_00,
+      giftCardBalanceAfterMinor: 8000_00,
+      amountTenderedMinor: 20000_00,
+      changeMinor: 500_00,
+      discountMinor: 500_00,
       lines: [
         {
           id: "p1",

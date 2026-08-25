@@ -62,6 +62,32 @@ export type HqOrgSnapshot = {
     openCashDrawer?: boolean;
     receiptCopies?: number;
     holdExpiryMinutes?: number;
+    receiptShowCashier?: boolean;
+    receiptShowBarcode?: boolean;
+    receiptShowTicketNumber?: boolean;
+    receiptShowDate?: boolean;
+    receiptShowCustomer?: boolean;
+    receiptShowCustomerPhone?: boolean;
+    receiptShowTill?: boolean;
+    receiptShowTender?: boolean;
+    receiptShowChange?: boolean;
+    receiptShowLoyalty?: boolean;
+    receiptShowLoyaltyBalance?: boolean;
+    receiptShowLoyaltyRedeemed?: boolean;
+    receiptShowLoyaltyEarned?: boolean;
+    receiptShowGiftCard?: boolean;
+    receiptShowGiftCardBalance?: boolean;
+    receiptShowTitle?: boolean;
+    receiptShowAddress?: boolean;
+    receiptShowEmail?: boolean;
+    receiptShowPhone?: boolean;
+    receiptShowHeader?: boolean;
+    receiptShowFooter?: boolean;
+    receiptShowDiscount?: boolean;
+    receiptShowPoweredBy?: boolean;
+    receiptTitle?: string;
+    receiptAddress?: string;
+    receiptEmail?: string;
   };
 };
 
@@ -74,13 +100,14 @@ export function applyHqOrg(org: HqOrgSnapshot) {
   const s = org.settings;
   saveStoreSettings({
     ...current,
-    storeName: org.company.name,
+    storeName: s.receiptTitle?.trim() || org.company.name,
     companyLegalName: org.company.legalName,
     companyRc: org.company.rc,
     storeTin: org.company.tin,
     companyEmail: org.company.email,
     storePhone: org.company.phone,
-    storeAddress: org.company.address,
+    storeAddress: s.receiptAddress?.trim() || org.company.address,
+    storeEmail: s.receiptEmail?.trim() || org.company.email,
     companyState: org.company.state,
     vatPercent: vat?.ratePercent ?? current.vatPercent,
     servicePercent: service?.ratePercent ?? current.servicePercent,
@@ -102,6 +129,31 @@ export function applyHqOrg(org: HqOrgSnapshot) {
     openCashDrawer: s.openCashDrawer ?? current.openCashDrawer,
     receiptCopies: s.receiptCopies ?? current.receiptCopies,
     holdExpiryMinutes: s.holdExpiryMinutes ?? current.holdExpiryMinutes,
+    receiptShowCashier: s.receiptShowCashier ?? current.receiptShowCashier,
+    receiptShowBarcode: s.receiptShowBarcode ?? current.receiptShowBarcode,
+    receiptShowTicketNumber: s.receiptShowTicketNumber ?? current.receiptShowTicketNumber,
+    receiptShowDate: s.receiptShowDate ?? current.receiptShowDate,
+    receiptShowCustomer: s.receiptShowCustomer ?? current.receiptShowCustomer,
+    receiptShowCustomerPhone: s.receiptShowCustomerPhone ?? current.receiptShowCustomerPhone,
+    receiptShowTill: s.receiptShowTill ?? current.receiptShowTill,
+    receiptShowTender: s.receiptShowTender ?? current.receiptShowTender,
+    receiptShowChange: s.receiptShowChange ?? current.receiptShowChange,
+    receiptShowLoyalty: s.receiptShowLoyalty ?? current.receiptShowLoyalty,
+    receiptShowLoyaltyBalance: s.receiptShowLoyaltyBalance ?? current.receiptShowLoyaltyBalance,
+    receiptShowLoyaltyRedeemed:
+      s.receiptShowLoyaltyRedeemed ?? current.receiptShowLoyaltyRedeemed,
+    receiptShowLoyaltyEarned: s.receiptShowLoyaltyEarned ?? current.receiptShowLoyaltyEarned,
+    receiptShowGiftCard: s.receiptShowGiftCard ?? current.receiptShowGiftCard,
+    receiptShowGiftCardBalance:
+      s.receiptShowGiftCardBalance ?? current.receiptShowGiftCardBalance,
+    receiptShowTitle: s.receiptShowTitle ?? current.receiptShowTitle,
+    receiptShowAddress: s.receiptShowAddress ?? current.receiptShowAddress,
+    receiptShowEmail: s.receiptShowEmail ?? current.receiptShowEmail,
+    receiptShowPhone: s.receiptShowPhone ?? current.receiptShowPhone,
+    receiptShowHeader: s.receiptShowHeader ?? current.receiptShowHeader,
+    receiptShowFooter: s.receiptShowFooter ?? current.receiptShowFooter,
+    receiptShowDiscount: s.receiptShowDiscount ?? current.receiptShowDiscount,
+    receiptShowPoweredBy: s.receiptShowPoweredBy ?? current.receiptShowPoweredBy,
     storefrontEnabled: front?.enabled ?? current.storefrontEnabled,
     storefrontUrl: front?.url || current.storefrontUrl,
     storefrontSyncPrices: front?.syncPrices ?? current.storefrontSyncPrices,

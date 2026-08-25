@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import {
   MarketingCard,
+  MarketingCtaBand,
   MarketingHero,
   MarketingPrimaryLink,
   MarketingSecondaryLink,
@@ -111,7 +112,7 @@ export default function ProductPage() {
         </div>
       </MarketingSection>
 
-      <MarketingSection className="pb-20">
+      <MarketingSection>
         <div className="overflow-hidden rounded-[32px] border border-pos-border/80 bg-pos-surface p-8 text-center shadow-pos-md sm:p-12">
           <h2 className="text-[clamp(1.5rem,3vw,2rem)] font-semibold tracking-tight text-pos-ink">
             Ready to issue your first till?
@@ -125,6 +126,11 @@ export default function ProductPage() {
           </div>
         </div>
       </MarketingSection>
+
+      <MarketingCtaBand
+        title="Ready to run the till without sharing a PC?"
+        copy="Create an HQ account. Issue a till. No pressure. No second spreadsheet."
+      />
     </>
   );
 }

@@ -77,12 +77,77 @@ export type HqOrgSettings = {
   receiptHeader: string;
   receiptFooter: string;
   receiptPaper: "80mm" | "58mm";
+  receiptTemplate: "classic" | "compact" | "bold" | "minimal";
+  receiptBrandColor: string;
+  receiptShowLogo: boolean;
+  receiptShowTax: boolean;
+  receiptShowCashier: boolean;
+  receiptShowBarcode: boolean;
+  /** Store title printed at top of receipt (overrides company name when set). */
+  receiptTitle: string;
+  /** Branch / store address line on the ticket. */
+  receiptAddress: string;
+  /** Contact email printed on the ticket. */
+  receiptEmail: string;
+  /** Sample / preview ticket id encoded as Code 128. */
+  receiptBarcodeValue: string;
+  /** Show “Powered by Herkintormiwer” on the ticket. */
+  receiptShowPoweredBy: boolean;
+  receiptShowTicketNumber: boolean;
+  receiptShowDate: boolean;
+  receiptShowCustomer: boolean;
+  receiptShowTill: boolean;
+  receiptShowTender: boolean;
+  receiptShowChange: boolean;
+  receiptShowLoyalty: boolean;
+  receiptShowGiftCard: boolean;
   invoicePrefix: string;
+  invoiceNextNumber: number;
+  invoiceTemplate: "modern" | "letterhead" | "classic" | "sapphire" | "ivory";
+  invoiceBrandColor: string;
+  invoicePanelColor: string;
+  invoiceShowLogo: boolean;
+  invoiceTerms: string;
+  invoicePaymentNote: string;
   pricesIncludeVat: boolean;
   idleLockMinutes: number;
   requireOpenShift: boolean;
   lowStockQty: number;
   blockNegativeStock: boolean;
+  printDuplicateReceipt: boolean;
+  showSkuOnReceipt: boolean;
+  allowPriceOverride: boolean;
+  requireManagerPin: boolean;
+  allowDiscounts: boolean;
+  maxDiscountPercent: number;
+  allowPartialRefunds: boolean;
+  restockOnRefund: boolean;
+  refundWithoutTicket: boolean;
+  tipsEnabled: boolean;
+  holdExpiryMinutes: number;
+  autoPrintReceipt: boolean;
+  openCashDrawer: boolean;
+  receiptCopies: number;
+  notifyLowStock: boolean;
+  notifyNewSale: boolean;
+  notifyRefund: boolean;
+  notifyShiftClose: boolean;
+  notifyDailySummary: boolean;
+  passwordMinLength: number;
+  sessionTimeoutMinutes: number;
+  uiTheme: "system" | "light" | "dark";
+  uiFont:
+    | "inter"
+    | "dm-sans"
+    | "source-sans"
+    | "ibm-plex"
+    | "nunito"
+    | "outfit"
+    | "manrope"
+    | "space-grotesk";
+  uiAccent: "violet" | "teal" | "blue" | "amber" | "rose";
+  uiDensity: "comfortable" | "compact";
+  uiReduceMotion: boolean;
 };
 
 export const SEED_COMPANY: HqCompany = {
@@ -231,12 +296,64 @@ export const SEED_SETTINGS: HqOrgSettings = {
   receiptHeader: "Goods sold are not returnable after 24 hours.",
   receiptFooter: "Thank you for shopping with us.",
   receiptPaper: "80mm",
+  receiptTemplate: "classic",
+  receiptBrandColor: "#111827",
+  receiptShowLogo: true,
+  receiptShowTax: true,
+  receiptShowCashier: true,
+  receiptShowBarcode: true,
+  receiptTitle: "The Place",
+  receiptAddress: "14 Adeola Odeku Street, Victoria Island, Lagos",
+  receiptEmail: "accounts@theplace.ng",
+  receiptBarcodeValue: "10482001933",
+  receiptShowPoweredBy: true,
+  receiptShowTicketNumber: true,
+  receiptShowDate: true,
+  receiptShowCustomer: true,
+  receiptShowTill: true,
+  receiptShowTender: true,
+  receiptShowChange: true,
+  receiptShowLoyalty: true,
+  receiptShowGiftCard: true,
   invoicePrefix: "INV",
+  invoiceNextNumber: 1001,
+  invoiceTemplate: "sapphire",
+  invoiceBrandColor: "#0F2C59",
+  invoicePanelColor: "#5788D3",
+  invoiceShowLogo: true,
+  invoiceTerms: "Payment is due within 7 days. Goods remain property of the seller until paid in full.",
+  invoicePaymentNote: "Transfer to the account on your statement. Quote the invoice number.",
   pricesIncludeVat: false,
   idleLockMinutes: 0,
   requireOpenShift: true,
   lowStockQty: 5,
   blockNegativeStock: true,
+  printDuplicateReceipt: false,
+  showSkuOnReceipt: false,
+  allowPriceOverride: false,
+  requireManagerPin: true,
+  allowDiscounts: true,
+  maxDiscountPercent: 20,
+  allowPartialRefunds: true,
+  restockOnRefund: true,
+  refundWithoutTicket: false,
+  tipsEnabled: false,
+  holdExpiryMinutes: 120,
+  autoPrintReceipt: true,
+  openCashDrawer: true,
+  receiptCopies: 1,
+  notifyLowStock: true,
+  notifyNewSale: false,
+  notifyRefund: true,
+  notifyShiftClose: true,
+  notifyDailySummary: true,
+  passwordMinLength: 6,
+  sessionTimeoutMinutes: 0,
+  uiTheme: "system",
+  uiFont: "inter",
+  uiAccent: "violet",
+  uiDensity: "comfortable",
+  uiReduceMotion: false,
 };
 
 export type HqOrgSnapshot = {

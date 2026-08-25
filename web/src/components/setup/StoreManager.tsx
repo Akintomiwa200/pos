@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Plus } from "lucide-react";
 import { toast } from "@/lib/toast";
 import {
@@ -23,6 +24,7 @@ import {
   fieldClass,
   secondaryButtonClass,
 } from "./SetupChrome";
+import { useOrgLive } from "./org/useOrgLive";
 
 const blank: Partial<HqStore> = {
   name: "",
@@ -47,19 +49,19 @@ export function StoreManager() {
   const [ready, setReady] = useState(false);
   const [search, setSearch] = useState("");
 
-  async function load() {
+  const load = useCallback(async () => {
     const [stores, branchRows] = await Promise.all([listStores(), listBranches()]);
     setRows(stores);
     setBranches(branchRows);
-    setReady(true);
-  }
+  }, []);
 
   useEffect(() => {
-    load().catch((err) => {
-      toast.error(err, "Could not load stores");
-      setReady(true);
-    });
-  }, []);
+    load()
+      .catch((err) => toast.error(err, "Could not load stores"))
+      .finally(() => setReady(true));
+  }, [load]);
+
+  useOrgLive(load);
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -85,11 +87,12 @@ export function StoreManager() {
   return (
     <div>
       <SetupHeader
-        kicker="Analytics · Point of Sales"
+        kicker="Setup · Organization"
         title="Stores"
         copy="Stock and selling space inside a branch — retail floor, warehouse, or dark kitchen. Tills sell from a store; inventory is counted here."
         action={
           <PrimaryButton
+            disabled={branches.length === 0}
             onClick={() => {
               setDraft({ ...blank, branchId: branches[0]?.id ?? "" });
               setOpen(true);
@@ -109,6 +112,18 @@ export function StoreManager() {
         <SetupStat label="Warehouse" value={String(byKind.warehouse)} />
         <SetupStat label="Dark kitchen" value={String(byKind["dark-kitchen"])} />
       </div>
+
+      <p className="mb-3 text-sm text-pos-ink-muted">
+        Stores sit on a{" "}
+        <Link href="/setup/others/branch" className="font-medium text-pos-primary hover:underline">
+          branch
+        </Link>
+        . Online shops are{" "}
+        <Link href="/setup/others/storefront" className="font-medium text-pos-primary hover:underline">
+          storefronts
+        </Link>
+        .
+      </p>
 
       <DataTable
         columns={["Name", "Branch", "Type", "Address", "Status"]}

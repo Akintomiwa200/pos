@@ -2,7 +2,9 @@ import { BadRequestException, Injectable, NotFoundException, OnModuleInit } from
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
+import { Observable, Subject } from "rxjs";
 import { DbService } from "../db/db.service";
+import { assertOrgSettingsInput } from "./setup-settings.validation";
 import {
   SEED_BRANCHES,
   SEED_COMPANY,
@@ -26,6 +28,12 @@ function nid(prefix: string) {
   return `${prefix}-${randomBytes(4).toString("hex")}`;
 }
 
+export type SettingsEvent = {
+  type: "settings";
+  settings: HqOrgSettings;
+  at: string;
+};
+
 @Injectable()
 export class SetupService implements OnModuleInit {
   private company: HqCompany = SEED_COMPANY;
@@ -35,6 +43,7 @@ export class SetupService implements OnModuleInit {
   private gateways: HqGateway[] = [];
   private taxes: HqTax[] = [];
   private settings: HqOrgSettings = SEED_SETTINGS;
+  private readonly settingsEvents = new Subject<SettingsEvent>();
 
   constructor(private readonly db: DbService) {}
 
@@ -308,19 +317,35 @@ export class SetupService implements OnModuleInit {
     return this.settings;
   }
 
+  settingsStream(): Observable<SettingsEvent> {
+    return new Observable((subscriber) => {
+      subscriber.next({
+        type: "settings",
+        settings: this.settings,
+        at: new Date().toISOString(),
+      });
+      const sub = this.settingsEvents.subscribe(subscriber);
+      return () => sub.unsubscribe();
+    });
+  }
+
+  private publishSettings() {
+    this.settingsEvents.next({
+      type: "settings",
+      settings: this.settings,
+      at: new Date().toISOString(),
+    });
+  }
+
   async saveSettings(input: Partial<HqOrgSettings>) {
+    const validated = assertOrgSettingsInput(input);
     this.settings = {
+      ...SEED_SETTINGS,
       ...this.settings,
-      ...input,
-      timezone: input.timezone?.trim() || this.settings.timezone,
-      language: input.language?.trim() || this.settings.language,
-      currency: input.currency?.trim() || this.settings.currency,
-      receiptHeader: input.receiptHeader ?? this.settings.receiptHeader,
-      receiptFooter: input.receiptFooter ?? this.settings.receiptFooter,
-      receiptPaper: input.receiptPaper === "58mm" ? "58mm" : input.receiptPaper === "80mm" ? "80mm" : this.settings.receiptPaper,
-      invoicePrefix: input.invoicePrefix?.trim() || this.settings.invoicePrefix,
+      ...validated,
     };
     await this.persist();
+    this.publishSettings();
     return this.settings;
   }
 

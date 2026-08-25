@@ -20,15 +20,15 @@ type AuthContextValue = {
   loading: boolean;
   live: boolean;
   /** Any HQ account (admin, sales, accountant, …). */
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<ConsoleSession>;
   /** Company onboarding — creates org + administrator. */
-  registerCompany: (input: CompanySignupInput) => Promise<void>;
+  registerCompany: (input: CompanySignupInput) => Promise<ConsoleSession>;
   /** Google: login for existing accounts, or company signup when intent is signup. */
-  loginWithGoogle: (credential: string) => Promise<void>;
+  loginWithGoogle: (credential: string) => Promise<ConsoleSession>;
   signupCompanyWithGoogle: (
     credential: string,
     company: CompanySignupInput["company"],
-  ) => Promise<void>;
+  ) => Promise<ConsoleSession>;
   logout: () => Promise<void>;
   updatePassword: (current: string, password: string) => Promise<void>;
   setSession: (session: ConsoleSession | null) => void;
@@ -139,16 +139,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const next = await loginConsole(email, password);
         setLive(true);
         setSessionState(next);
+        return next;
       },
       async registerCompany(input) {
         const next = await registerCompanyConsole(input);
         setLive(true);
         setSessionState(next);
+        return next;
       },
       async loginWithGoogle(credential) {
         const next = await googleAuthConsole({ credential, intent: "login" });
         setLive(true);
         setSessionState(next);
+        return next;
       },
       async signupCompanyWithGoogle(credential, company) {
         const next = await googleAuthConsole({
@@ -158,6 +161,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
         setLive(true);
         setSessionState(next);
+        return next;
       },
       async logout() {
         await logoutConsole(session?.token);

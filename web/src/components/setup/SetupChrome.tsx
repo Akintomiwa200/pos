@@ -65,14 +65,25 @@ export function SetupStat({
 export function Field({
   label,
   children,
+  error,
+  hint,
 }: {
   label: string;
   children: ReactNode;
+  error?: string;
+  hint?: string;
 }) {
   return (
     <label className="mb-3 block text-sm font-medium text-pos-ink">
       {label}
       <span className="mt-1 block font-normal">{children}</span>
+      {error ? (
+        <span className="mt-1.5 block text-[12px] font-normal text-pos-danger" role="alert">
+          {error}
+        </span>
+      ) : hint ? (
+        <span className="mt-1 block text-[12px] font-normal text-pos-ink-faint">{hint}</span>
+      ) : null}
     </label>
   );
 }

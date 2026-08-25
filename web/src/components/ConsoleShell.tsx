@@ -1,8 +1,8 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { canAccessPath, filterNav } from "../lib/access";
+import { useEffect, useRef, useState } from "react";
+import { canAccessPath, filterNav, firstAllowedPath } from "../lib/access";
 import { ConsoleHeader } from "./ConsoleHeader";
 import { useAuth } from "./AuthProvider";
 import { AiHelpModal } from "./help/AiHelpModal";
@@ -15,6 +15,7 @@ export function ConsoleShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [navOpen, setNavOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const lastAllowedRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!loading && !session) router.replace("/login");
@@ -33,16 +34,47 @@ export function ConsoleShell({ children }: { children: React.ReactNode }) {
     return () => document.removeEventListener("keydown", onKey);
   }, [navOpen]);
 
+  useEffect(() => {
+    if (loading || !session) return;
+
+    const allowed = canAccessPath(pathname, session.departments, session.privileges);
+    if (allowed) {
+      lastAllowedRef.current = pathname;
+      return;
+    }
+
+    const previous = lastAllowedRef.current;
+    const previousOk =
+      previous &&
+      previous !== pathname &&
+      canAccessPath(previous, session.departments, session.privileges);
+
+    const fallback = previousOk
+      ? previous
+      : firstAllowedPath(session.departments, session.privileges);
+
+    if (fallback && fallback !== pathname) {
+      router.replace(fallback);
+    }
+  }, [loading, session, pathname, router]);
+
   if (loading || !session) {
     return <ConsoleChromeSkeleton />;
   }
 
   const nav = filterNav(session.departments, session.privileges);
   const allowed = canAccessPath(pathname, session.departments, session.privileges);
+  const homeHref = firstAllowedPath(session.departments, session.privileges);
 
   return (
     <div className="flex h-svh overflow-hidden bg-pos-bg">
-      <Sidebar session={session} nav={nav} open={navOpen} onClose={() => setNavOpen(false)} />
+      <Sidebar
+        session={session}
+        nav={nav}
+        homeHref={homeHref}
+        open={navOpen}
+        onClose={() => setNavOpen(false)}
+      />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <ConsoleHeader
           session={session}
@@ -51,20 +83,8 @@ export function ConsoleShell({ children }: { children: React.ReactNode }) {
           onOpenHelp={() => setHelpOpen(true)}
         />
         <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-7xl p-4 sm:p-8">
-            {allowed ? (
-              children
-            ) : (
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-pos-primary">
-                  Access
-                </p>
-                <h1 className="mt-1 text-2xl font-semibold tracking-tight">No access</h1>
-                <p className="mt-2 max-w-xl text-pos-ink-muted">
-                  This page is not in the departments or privileges assigned to your group.
-                </p>
-              </div>
-            )}
+          <div className="console-shell-main mx-auto w-full max-w-7xl p-4 sm:p-8">
+            {allowed ? children : null}
           </div>
         </main>
       </div>

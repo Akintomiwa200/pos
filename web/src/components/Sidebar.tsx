@@ -222,11 +222,13 @@ function NavRow({
 export function Sidebar({
   session,
   nav,
+  homeHref = "/dashboard",
   open = false,
   onClose,
 }: {
   session: ConsoleSession;
   nav: NavSection[];
+  homeHref?: string;
   open?: boolean;
   onClose?: () => void;
 }) {
@@ -235,6 +237,16 @@ export function Sidebar({
   const { logout } = useAuth();
   const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({});
   const dashboardActive = pathname === "/dashboard" || pathname.startsWith("/dashboard/");
+  const canSeeDashboard = nav.some(
+    (section) =>
+      section.heading === "Main Menu" &&
+      section.items.some((item) => item.id === "dashboard"),
+  );
+  const settingsAllowed = nav.some(
+    (section) =>
+      section.heading === "Settings" &&
+      section.items.some((item) => item.id === "others-settings"),
+  );
 
   useEffect(() => {
     setOpenMenus((current) => ({ ...current, ...openIdsForPath(pathname, nav) }));
@@ -310,7 +322,7 @@ export function Sidebar({
       >
         <div className="flex items-center gap-2 px-5 py-5">
           <div className="min-w-0 flex-1">
-            <BrandLogo href="/dashboard" size="sm" />
+            <BrandLogo href={homeHref} size="sm" />
           </div>
           <button
             type="button"
@@ -323,27 +335,32 @@ export function Sidebar({
         </div>
 
         <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
+          {(canSeeDashboard || (mainMenu?.items.filter((item) => item.id !== "dashboard").length ?? 0) > 0) ? (
           <div className="mb-5">
             <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-pos-sidebar-muted">
               Main Menu
             </p>
             <div className="flex flex-col gap-0.5">
-              <Link
-                href="/dashboard"
-                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-[14px] transition ${
-                  dashboardActive
-                    ? "bg-pos-primary font-medium text-white shadow-[0_4px_14px_rgba(109,74,255,0.3)]"
-                    : "text-pos-ink hover:bg-pos-surface-muted"
-                }`}
-              >
-                <LayoutDashboard
-                  size={18}
-                  strokeWidth={1.75}
-                  className={dashboardActive ? "text-white" : "text-pos-ink-muted"}
-                />
-                <span className="flex-1">Dashboard</span>
-              </Link>
-              {mainMenu?.items.map((item) => {
+              {canSeeDashboard ? (
+                <Link
+                  href="/dashboard"
+                  className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-[14px] transition ${
+                    dashboardActive
+                      ? "bg-pos-primary font-medium text-white shadow-[0_4px_14px_rgba(109,74,255,0.3)]"
+                      : "text-pos-ink hover:bg-pos-surface-muted"
+                  }`}
+                >
+                  <LayoutDashboard
+                    size={18}
+                    strokeWidth={1.75}
+                    className={dashboardActive ? "text-white" : "text-pos-ink-muted"}
+                  />
+                  <span className="flex-1">Dashboard</span>
+                </Link>
+              ) : null}
+              {mainMenu?.items
+                .filter((item) => item.id !== "dashboard")
+                .map((item) => {
                 const dropdown = Array.isArray(item.children);
                 const expanded = Boolean(openMenus[item.id]);
 
@@ -369,6 +386,7 @@ export function Sidebar({
               })}
             </div>
           </div>
+          ) : null}
 
           {nav.length === 0 && (
             <p className="px-3 text-sm text-pos-ink-faint">No menus assigned to this group.</p>
@@ -407,21 +425,23 @@ export function Sidebar({
                     </div>
                   );
                 })}
-              <Link
-                href="/setup/others/settings"
-                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-[14px] transition ${
-                  settingsActive
-                    ? "bg-pos-primary font-medium text-white shadow-[0_4px_14px_rgba(109,74,255,0.3)]"
-                    : "text-pos-ink hover:bg-pos-surface-muted"
-                }`}
-              >
-                <SlidersHorizontal
-                  size={18}
-                  strokeWidth={1.75}
-                  className={settingsActive ? "text-white" : "text-pos-ink-muted"}
-                />
-                <span className="flex-1">Settings</span>
-              </Link>
+              {settingsAllowed ? (
+                <Link
+                  href="/setup/others/settings"
+                  className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-[14px] transition ${
+                    settingsActive
+                      ? "bg-pos-primary font-medium text-white shadow-[0_4px_14px_rgba(109,74,255,0.3)]"
+                      : "text-pos-ink hover:bg-pos-surface-muted"
+                  }`}
+                >
+                  <SlidersHorizontal
+                    size={18}
+                    strokeWidth={1.75}
+                    className={settingsActive ? "text-white" : "text-pos-ink-muted"}
+                  />
+                  <span className="flex-1">Settings</span>
+                </Link>
+              ) : null}
               <button
                 type="button"
                 onClick={() => void handleLogout()}

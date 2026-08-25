@@ -42,6 +42,9 @@ export type ConsoleSession = {
 
 export const SESSION_KEY = "hq.session.v1";
 
+/** Always reachable when signed in (not shown as group privileges). */
+const ALWAYS_ALLOWED_PATHS = ["/password", "/help"];
+
 function nodeIds(node: NavNode): string[] {
   if (!isNavGroup(node)) return [node.id];
   return [node.id, ...node.children.flatMap(nodeIds)];
@@ -52,7 +55,10 @@ function itemIds(item: NavItem): string[] {
 }
 
 export function allNavIds(): string[] {
-  return ACCESS_NAV.flatMap((section) => section.items.flatMap(itemIds));
+  return [
+    ...NAV.flatMap((section) => section.items.flatMap(itemIds)),
+    ...ACCESS_NAV.flatMap((section) => section.items.flatMap(itemIds)),
+  ];
 }
 
 function allSidebarIds(): string[] {
@@ -80,7 +86,36 @@ export function expandPrivileges(privileges: string[]): Set<string> {
   for (const section of accessTree()) {
     for (const item of section.items) expand(item);
   }
+
+  // Also expand any ACCESS_NAV parents still stored on older groups
+  for (const section of ACCESS_NAV) {
+    for (const item of section.items) expand(itemToAccessNode(item));
+  }
+
   return granted;
+}
+
+function itemToAccessNode(item: NavItem): AccessNode {
+  return {
+    id: item.id,
+    label: item.label,
+    children: item.children?.map((node) =>
+      isNavGroup(node)
+        ? { id: node.id, label: node.label, children: node.children.map(nodeToAccessNode) }
+        : { id: node.id, label: node.label },
+    ),
+  };
+}
+
+function nodeToAccessNode(node: NavNode): AccessNode {
+  if (isNavGroup(node)) {
+    return {
+      id: node.id,
+      label: node.label,
+      children: node.children.map(nodeToAccessNode),
+    };
+  }
+  return { id: node.id, label: node.label };
 }
 
 function filterNodes(nodes: NavNode[], granted: Set<string>): NavNode[] {
@@ -157,16 +192,15 @@ export function collectHrefs(sections: NavSection[]): string[] {
   );
 }
 
-const OPEN_PATHS = new Set([
-  "/dashboard",
-  "/password",
-  "/admin",
-  "/procurement",
-  "/it",
-  "/finance",
-  "/hr",
-  "/catalog",
-]);
+function isAlwaysAllowed(pathname: string) {
+  return ALWAYS_ALLOWED_PATHS.some(
+    (path) => pathname === path || pathname.startsWith(`${path}/`),
+  );
+}
+
+export function pathMatchesHref(pathname: string, href: string) {
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
 
 export function canAccessPath(
   pathname: string,
@@ -174,11 +208,39 @@ export function canAccessPath(
   privileges: string[],
 ) {
   if (privileges.includes("*")) return true;
-  if (OPEN_PATHS.has(pathname) || pathname.startsWith("/verticals")) return true;
-  const sections = filterAccessNav(departments, privileges);
-  return collectHrefs(sections).some(
-    (href) => pathname === href || pathname.startsWith(`${href}/`),
-  );
+  if (isAlwaysAllowed(pathname)) return true;
+
+  const hrefs = [
+    ...collectHrefs(filterNav(departments, privileges)),
+    ...collectHrefs(filterAccessNav(departments, privileges)),
+  ];
+
+  return hrefs.some((href) => pathMatchesHref(pathname, href));
+}
+
+/** First page this group is allowed to open (for redirects). */
+export function firstAllowedPath(
+  departments: Array<DepartmentName | "*">,
+  privileges: string[],
+) {
+  if (privileges.includes("*")) return "/dashboard";
+  const hrefs = collectHrefs(filterNav(departments, privileges));
+  if (hrefs.includes("/dashboard")) return "/dashboard";
+  return hrefs[0] ?? "/help";
+}
+
+/** Derive department flags from which sidebar sections have any granted privileges. */
+export function departmentsFromPrivileges(
+  privileges: string[],
+): Array<DepartmentName | "*"> {
+  if (privileges.includes("*")) return ["*"];
+  const granted = expandPrivileges(privileges);
+  const depts = new Set<DepartmentName>();
+  for (const section of NAV) {
+    const ids = section.items.flatMap(itemIds);
+    if (ids.some((id) => granted.has(id))) depts.add(section.department);
+  }
+  return depts.size ? [...depts] : [];
 }
 
 export function isChecked(granted: Set<string>, node: AccessNode): boolean {
@@ -196,7 +258,7 @@ export function isIndeterminate(granted: Set<string>, node: AccessNode): boolean
 }
 
 export function compressPrivileges(granted: Set<string>): string[] {
-  if (granted.has("*") || allNavIds().every((id) => granted.has(id))) return ["*"];
+  if (granted.has("*") || allSidebarIds().every((id) => granted.has(id))) return ["*"];
   const out: string[] = [];
 
   function walk(nodes: AccessNode[]) {

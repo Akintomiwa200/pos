@@ -8,6 +8,7 @@ import {
 } from "@nestjs/common";
 import { DbService } from "../db/db.service";
 import {
+  isDefaultGroupId,
   publicAccount,
   type ConsoleAccount,
   type ConsoleGroup,
@@ -202,6 +203,9 @@ export class ConsoleService {
   }
 
   async deleteGroup(id: string) {
+    if (isDefaultGroupId(id)) {
+      throw new BadRequestException("Default groups cannot be deleted");
+    }
     const inUse = await this.db.query(
       `select 1 from hq_accounts where group_id = $1 limit 1`,
       [id],
@@ -667,10 +671,22 @@ export class ConsoleService {
     const name = input.name?.trim();
     const email = input.email?.trim().toLowerCase();
     const username = input.username?.trim().toLowerCase();
+    const groupId = input.groupId?.trim();
     if (!name || !email || !username) {
       throw new BadRequestException("Name, email, and username are required");
     }
-    if (!(await this.findGroup(String(input.groupId)))) {
+    if (!groupId) {
+      throw new BadRequestException("Group is required");
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw new BadRequestException("Enter a valid email address");
+    }
+    if (!/^[a-z0-9._-]{3,32}$/.test(username)) {
+      throw new BadRequestException(
+        "Username must be 3–32 characters: letters, numbers, dots, underscores, or hyphens",
+      );
+    }
+    if (!(await this.findGroup(groupId))) {
       throw new BadRequestException("Select a group");
     }
     const existing = input.id
@@ -682,17 +698,26 @@ export class ConsoleService {
     );
     if (duplicate) throw new BadRequestException("Email or username already in use");
 
-    const plainPassword = input.password?.trim();
-    const passwordHash = existing
-      ? plainPassword
-        ? hashPassword(plainPassword)
-        : existing.password
-      : hashPassword(plainPassword || "demo");
-    const id = existing?.id ?? `a-${Date.now()}`;
+    const plainPassword = input.password?.trim() ?? "";
     const authProvider =
       input.authProvider ??
       existing?.authProvider ??
       (input.googleId ? "google" : "password");
+    const isGoogleOnly = authProvider === "google";
+
+    if (!existing && !plainPassword && !isGoogleOnly) {
+      throw new BadRequestException("Password is required for new accounts");
+    }
+    if (plainPassword && plainPassword.length < 6) {
+      throw new BadRequestException("Password must be at least 6 characters");
+    }
+
+    const passwordHash = existing
+      ? plainPassword
+        ? hashPassword(plainPassword)
+        : existing.password
+      : hashPassword(plainPassword || generateSessionToken().slice(0, 24));
+    const id = existing?.id ?? `a-${Date.now()}`;
     const googleId =
       input.googleId !== undefined ? input.googleId : existing?.googleId ?? null;
 
@@ -708,7 +733,17 @@ export class ConsoleService {
            active = excluded.active,
            google_id = excluded.google_id,
            auth_provider = excluded.auth_provider`,
-      [id, name, email, username, passwordHash, input.groupId, input.active ?? existing?.active ?? true, googleId, authProvider],
+      [
+        id,
+        name,
+        email,
+        username,
+        passwordHash,
+        groupId,
+        input.active ?? existing?.active ?? true,
+        googleId,
+        authProvider,
+      ],
     );
 
     const next: ConsoleAccount = {
@@ -717,10 +752,11 @@ export class ConsoleService {
       email,
       username,
       password: passwordHash,
-      groupId: String(input.groupId),
+      groupId,
       active: input.active ?? existing?.active ?? true,
       googleId,
-      authProvider: authProvider === "google" || authProvider === "both" ? authProvider : "password",
+      authProvider:
+        authProvider === "google" || authProvider === "both" ? authProvider : "password",
     };
 
     if (!existing) {

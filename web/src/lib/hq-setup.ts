@@ -75,12 +75,72 @@ export type HqOrgSettings = {
   receiptHeader: string;
   receiptFooter: string;
   receiptPaper: "80mm" | "58mm";
+  receiptTemplate: "classic" | "compact" | "bold" | "minimal";
+  receiptBrandColor: string;
+  receiptShowLogo: boolean;
+  receiptShowTax: boolean;
+  receiptShowCashier: boolean;
+  receiptShowBarcode: boolean;
+  receiptTitle: string;
+  receiptAddress: string;
+  receiptEmail: string;
+  receiptBarcodeValue: string;
+  receiptShowPoweredBy: boolean;
+  receiptShowTicketNumber: boolean;
+  receiptShowDate: boolean;
+  receiptShowCustomer: boolean;
+  receiptShowTill: boolean;
+  receiptShowTender: boolean;
+  receiptShowChange: boolean;
+  receiptShowLoyalty: boolean;
+  receiptShowGiftCard: boolean;
   invoicePrefix: string;
+  invoiceNextNumber: number;
+  invoiceTemplate: "modern" | "letterhead" | "classic" | "sapphire" | "ivory";
+  invoiceBrandColor: string;
+  invoicePanelColor: string;
+  invoiceShowLogo: boolean;
+  invoiceTerms: string;
+  invoicePaymentNote: string;
   pricesIncludeVat: boolean;
   idleLockMinutes: number;
   requireOpenShift: boolean;
   lowStockQty: number;
   blockNegativeStock: boolean;
+  printDuplicateReceipt: boolean;
+  showSkuOnReceipt: boolean;
+  allowPriceOverride: boolean;
+  requireManagerPin: boolean;
+  allowDiscounts: boolean;
+  maxDiscountPercent: number;
+  allowPartialRefunds: boolean;
+  restockOnRefund: boolean;
+  refundWithoutTicket: boolean;
+  tipsEnabled: boolean;
+  holdExpiryMinutes: number;
+  autoPrintReceipt: boolean;
+  openCashDrawer: boolean;
+  receiptCopies: number;
+  notifyLowStock: boolean;
+  notifyNewSale: boolean;
+  notifyRefund: boolean;
+  notifyShiftClose: boolean;
+  notifyDailySummary: boolean;
+  passwordMinLength: number;
+  sessionTimeoutMinutes: number;
+  uiTheme: "system" | "light" | "dark";
+  uiFont:
+    | "inter"
+    | "dm-sans"
+    | "source-sans"
+    | "ibm-plex"
+    | "nunito"
+    | "outfit"
+    | "manrope"
+    | "space-grotesk";
+  uiAccent: "violet" | "teal" | "blue" | "amber" | "rose";
+  uiDensity: "comfortable" | "compact";
+  uiReduceMotion: boolean;
 };
 
 export type HqOrgSnapshot = {

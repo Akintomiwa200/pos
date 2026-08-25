@@ -16,6 +16,7 @@ import {
   History,
   IdCard,
   Landmark,
+  LayoutDashboard,
   LifeBuoy,
   Megaphone,
   MessageSquare,
@@ -590,6 +591,12 @@ export const NAV: NavSection[] = [
     department: "Setup",
     items: [
       {
+        id: "dashboard",
+        label: "Dashboard",
+        icon: LayoutDashboard,
+        href: "/dashboard",
+      },
+      {
         id: "items",
         label: "Products",
         icon: ShoppingCart,
@@ -791,18 +798,15 @@ export const NAV: NavSection[] = [
   },
 ];
 
-export function accessTree(): { heading: DepartmentName; items: AccessNode[] }[] {
-  const buckets: Record<DepartmentName, AccessNode[]> = {
-    Report: [],
-    Transaction: [],
-    Setup: [],
-  };
-
-  for (const section of ACCESS_NAV) {
-    for (const item of section.items) {
-      buckets[section.department].push(itemToAccess(item));
-    }
-  }
-
-  return DEPARTMENTS.map((heading) => ({ heading, items: buckets[heading] }));
+/** Privilege registration tree — mirrors sidebar categories, not deep ACCESS_NAV pages. */
+export function accessTree(): {
+  heading: string;
+  department: DepartmentName;
+  items: AccessNode[];
+}[] {
+  return NAV.map((section) => ({
+    heading: section.heading,
+    department: section.department,
+    items: section.items.map(itemToAccess),
+  }));
 }

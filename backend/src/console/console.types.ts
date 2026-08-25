@@ -32,6 +32,21 @@ export type HqNotice = {
   derived?: boolean;
 };
 
+/** Built-in roles that ship with HQ and cannot be deleted. */
+export const DEFAULT_GROUP_IDS = [
+  "g-admin",
+  "g-store-manager",
+  "g-accountant",
+  "g-sales",
+  "g-cashier",
+  "g-inventory",
+  "g-support",
+] as const;
+
+export function isDefaultGroupId(id: string) {
+  return (DEFAULT_GROUP_IDS as readonly string[]).includes(id);
+}
+
 export const SEED_GROUPS: ConsoleGroup[] = [
   {
     id: "g-admin",
@@ -40,27 +55,87 @@ export const SEED_GROUPS: ConsoleGroup[] = [
     privileges: ["*"],
   },
   {
+    id: "g-store-manager",
+    name: "Store Manager",
+    departments: ["Report", "Setup"],
+    privileges: [
+      "dashboard",
+      "items",
+      "sales",
+      "pos-hub",
+      "sales-gp-subgroup",
+      "purchase-order",
+      "sales-return-list",
+      "stock-report",
+      "sales-invoice-list",
+      "payments",
+      "audit",
+      "customer",
+      "vendor",
+      "staff",
+      "sales-rep",
+      "payment-method",
+      "sales-promotion",
+      "chat",
+      "help",
+    ],
+  },
+  {
     id: "g-accountant",
     name: "Accountant",
-    departments: ["Report", "Transaction", "Setup"],
+    departments: ["Report", "Setup"],
     privileges: [
+      "dashboard",
       "sales",
       "stock-report",
+      "sales-invoice-list",
+      "payments",
+      "audit",
+      "finance",
+      "accounting-books",
+      "accounting-statements",
       "balance",
       "ledger",
       "trail",
       "tax",
-      "payments",
-      "receipt",
-      "expenses",
       "expense-account",
+      "billing",
+      "help",
     ],
   },
   {
     id: "g-sales",
-    name: "Sales",
-    departments: ["Report", "Transaction", "Setup"],
-    privileges: ["sales", "receipt", "customer", "sales-rep"],
+    name: "Sales Associate",
+    departments: ["Report", "Setup"],
+    privileges: [
+      "pos-hub",
+      "payments",
+      "sales-return-list",
+      "sales-invoice-list",
+      "customer",
+      "sales-rep",
+      "sales-promotion",
+      "chat",
+      "help",
+    ],
+  },
+  {
+    id: "g-cashier",
+    name: "Cashier",
+    departments: ["Report", "Setup"],
+    privileges: ["pos-hub", "payments", "sales-return-list", "customer", "help"],
+  },
+  {
+    id: "g-inventory",
+    name: "Inventory Clerk",
+    departments: ["Report", "Setup"],
+    privileges: ["items", "stock-report", "purchase-order", "vendor", "payments", "help"],
+  },
+  {
+    id: "g-support",
+    name: "Support Agent",
+    departments: ["Setup"],
+    privileges: ["chat", "support", "customer", "help"],
   },
 ];
 
@@ -72,6 +147,15 @@ export const SEED_ACCOUNTS: ConsoleAccount[] = [
     username: "emma",
     password: "demo",
     groupId: "g-admin",
+    active: true,
+  },
+  {
+    id: "a-funke",
+    name: "Funke Adeyemi",
+    email: "funke.adeyemi@example.com",
+    username: "funke",
+    password: "demo",
+    groupId: "g-store-manager",
     active: true,
   },
   {
@@ -90,6 +174,33 @@ export const SEED_ACCOUNTS: ConsoleAccount[] = [
     username: "tosin",
     password: "demo",
     groupId: "g-sales",
+    active: true,
+  },
+  {
+    id: "a-amaka",
+    name: "Amaka Eze",
+    email: "amaka.eze@example.com",
+    username: "amaka",
+    password: "demo",
+    groupId: "g-cashier",
+    active: true,
+  },
+  {
+    id: "a-ibrahim",
+    name: "Ibrahim Bello",
+    email: "ibrahim.bello@example.com",
+    username: "ibrahim",
+    password: "demo",
+    groupId: "g-inventory",
+    active: true,
+  },
+  {
+    id: "a-david",
+    name: "David Okoro",
+    email: "david.okoro@example.com",
+    username: "david",
+    password: "demo",
+    groupId: "g-support",
     active: true,
   },
 ];

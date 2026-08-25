@@ -5,7 +5,7 @@ import {
   type ConsoleSession,
 } from "./access";
 import { NetworkError, resolveUserMessage } from "./errors";
-import { SEED_ACCOUNTS, SEED_GROUPS } from "./hq-seed";
+import { SEED_ACCOUNTS, SEED_GROUPS, isDefaultGroupId } from "./hq-seed";
 
 export { NetworkError } from "./errors";
 
@@ -294,8 +294,13 @@ export async function listGroups(): Promise<ConsoleGroup[]> {
     return await api<ConsoleGroup[]>("/api/console/groups");
   } catch (error) {
     if (!(error instanceof NetworkError)) throw error;
-    const groups = readLocal(GROUPS_KEY, SEED_GROUPS);
-    if (!window.localStorage.getItem(GROUPS_KEY)) writeLocal(GROUPS_KEY, groups);
+    const stored = readLocal(GROUPS_KEY, SEED_GROUPS);
+    const byId = new Map(stored.map((row) => [row.id, row]));
+    for (const seed of SEED_GROUPS) {
+      if (!byId.has(seed.id)) byId.set(seed.id, seed);
+    }
+    const groups = [...byId.values()];
+    writeLocal(GROUPS_KEY, groups);
     return groups;
   }
 }
@@ -319,6 +324,9 @@ export async function saveGroup(group: ConsoleGroup): Promise<ConsoleGroup> {
 }
 
 export async function deleteGroup(id: string) {
+  if (isDefaultGroupId(id)) {
+    throw new Error("Default groups cannot be deleted");
+  }
   try {
     await api(`/api/console/groups/${id}`, { method: "DELETE" });
   } catch (error) {
@@ -339,8 +347,13 @@ export async function listAccounts(): Promise<Omit<ConsoleAccount, "password">[]
     return await api<Omit<ConsoleAccount, "password">[]>("/api/console/accounts");
   } catch (error) {
     if (!(error instanceof NetworkError)) throw error;
-    const accounts = readLocal(ACCOUNTS_KEY, SEED_ACCOUNTS);
-    if (!window.localStorage.getItem(ACCOUNTS_KEY)) writeLocal(ACCOUNTS_KEY, accounts);
+    const stored = readLocal(ACCOUNTS_KEY, SEED_ACCOUNTS);
+    const byId = new Map(stored.map((row) => [row.id, row]));
+    for (const seed of SEED_ACCOUNTS) {
+      if (!byId.has(seed.id)) byId.set(seed.id, seed);
+    }
+    const accounts = [...byId.values()];
+    writeLocal(ACCOUNTS_KEY, accounts);
     return accounts.map(({ password: _password, ...rest }) => rest);
   }
 }
@@ -357,13 +370,37 @@ export async function saveAccount(
     if (!(error instanceof NetworkError)) throw error;
     const accounts = readLocal(ACCOUNTS_KEY, SEED_ACCOUNTS);
     const existing = account.id ? accounts.find((row) => row.id === account.id) : undefined;
+    const name = account.name?.trim() || "";
+    const email = account.email?.trim().toLowerCase() || "";
+    const username = account.username?.trim().toLowerCase() || "";
+    const groupId = account.groupId?.trim() || "";
+    const password = account.password?.trim() || "";
+
+    if (!name || !email || !username || !groupId) {
+      throw new Error("Name, email, username, and group are required");
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw new Error("Enter a valid email address");
+    }
+    if (!/^[a-z0-9._-]{3,32}$/.test(username)) {
+      throw new Error(
+        "Username must be 3–32 characters: letters, numbers, dots, underscores, or hyphens",
+      );
+    }
+    if (!existing && !password) {
+      throw new Error("Password is required for new accounts");
+    }
+    if (password && password.length < 6) {
+      throw new Error("Password must be at least 6 characters");
+    }
+
     const next: ConsoleAccount = {
       id: existing?.id ?? `a-${Date.now()}`,
-      name: account.name?.trim() || "",
-      email: account.email?.trim().toLowerCase() || "",
-      username: account.username?.trim().toLowerCase() || "",
-      password: account.password?.trim() || existing?.password || "demo",
-      groupId: account.groupId || "",
+      name,
+      email,
+      username,
+      password: password || existing?.password || "",
+      groupId,
       active: account.active ?? existing?.active ?? true,
     };
     const duplicate = accounts.find(
@@ -371,9 +408,6 @@ export async function saveAccount(
         row.id !== next.id &&
         (row.email === next.email || row.username === next.username),
     );
-    if (!next.name || !next.email || !next.username || !next.groupId) {
-      throw new Error("Name, email, username, and group are required");
-    }
     if (duplicate) throw new Error("Email or username already in use");
     const updated = existing
       ? accounts.map((row) => (row.id === existing.id ? next : row))

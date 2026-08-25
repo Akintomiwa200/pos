@@ -53,6 +53,15 @@ export type HqOrgSnapshot = {
     requireOpenShift: boolean;
     lowStockQty: number;
     blockNegativeStock: boolean;
+    allowPriceOverride?: boolean;
+    requireManagerPin?: boolean;
+    allowPartialRefunds?: boolean;
+    restockOnRefund?: boolean;
+    refundWithoutTicket?: boolean;
+    autoPrintReceipt?: boolean;
+    openCashDrawer?: boolean;
+    receiptCopies?: number;
+    holdExpiryMinutes?: number;
   };
 };
 
@@ -62,6 +71,7 @@ export function applyHqOrg(org: HqOrgSnapshot) {
   const front = org.storefronts[0];
   const pay = org.gateways;
   const current = loadStoreSettings();
+  const s = org.settings;
   saveStoreSettings({
     ...current,
     storeName: org.company.name,
@@ -74,15 +84,24 @@ export function applyHqOrg(org: HqOrgSnapshot) {
     companyState: org.company.state,
     vatPercent: vat?.ratePercent ?? current.vatPercent,
     servicePercent: service?.ratePercent ?? current.servicePercent,
-    pricesIncludeVat: vat?.inclusive ?? org.settings.pricesIncludeVat,
-    receiptHeader: org.settings.receiptHeader,
-    receiptFooter: org.settings.receiptFooter,
-    receiptPaper: org.settings.receiptPaper,
-    invoicePrefix: org.settings.invoicePrefix,
-    idleLockMinutes: org.settings.idleLockMinutes,
-    requireOpenShift: org.settings.requireOpenShift,
-    lowStockQty: org.settings.lowStockQty,
-    blockNegativeStock: org.settings.blockNegativeStock,
+    pricesIncludeVat: vat?.inclusive ?? s.pricesIncludeVat,
+    receiptHeader: s.receiptHeader,
+    receiptFooter: s.receiptFooter,
+    receiptPaper: s.receiptPaper,
+    invoicePrefix: s.invoicePrefix,
+    idleLockMinutes: s.idleLockMinutes,
+    requireOpenShift: s.requireOpenShift,
+    lowStockQty: s.lowStockQty,
+    blockNegativeStock: s.blockNegativeStock,
+    allowPriceOverride: s.allowPriceOverride ?? current.allowPriceOverride,
+    requireManagerPin: s.requireManagerPin ?? current.requireManagerPin,
+    allowPartialRefunds: s.allowPartialRefunds ?? current.allowPartialRefunds,
+    restockOnRefund: s.restockOnRefund ?? current.restockOnRefund,
+    refundWithoutTicket: s.refundWithoutTicket ?? current.refundWithoutTicket,
+    autoPrintReceipt: s.autoPrintReceipt ?? current.autoPrintReceipt,
+    openCashDrawer: s.openCashDrawer ?? current.openCashDrawer,
+    receiptCopies: s.receiptCopies ?? current.receiptCopies,
+    holdExpiryMinutes: s.holdExpiryMinutes ?? current.holdExpiryMinutes,
     storefrontEnabled: front?.enabled ?? current.storefrontEnabled,
     storefrontUrl: front?.url || current.storefrontUrl,
     storefrontSyncPrices: front?.syncPrices ?? current.storefrontSyncPrices,

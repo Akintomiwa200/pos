@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "@/lib/toast";
+import { firstAllowedPath } from "@/lib/access";
 import { useAuth } from "../../../components/AuthProvider";
 import { GoogleAuthButton } from "../../../components/site/GoogleAuthButton";
 import {
@@ -19,7 +20,9 @@ export default function LoginPage() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (!loading && session) router.replace("/dashboard");
+    if (!loading && session) {
+      router.replace(firstAllowedPath(session.departments, session.privileges));
+    }
   }, [loading, session, router]);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -27,9 +30,12 @@ export default function LoginPage() {
     const form = new FormData(event.currentTarget);
     setBusy(true);
     try {
-      await login(String(form.get("email") ?? ""), String(form.get("password") ?? ""));
+      const next = await login(
+        String(form.get("email") ?? ""),
+        String(form.get("password") ?? ""),
+      );
       toast.success("Signed in.");
-      router.replace("/dashboard");
+      router.replace(firstAllowedPath(next.departments, next.privileges));
     } catch (err) {
       toast.error(err, "Could not sign in");
     } finally {
@@ -48,9 +54,9 @@ export default function LoginPage() {
           label="Sign in with Google"
           disabled={busy}
           onCredential={async (credential) => {
-            await loginWithGoogle(credential);
+            const next = await loginWithGoogle(credential);
             toast.success("Signed in with Google.");
-            router.replace("/dashboard");
+            router.replace(firstAllowedPath(next.departments, next.privileges));
           }}
         />
       }

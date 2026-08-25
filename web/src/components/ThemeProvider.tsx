@@ -6,45 +6,102 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import {
+  DEFAULT_APPEARANCE,
   THEME_STORAGE_KEY,
+  applyAppearance,
   applyTheme,
-  getSystemTheme,
   isThemePreference,
+  readAppearance,
   resolveTheme,
+  writeAppearance,
+  type AppearancePrefs,
   type ResolvedTheme,
   type ThemePreference,
-} from "../lib/theme";
+  type UiAccent,
+  type UiDensity,
+  type UiFont,
+} from "@/lib/appearance";
+import { getOrgSettings } from "@/lib/hq-setup";
+import {
+  appearanceFromSettings,
+  createSettingsSaver,
+  normalizeSettings,
+  settingsPatchFromAppearance,
+  subscribeSettingsStream,
+} from "@/lib/settings-live";
 
-type ThemeContextValue = {
+type AppearanceContextValue = {
   preference: ThemePreference;
   resolved: ResolvedTheme;
   setPreference: (preference: ThemePreference) => void;
+  appearance: AppearancePrefs;
+  setFont: (font: UiFont) => void;
+  setAccent: (accent: UiAccent) => void;
+  setDensity: (density: UiDensity) => void;
+  setReduceMotion: (value: boolean) => void;
+  resetAppearance: () => void;
+  hqSynced: boolean;
 };
 
-const ThemeContext = createContext<ThemeContextValue | null>(null);
+const AppearanceContext = createContext<AppearanceContextValue | null>(null);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [preference, setPreferenceState] = useState<ThemePreference>("system");
   const [resolved, setResolved] = useState<ResolvedTheme>("light");
+  const [appearance, setAppearance] = useState<AppearancePrefs>(DEFAULT_APPEARANCE);
+  const [hqSynced, setHqSynced] = useState(false);
+  const localEditUntil = useRef(0);
+  const saver = useRef(createSettingsSaver(500));
+  const skipRemote = useRef(false);
+
+  const applyFromHq = useCallback((prefs: ReturnType<typeof appearanceFromSettings>) => {
+    skipRemote.current = true;
+    setPreferenceState(prefs.theme);
+    localStorage.setItem(THEME_STORAGE_KEY, prefs.theme);
+    const next: AppearancePrefs = {
+      font: prefs.font,
+      accent: prefs.accent,
+      density: prefs.density,
+      reduceMotion: prefs.reduceMotion,
+    };
+    writeAppearance(next);
+    setAppearance(next);
+    queueMicrotask(() => {
+      skipRemote.current = false;
+    });
+  }, []);
 
   useEffect(() => {
-    const stored = localStorage.getItem(THEME_STORAGE_KEY);
-    if (isThemePreference(stored)) setPreferenceState(stored);
-    else {
-      const initial = getSystemTheme();
-      setResolved(initial);
-      applyTheme(initial);
-    }
-  }, []);
+    const storedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+    if (isThemePreference(storedTheme)) setPreferenceState(storedTheme);
+    setAppearance(readAppearance());
+
+    void getOrgSettings()
+      .then((raw) => {
+        applyFromHq(appearanceFromSettings(normalizeSettings(raw)));
+        setHqSynced(true);
+      })
+      .catch(() => {
+        setHqSynced(false);
+      });
+
+    return subscribeSettingsStream((event) => {
+      if (Date.now() < localEditUntil.current) return;
+      applyFromHq(appearanceFromSettings(normalizeSettings(event.settings)));
+      setHqSynced(true);
+    });
+  }, [applyFromHq]);
 
   useEffect(() => {
     const next = resolveTheme(preference);
     setResolved(next);
     applyTheme(next);
-  }, [preference]);
+    applyAppearance(appearance, next);
+  }, [preference, appearance]);
 
   useEffect(() => {
     if (preference !== "system") return;
@@ -53,26 +110,113 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       const next = resolveTheme("system");
       setResolved(next);
       applyTheme(next);
+      applyAppearance(appearance, next);
     }
     media.addEventListener("change", onChange);
     return () => media.removeEventListener("change", onChange);
-  }, [preference]);
+  }, [preference, appearance]);
 
-  const setPreference = useCallback((next: ThemePreference) => {
-    setPreferenceState(next);
-    localStorage.setItem(THEME_STORAGE_KEY, next);
-  }, []);
-
-  const value = useMemo(
-    () => ({ preference, resolved, setPreference }),
-    [preference, resolved, setPreference],
+  const persistHq = useCallback(
+    (theme: ThemePreference, prefs: AppearancePrefs) => {
+      if (skipRemote.current) return;
+      localEditUntil.current = Date.now() + 1400;
+      void saver.current
+        .push(settingsPatchFromAppearance({ theme, ...prefs }))
+        .then(() => setHqSynced(true))
+        .catch(() => undefined);
+    },
+    [],
   );
 
-  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+  const patchAppearance = useCallback(
+    (partial: Partial<AppearancePrefs>) => {
+      setAppearance((prev) => {
+        const next = { ...prev, ...partial };
+        writeAppearance(next);
+        persistHq(preference, next);
+        return next;
+      });
+    },
+    [persistHq, preference],
+  );
+
+  const setPreference = useCallback(
+    (next: ThemePreference) => {
+      setPreferenceState(next);
+      localStorage.setItem(THEME_STORAGE_KEY, next);
+      persistHq(next, appearance);
+    },
+    [appearance, persistHq],
+  );
+
+  const setFont = useCallback(
+    (font: UiFont) => patchAppearance({ font }),
+    [patchAppearance],
+  );
+  const setAccent = useCallback(
+    (accent: UiAccent) => patchAppearance({ accent }),
+    [patchAppearance],
+  );
+  const setDensity = useCallback(
+    (density: UiDensity) => patchAppearance({ density }),
+    [patchAppearance],
+  );
+  const setReduceMotion = useCallback(
+    (reduceMotion: boolean) => patchAppearance({ reduceMotion }),
+    [patchAppearance],
+  );
+  const resetAppearance = useCallback(() => {
+    writeAppearance(DEFAULT_APPEARANCE);
+    setAppearance(DEFAULT_APPEARANCE);
+    setPreferenceState("system");
+    localStorage.setItem(THEME_STORAGE_KEY, "system");
+    persistHq("system", DEFAULT_APPEARANCE);
+  }, [persistHq]);
+
+  const value = useMemo(
+    () => ({
+      preference,
+      resolved,
+      setPreference,
+      appearance,
+      setFont,
+      setAccent,
+      setDensity,
+      setReduceMotion,
+      resetAppearance,
+      hqSynced,
+    }),
+    [
+      preference,
+      resolved,
+      setPreference,
+      appearance,
+      setFont,
+      setAccent,
+      setDensity,
+      setReduceMotion,
+      resetAppearance,
+      hqSynced,
+    ],
+  );
+
+  return (
+    <AppearanceContext.Provider value={value}>{children}</AppearanceContext.Provider>
+  );
 }
 
 export function useTheme() {
-  const value = useContext(ThemeContext);
+  const value = useContext(AppearanceContext);
   if (!value) throw new Error("useTheme must be used within ThemeProvider");
+  return {
+    preference: value.preference,
+    resolved: value.resolved,
+    setPreference: value.setPreference,
+  };
+}
+
+export function useAppearance() {
+  const value = useContext(AppearanceContext);
+  if (!value) throw new Error("useAppearance must be used within ThemeProvider");
   return value;
 }

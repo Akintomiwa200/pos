@@ -7,15 +7,17 @@ import {
   Param,
   Post,
   Query,
+  Sse,
   UploadedFile,
   UseInterceptors,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { memoryStorage } from "multer";
+import { map, Observable } from "rxjs";
 import { CatalogService, type CatalogRow } from "../catalog/catalog.service";
 import { MAX_PRODUCT_IMAGE_BYTES } from "../catalog/cloudinary.service";
 import { ConsoleService } from "./console.service";
-import { SetupService } from "./setup.service";
+import { SetupService, type SettingsEvent } from "./setup.service";
 import type { ConsoleAccount, ConsoleGroup } from "./console.types";
 import type {
   HqBranch,
@@ -325,6 +327,11 @@ export class ConsoleController {
   @Get("setup/settings")
   settings() {
     return this.setup.getSettings();
+  }
+
+  @Sse("setup/settings/stream")
+  settingsStream(): Observable<{ data: SettingsEvent }> {
+    return this.setup.settingsStream().pipe(map((data) => ({ data })));
   }
 
   @Post("setup/settings")

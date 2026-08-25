@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "@/lib/toast";
+import { firstAllowedPath } from "@/lib/access";
 import { useAuth } from "../../../components/AuthProvider";
 import { GoogleAuthButton } from "../../../components/site/GoogleAuthButton";
 import {
@@ -20,7 +21,9 @@ export default function RegisterPage() {
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
-    if (!loading && session) router.replace("/dashboard");
+    if (!loading && session) {
+      router.replace(firstAllowedPath(session.departments, session.privileges));
+    }
   }, [loading, session, router]);
 
   function readCompanyFromForm() {

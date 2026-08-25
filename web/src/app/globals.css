@@ -141,7 +141,7 @@
 }
 
 @theme inline {
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--pos-font-family), ui-sans-serif, system-ui, sans-serif;
   --color-pos-bg: var(--pos-bg);
   --color-pos-surface: var(--pos-surface);
   --color-pos-surface-muted: var(--pos-surface-muted);
@@ -164,15 +164,38 @@
   --shadow-pos-primary: var(--pos-shadow-primary);
 }
 
+:root {
+  --pos-font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
 html,
 body {
   min-height: 100%;
   background: var(--pos-bg);
   color: var(--pos-ink);
+  font-family: var(--pos-font-family);
   letter-spacing: -0.011em;
   transition:
     background-color 0.2s ease,
     color 0.2s ease;
+}
+
+html[data-density="compact"] .console-shell-main {
+  padding: 0.75rem 1rem;
+}
+@media (min-width: 640px) {
+  html[data-density="compact"] .console-shell-main {
+    padding: 1rem 1.25rem;
+  }
+}
+
+html.reduce-motion *,
+html.reduce-motion *::before,
+html.reduce-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
 }
 
 /* Slim SaaS scrollbars */

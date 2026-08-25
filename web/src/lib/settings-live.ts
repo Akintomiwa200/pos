@@ -174,8 +174,8 @@ export function createSettingsSaver(debounceMs = 450) {
       latest = { ...latest, ...partial };
       return new Promise<HqOrgSettings>((resolve, reject) => {
         waiters.push({ resolve, reject });
-        if (timer) window.clearTimeout(timer);
-        timer = window.setTimeout(() => {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => {
           timer = null;
           void run();
         }, debounceMs);
@@ -183,7 +183,7 @@ export function createSettingsSaver(debounceMs = 450) {
     },
     flush() {
       if (timer) {
-        window.clearTimeout(timer);
+        clearTimeout(timer);
         timer = null;
       }
       if (Object.keys(latest).length) return run();

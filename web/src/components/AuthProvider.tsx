@@ -101,6 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             current.token === next.token &&
             current.name === next.name &&
             current.groupName === next.groupName &&
+            current.scope === next.scope &&
             JSON.stringify(current.departments) === JSON.stringify(next.departments) &&
             JSON.stringify(current.privileges) === JSON.stringify(next.privileges);
           return same ? current : next;

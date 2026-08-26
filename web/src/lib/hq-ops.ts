@@ -1,12 +1,9 @@
 import { api } from "./hq-api";
 import type { HqCatalogItem, HqSale } from "./hq-api";
+import { formatMinor, getCurrency } from "./org-locale";
 
 export function naira(minor: number, fractionDigits = 2) {
-  return (minor / 100).toLocaleString("en-NG", {
-    style: "currency",
-    currency: "NGN",
-    maximumFractionDigits: fractionDigits,
-  });
+  return formatMinor(minor, fractionDigits, getCurrency());
 }
 
 export function dayKey(iso: string) {

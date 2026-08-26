@@ -18,11 +18,13 @@ import {
   getSetupData,
   listBranches,
   saveCompany,
+  saveOrgSettings,
   type HqCompany,
 } from "@/lib/hq-setup";
 import { ManagerSkeleton } from "@/components/Skeleton";
 import {
   Field,
+  FormSelect,
   PrimaryButton,
   SetupHeader,
   SetupStat,
@@ -30,6 +32,10 @@ import {
   secondaryButtonClass,
 } from "@/components/setup/SetupChrome";
 import { useOrgLive } from "./useOrgLive";
+import { SetupCountryStateFields } from "@/components/geo/CountryStateFields";
+import { CURRENCIES, currencyForCountry, localeFromCurrency, withCurrent } from "@/lib/locale";
+import { setOrgLocale, useOrgLocale } from "@/lib/org-locale";
+import { useOrgLinks } from "@/lib/org-links";
 
 function requiredCompany(draft: Partial<HqCompany>) {
   if (!draft.name?.trim()) return "Trading name is required";
@@ -41,6 +47,9 @@ function requiredCompany(draft: Partial<HqCompany>) {
 }
 
 export function CompanyManager() {
+  const locale = useOrgLocale();
+  const links = useOrgLinks();
+  const kicker = links.area === "producer" ? "Producer · Companies" : "Setup · Organization";
   const [company, setCompany] = useState<HqCompany | null>(null);
   const [draft, setDraft] = useState<HqCompany | null>(null);
   const [stats, setStats] = useState<{
@@ -88,7 +97,7 @@ export function CompanyManager() {
     return (
       <div>
         <SetupHeader
-          kicker="Setup · Organization"
+          kicker={kicker}
           title="Company"
           copy="HQ API is not reachable. Start the backend, then refresh."
         />
@@ -99,7 +108,7 @@ export function CompanyManager() {
   return (
     <div>
       <SetupHeader
-        kicker="Setup · Organization"
+        kicker={kicker}
         title="Company"
         copy="Legal identity on receipts and filings. Branches, storefronts, gateways, and tax hang off this profile."
         action={
@@ -157,7 +166,7 @@ export function CompanyManager() {
                 {company.legalName || "Legal name not set"}
               </p>
               <p className="mt-2 text-[12px] text-pos-ink-faint">
-                {company.currency || "NGN"} · {company.country || "Nigeria"}
+                {locale.currency || company.currency || "NGN"} · {company.country || "Nigeria"}
               </p>
             </div>
           </div>
@@ -216,7 +225,7 @@ export function CompanyManager() {
                 Active branches
               </h3>
               <Link
-                href="/setup/others/branch"
+                href={links.branch}
                 className="text-[12px] font-medium text-pos-primary hover:underline"
               >
                 Manage
@@ -225,7 +234,7 @@ export function CompanyManager() {
             {branchPreview.length === 0 ? (
               <p className="text-sm text-pos-ink-faint">
                 No branches yet.{" "}
-                <Link href="/setup/others/branch" className="text-pos-primary hover:underline">
+                <Link href={links.branch} className="text-pos-primary hover:underline">
                   Add a branch
                 </Link>
               </p>
@@ -242,15 +251,15 @@ export function CompanyManager() {
               </ul>
             )}
             <div className="mt-4 flex flex-wrap gap-2">
-              <Link href="/setup/others/storefront" className={secondaryButtonClass}>
+              <Link href={links.storefront} className={secondaryButtonClass}>
                 <Store size={14} />
                 Storefronts
               </Link>
-              <Link href="/setup/others/payment-gateway" className={secondaryButtonClass}>
+              <Link href={links.gateway} className={secondaryButtonClass}>
                 <CreditCard size={14} />
                 Gateways
               </Link>
-              <Link href="/setup/others/tax" className={secondaryButtonClass}>
+              <Link href={links.tax} className={secondaryButtonClass}>
                 <Percent size={14} />
                 Tax
               </Link>
@@ -332,28 +341,29 @@ export function CompanyManager() {
                   onChange={(e) => setDraft({ ...draft, address: e.target.value })}
                 />
               </Field>
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="State">
-                  <input
-                    className={fieldClass}
-                    value={draft.state}
-                    onChange={(e) => setDraft({ ...draft, state: e.target.value })}
-                  />
-                </Field>
-                <Field label="Country">
-                  <input
-                    className={fieldClass}
-                    value={draft.country}
-                    onChange={(e) => setDraft({ ...draft, country: e.target.value })}
-                  />
-                </Field>
-              </div>
+              <SetupCountryStateFields
+                country={draft.country || "Nigeria"}
+                state={draft.state}
+                onChange={({ country, state }) =>
+                  setDraft({
+                    ...draft,
+                    country,
+                    state,
+                    currency: currencyForCountry(country),
+                  })
+                }
+              />
               <Field label="Currency">
-                <input
-                  className={fieldClass}
+                <FormSelect
                   value={draft.currency}
                   onChange={(e) => setDraft({ ...draft, currency: e.target.value })}
-                />
+                >
+                  {withCurrent(CURRENCIES, draft.currency).map((row) => (
+                    <option key={row.value} value={row.value}>
+                      {row.label}
+                    </option>
+                  ))}
+                </FormSelect>
               </Field>
             </div>
             <footer className="flex gap-2 border-t border-pos-border bg-pos-surface px-5 py-4">
@@ -373,6 +383,11 @@ export function CompanyManager() {
                   try {
                     const saved = await saveCompany(draft);
                     setCompany(saved);
+                    if (saved.currency) {
+                      const synced = localeFromCurrency(saved.currency, locale);
+                      setOrgLocale(synced);
+                      await saveOrgSettings(synced).catch(() => undefined);
+                    }
                     setOpen(false);
                     toast.success("Company saved.");
                     await load();

@@ -1,8 +1,24 @@
-export type DepartmentName = "Report" | "Transaction" | "Setup";
+export type TenantDepartmentName = "Report" | "Transaction" | "Setup";
+export type ProducerDepartmentName =
+  | "Main"
+  | "Business"
+  | "Catalog"
+  | "People"
+  | "Billing"
+  | "Commerce"
+  | "Analytics"
+  | "Support"
+  | "Security"
+  | "System"
+  | "Developer"
+  | "Admin";
+export type DepartmentName = TenantDepartmentName | ProducerDepartmentName;
+export type GroupScope = "tenant" | "producer";
 
 export type ConsoleGroup = {
   id: string;
   name: string;
+  scope?: GroupScope;
   departments: Array<DepartmentName | "*">;
   privileges: string[];
 };
@@ -33,7 +49,7 @@ export type HqNotice = {
 };
 
 /** Built-in roles that ship with HQ and cannot be deleted. */
-export const DEFAULT_GROUP_IDS = [
+export const DEFAULT_TENANT_GROUP_IDS = [
   "g-admin",
   "g-store-manager",
   "g-accountant",
@@ -43,14 +59,146 @@ export const DEFAULT_GROUP_IDS = [
   "g-support",
 ] as const;
 
+export const DEFAULT_PRODUCER_GROUP_IDS = [
+  "g-super-admin",
+  "g-ceo",
+  "g-ops",
+  "g-prod-finance",
+  "g-people",
+  "g-product",
+  "g-prod-sales",
+  "g-prod-support",
+] as const;
+
+export const DEFAULT_GROUP_IDS = [
+  ...DEFAULT_TENANT_GROUP_IDS,
+  ...DEFAULT_PRODUCER_GROUP_IDS,
+] as const;
+
 export function isDefaultGroupId(id: string) {
   return (DEFAULT_GROUP_IDS as readonly string[]).includes(id);
 }
+
+export function isProducerGroupId(id: string) {
+  return (DEFAULT_PRODUCER_GROUP_IDS as readonly string[]).includes(id);
+}
+
+export const SEED_PRODUCER_GROUPS: ConsoleGroup[] = [
+  {
+    id: "g-super-admin",
+    name: "Super Admin",
+    scope: "producer",
+    departments: ["*"],
+    privileges: ["*"],
+  },
+  {
+    id: "g-ceo",
+    name: "CEO",
+    scope: "producer",
+    departments: ["Main", "Business", "Billing", "People", "Analytics", "Admin"],
+    privileges: [
+      "super-home",
+      "super-activity",
+      "super-notifications",
+      "super-companies",
+      "super-branches",
+      "super-stores",
+      "super-storefronts",
+      "super-tills",
+      "super-billing-subscriptions",
+      "super-billing-plans",
+      "super-people-owners",
+      "super-people-access",
+      "super-analytics",
+      "super-admins",
+      "super-admin-roles",
+      "super-account",
+    ],
+  },
+  {
+    id: "g-ops",
+    name: "Operations",
+    scope: "producer",
+    departments: ["Main", "Business"],
+    privileges: [
+      "super-home",
+      "super-companies",
+      "super-branches",
+      "super-stores",
+      "super-storefronts",
+      "super-tills",
+    ],
+  },
+  {
+    id: "g-prod-finance",
+    name: "Finance",
+    scope: "producer",
+    departments: ["Main", "Billing", "Commerce"],
+    privileges: [
+      "super-home",
+      "super-billing-plans",
+      "super-billing-subscriptions",
+      "super-billing-invoices",
+      "super-billing-payments",
+      "super-billing-usage",
+      "super-commerce-gateways",
+    ],
+  },
+  {
+    id: "g-people",
+    name: "People",
+    scope: "producer",
+    departments: ["Main", "People", "Admin"],
+    privileges: [
+      "super-home",
+      "super-people-users",
+      "super-people-owners",
+      "super-people-staff",
+      "super-people-roles",
+      "super-people-access",
+      "super-admins",
+      "super-admin-roles",
+    ],
+  },
+  {
+    id: "g-product",
+    name: "Product",
+    scope: "producer",
+    departments: ["Main", "Business", "Catalog"],
+    privileges: [
+      "super-home",
+      "super-stores",
+      "super-tills",
+      "super-catalog-products",
+      "super-catalog-inventory",
+    ],
+  },
+  {
+    id: "g-prod-sales",
+    name: "Sales & Partnerships",
+    scope: "producer",
+    departments: ["Main", "Business"],
+    privileges: ["super-home", "super-companies"],
+  },
+  {
+    id: "g-prod-support",
+    name: "Support",
+    scope: "producer",
+    departments: ["Main", "Support"],
+    privileges: [
+      "super-home",
+      "super-support",
+      "super-support-tickets",
+      "super-support-requests",
+    ],
+  },
+];
 
 export const SEED_GROUPS: ConsoleGroup[] = [
   {
     id: "g-admin",
     name: "Administrator",
+    scope: "tenant",
     departments: ["*"],
     privileges: ["*"],
   },

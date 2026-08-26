@@ -15,6 +15,7 @@ export type HqCompany = {
 export type HqBranch = {
   id: string;
   companyId: string;
+  storeId?: string;
   name: string;
   city: string;
   state: string;
@@ -28,7 +29,9 @@ export type StoreKind = "retail" | "warehouse" | "dark-kitchen";
 
 export type HqStore = {
   id: string;
-  branchId: string;
+  companyId: string;
+  /** Legacy; stores are company-wide and cover every branch. */
+  branchId?: string;
   name: string;
   kind: StoreKind;
   address: string;
@@ -203,19 +206,11 @@ export const SEED_BRANCHES: HqBranch[] = [
 
 export const SEED_STORES: HqStore[] = [
   {
-    id: "st-vi-retail",
-    branchId: "br-vi",
-    name: "VI Retail",
+    id: "st-demo-retail",
+    companyId: "co-place",
+    name: "Demo Store",
     kind: "retail",
-    address: "14 Adeola Odeku Street",
-    active: true,
-  },
-  {
-    id: "st-ikeja-retail",
-    branchId: "br-ikeja",
-    name: "Ikeja Retail",
-    kind: "retail",
-    address: "Allen Avenue",
+    address: "",
     active: true,
   },
 ];
@@ -223,7 +218,7 @@ export const SEED_STORES: HqStore[] = [
 export const SEED_STOREFRONTS: HqStorefront[] = [
   {
     id: "sf-vi",
-    storeId: "st-vi-retail",
+    storeId: "st-demo-retail",
     name: "The Place VI shop",
     url: "https://shop.theplace.ng",
     hours: "08:00 – 22:00",

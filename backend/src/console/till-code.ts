@@ -41,6 +41,8 @@ export type HqTill = {
   name: string;
   code: string;
   branchName: string;
+  branchId?: string;
+  storeId?: string;
   product: TillProduct;
   active: boolean;
   hardwareHex: string | null;
@@ -65,34 +67,3 @@ export function isSubscriptionExpired(expiresAt: string | null | undefined) {
   const at = Date.parse(expiresAt);
   return !Number.isFinite(at) || at <= Date.now();
 }
-
-export const DEMO_TILL: HqTill = {
-  id: "till-demo-01",
-  name: "TILL-DEMO-01",
-  code: "1111-2222-3333-4444",
-  branchName: "Victoria Island",
-  product: "supermarket",
-  active: true,
-  hardwareHex: null,
-  sessionToken: null,
-  pairedAt: null,
-  lastSeenAt: null,
-  subscriptionExpiresAt: null,
-};
-
-export const SEED_TILLS: HqTill[] = [
-  DEMO_TILL,
-  {
-    id: "till-vi-01",
-    name: "TILL-VI-01",
-    code: "A7F3-19C0-B4E2-8D61",
-    branchName: "Victoria Island",
-    product: "supermarket",
-    active: true,
-    hardwareHex: null,
-    sessionToken: null,
-    pairedAt: null,
-    lastSeenAt: null,
-    subscriptionExpiresAt: null,
-  },
-];

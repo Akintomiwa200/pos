@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "@/lib/toast";
-import { listTills, renewTill, tillProductLabel, type HqTill } from "@/lib/hq-api";
+import { renewTill, tillProductLabel, type HqTill } from "@/lib/hq-api";
+import { useLivePos } from "@/lib/live-pos";
 import { ManagerSkeleton } from "../Skeleton";
 import { DataTable, PrimaryButton, SetupHeader } from "./SetupChrome";
+import { useOrgLinks } from "@/lib/org-links";
 
 function licenceState(till: HqTill) {
   if (!till.subscriptionExpiresAt) return { label: "Not activated", tone: "text-pos-ink-faint" };
@@ -19,19 +21,9 @@ export function SubscriptionManager({
 }: {
   variant?: "subscriptions" | "licences";
 }) {
-  const [tills, setTills] = useState<HqTill[] | null>(null);
+  const { tills, ready } = useLivePos();
+  const links = useOrgLinks();
   const [busyId, setBusyId] = useState<string | null>(null);
-
-  async function load() {
-    setTills(await listTills());
-  }
-
-  useEffect(() => {
-    load().catch((err) => {
-      toast.error(err, "Could not load subscriptions");
-      setTills([]);
-    });
-  }, []);
 
   const rows = useMemo(() => {
     if (!tills) return [];
@@ -45,7 +37,7 @@ export function SubscriptionManager({
     return tills;
   }, [tills, variant]);
 
-  if (!tills) return <ManagerSkeleton variant="list" />;
+  if (!ready) return <ManagerSkeleton variant="list" />;
 
   const active = tills.filter((till) => !till.expired).length;
   const expired = tills.filter((till) => till.expired || licenceState(till).label.startsWith("Expired")).length;
@@ -54,7 +46,6 @@ export function SubscriptionManager({
     setBusyId(id);
     try {
       await renewTill(id);
-      await load();
       toast.success("Licence renewed for one year.");
     } catch (err) {
       toast.error(err, "Could not renew");
@@ -68,7 +59,7 @@ export function SubscriptionManager({
   return (
     <div>
       <SetupHeader
-        kicker="Account · Billing"
+        kicker={links.area === "producer" ? "Producer · Billing" : "Account · Billing"}
         title={isLicences ? "Till licences" : "Subscriptions"}
         copy={
           isLicences
@@ -77,7 +68,7 @@ export function SubscriptionManager({
         }
         action={
           <a
-            href="/setup/others/till"
+            href={links.till}
             className="rounded-xl border border-pos-border px-4 py-2.5 text-sm text-pos-ink hover:bg-pos-surface-muted"
           >
             Manage tills

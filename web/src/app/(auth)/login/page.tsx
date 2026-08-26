@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "@/lib/toast";
-import { firstAllowedPath } from "@/lib/access";
+import { homePathForSession } from "@/lib/access";
 import { useAuth } from "../../../components/AuthProvider";
 import { GoogleAuthButton } from "../../../components/site/GoogleAuthButton";
 import {
@@ -21,7 +21,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!loading && session) {
-      router.replace(firstAllowedPath(session.departments, session.privileges));
+      router.replace(homePathForSession(session));
     }
   }, [loading, session, router]);
 
@@ -35,7 +35,7 @@ export default function LoginPage() {
         String(form.get("password") ?? ""),
       );
       toast.success("Signed in.");
-      router.replace(firstAllowedPath(next.departments, next.privileges));
+      router.replace(homePathForSession(next));
     } catch (err) {
       toast.error(err, "Could not sign in");
     } finally {
@@ -56,7 +56,7 @@ export default function LoginPage() {
           onCredential={async (credential) => {
             const next = await loginWithGoogle(credential);
             toast.success("Signed in with Google.");
-            router.replace(firstAllowedPath(next.departments, next.privileges));
+            router.replace(homePathForSession(next));
           }}
         />
       }

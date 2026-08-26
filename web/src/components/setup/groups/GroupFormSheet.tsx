@@ -6,13 +6,16 @@ import {
   compressPrivileges,
   departmentsFromPrivileges,
   expandPrivileges,
+  groupScope,
   isChecked,
   isIndeterminate,
   toggleAccessNode,
   accessParentMap,
   type ConsoleGroup,
+  type GroupScope,
 } from "@/lib/access";
 import { accessTree, type AccessNode } from "@/lib/nav";
+import { producerAccessTree } from "@/lib/producer-nav";
 import { groupTone } from "../accounts/account-ui";
 import { Field, PrimaryButton, fieldClass, secondaryButtonClass } from "../SetupChrome";
 
@@ -62,10 +65,11 @@ function PrivilegeNodeRow({
   );
 }
 
-export function emptyGroup(): ConsoleGroup {
+export function emptyGroup(scope: GroupScope = "tenant"): ConsoleGroup {
   return {
     id: "",
     name: "",
+    scope,
     departments: [],
     privileges: [],
   };
@@ -90,9 +94,10 @@ export function GroupFormSheet({
 }) {
   const [mounted, setMounted] = useState(false);
   const isEdit = Boolean(draft.id);
-  const granted = expandPrivileges(draft.privileges);
-  const tree = accessTree();
-  const parentOf = accessParentMap();
+  const scope = groupScope(draft);
+  const granted = expandPrivileges(draft.privileges, scope);
+  const tree = scope === "producer" ? producerAccessTree() : accessTree();
+  const parentOf = accessParentMap(scope);
 
   useEffect(() => {
     if (!open) return;
@@ -127,7 +132,7 @@ export function GroupFormSheet({
         <header className="flex shrink-0 items-start justify-between gap-4 bg-pos-surface px-6 py-5 shadow-pos-sm">
           <div className="min-w-0">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-pos-ink-faint">
-              Setup · Users
+              {scope === "producer" ? "Producer · Privileges" : "Setup · Users"}
             </p>
             <h2 className="mt-2 text-[clamp(1.25rem,2.5vw,1.75rem)] font-medium leading-none tracking-tight text-pos-ink-faint">
               {isEdit ? draft.name || "Edit group" : "New group"}
@@ -154,7 +159,7 @@ export function GroupFormSheet({
                 className={fieldClass}
                 value={draft.name}
                 onChange={(event) => onChange({ ...draft, name: event.target.value })}
-                placeholder="e.g. Cashier"
+                placeholder={scope === "producer" ? "e.g. Partnerships" : "e.g. Cashier"}
                 required
               />
             </Field>
@@ -182,11 +187,13 @@ export function GroupFormSheet({
                         onToggle={(target) => {
                           const privileges = compressPrivileges(
                             toggleAccessNode(granted, target, parentOf),
+                            scope,
                           );
                           onChange({
                             ...draft,
+                            scope,
                             privileges,
-                            departments: departmentsFromPrivileges(privileges),
+                            departments: departmentsFromPrivileges(privileges, scope),
                           });
                         }}
                       />

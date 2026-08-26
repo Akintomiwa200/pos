@@ -1,4 +1,5 @@
 import { ACCESS_NAV, NAV, isNavGroup, type NavNode, type NavSection } from "./nav";
+import { PRODUCER_NAV } from "./producer-nav";
 
 /** Section headings — not shown in the navbar breadcrumb. */
 const SKIP_HEADINGS = new Set([
@@ -10,13 +11,32 @@ const SKIP_HEADINGS = new Set([
   "Workspace",
   "Apps",
   "Settings",
+  "Companies",
+  "Billing",
+  "Payments",
+  "People",
+  "Support",
+  "Business",
+  "Catalog",
+  "Commerce",
+  "Analytics",
+  "Security",
+  "System",
+  "Developer",
+  "Super Admin",
 ]);
 
 const STATIC_CRUMBS: Record<string, string[]> = {
   "/dashboard": ["Dashboard"],
+  "/admin": ["Super Admin"],
+  "/admin/companies": ["Super Admin", "Companies"],
+  "/admin/companies/register": ["Super Admin", "Register company"],
+  "/admin/tills": ["Super Admin", "Tills"],
+  "/admin/billing/subscriptions": ["Super Admin", "Subscriptions"],
+  "/admin/administrators": ["Super Admin", "Administrators"],
+  "/admin/support": ["Super Admin", "Support"],
   "/password": ["Password"],
   "/catalog": ["Products", "Scan Barcode"],
-  "/admin": ["Admin"],
   "/procurement": ["Procurement"],
   "/audit": ["Account", "Audit", "Today's Summary"],
   "/audit/x-report": ["Account", "Audit", "Mid-day Check"],
@@ -86,6 +106,7 @@ function pageRegistry() {
   const registry = new Map<string, RegistryEntry>();
   ingestNav(registry, ACCESS_NAV, 1);
   ingestNav(registry, NAV, 2);
+  ingestNav(registry, PRODUCER_NAV, 3);
 
   registryCache = new Map(
     Array.from(registry.entries(), ([href, entry]) => [href, entry.crumbs]),

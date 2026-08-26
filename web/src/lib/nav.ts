@@ -69,7 +69,24 @@ export function isNavGroup(node: NavNode): node is NavGroup {
 }
 
 export const DEPARTMENTS = ["Report", "Transaction", "Setup"] as const;
-export type DepartmentName = (typeof DEPARTMENTS)[number];
+export type TenantDepartmentName = (typeof DEPARTMENTS)[number];
+
+export const PRODUCER_DEPARTMENTS = [
+  "Main",
+  "Business",
+  "Catalog",
+  "People",
+  "Billing",
+  "Commerce",
+  "Analytics",
+  "Support",
+  "Security",
+  "System",
+  "Developer",
+  "Admin",
+] as const;
+export type ProducerDepartmentName = (typeof PRODUCER_DEPARTMENTS)[number];
+export type DepartmentName = TenantDepartmentName | ProducerDepartmentName;
 
 export type AccessNode = {
   id: string;
@@ -264,7 +281,7 @@ function nodeToAccess(node: NavNode): AccessNode {
   return { id: node.id, label: node.label, href: node.href };
 }
 
-function itemToAccess(item: NavItem): AccessNode {
+export function itemToAccess(item: NavItem): AccessNode {
   return {
     id: item.id,
     label: item.label,

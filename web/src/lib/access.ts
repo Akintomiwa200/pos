@@ -10,10 +10,14 @@ import {
   type NavNode,
   type NavSection,
 } from "./nav";
+import { PRODUCER_NAV, producerAccessTree } from "./producer-nav";
+
+export type GroupScope = "tenant" | "producer";
 
 export type ConsoleGroup = {
   id: string;
   name: string;
+  scope?: GroupScope;
   departments: Array<DepartmentName | "*">;
   privileges: string[];
 };
@@ -36,9 +40,18 @@ export type ConsoleSession = {
   username: string;
   groupId: string;
   groupName: string;
+  scope?: GroupScope;
   departments: Array<DepartmentName | "*">;
   privileges: string[];
 };
+
+export function groupScope(group: { scope?: GroupScope } | null | undefined): GroupScope {
+  return group?.scope === "producer" ? "producer" : "tenant";
+}
+
+export function sessionScope(session: { scope?: GroupScope } | null | undefined): GroupScope {
+  return session?.scope === "producer" ? "producer" : "tenant";
+}
 
 export const SESSION_KEY = "hq.session.v1";
 
@@ -65,13 +78,25 @@ function allSidebarIds(): string[] {
   return NAV.flatMap((section) => section.items.flatMap(itemIds));
 }
 
+function producerSidebarIds(): string[] {
+  return PRODUCER_NAV.flatMap((section) => section.items.flatMap(itemIds));
+}
+
+function navFor(scope: GroupScope): NavSection[] {
+  return scope === "producer" ? PRODUCER_NAV : NAV;
+}
+
+function treeFor(scope: GroupScope) {
+  return scope === "producer" ? producerAccessTree() : accessTree();
+}
+
 function accessIds(node: AccessNode): string[] {
   return [node.id, ...(node.children ?? []).flatMap(accessIds)];
 }
 
-export function expandPrivileges(privileges: string[]): Set<string> {
+export function expandPrivileges(privileges: string[], scope: GroupScope = "tenant"): Set<string> {
   if (privileges.includes("*")) {
-    return new Set(["*", ...allNavIds(), ...allSidebarIds()]);
+    return new Set(["*", ...allNavIds(), ...allSidebarIds(), ...producerSidebarIds()]);
   }
   const granted = new Set(privileges);
 
@@ -83,13 +108,14 @@ export function expandPrivileges(privileges: string[]): Set<string> {
     for (const child of node.children ?? []) expand(child);
   }
 
-  for (const section of accessTree()) {
+  for (const section of treeFor(scope)) {
     for (const item of section.items) expand(item);
   }
 
-  // Also expand any ACCESS_NAV parents still stored on older groups
-  for (const section of ACCESS_NAV) {
-    for (const item of section.items) expand(itemToAccessNode(item));
+  if (scope === "tenant") {
+    for (const section of ACCESS_NAV) {
+      for (const item of section.items) expand(itemToAccessNode(item));
+    }
   }
 
   return granted;
@@ -163,9 +189,10 @@ function filterSections(
 export function filterNav(
   departments: Array<DepartmentName | "*">,
   privileges: string[],
+  scope: GroupScope = "tenant",
 ): NavSection[] {
-  const granted = expandPrivileges(privileges);
-  return filterSections(NAV, departments, granted);
+  const granted = expandPrivileges(privileges, scope);
+  return filterSections(navFor(scope), departments, granted);
 }
 
 export function filterAccessNav(
@@ -199,6 +226,7 @@ function isAlwaysAllowed(pathname: string) {
 }
 
 export function pathMatchesHref(pathname: string, href: string) {
+  if (href === "/admin") return pathname === "/admin";
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
@@ -206,12 +234,25 @@ export function canAccessPath(
   pathname: string,
   departments: Array<DepartmentName | "*">,
   privileges: string[],
+  scope: GroupScope = "tenant",
 ) {
-  if (privileges.includes("*")) return true;
   if (isAlwaysAllowed(pathname)) return true;
+  const producerPath =
+    pathname === "/admin" ||
+    pathname.startsWith("/admin/") ||
+    pathname === "/super" ||
+    pathname.startsWith("/super/");
+  if (scope === "producer") {
+    if (!producerPath) return false;
+    if (privileges.includes("*")) return true;
+    const hrefs = collectHrefs(filterNav(departments, privileges, "producer"));
+    return hrefs.some((href) => pathMatchesHref(pathname, href));
+  }
+  if (producerPath) return false;
+  if (privileges.includes("*")) return true;
 
   const hrefs = [
-    ...collectHrefs(filterNav(departments, privileges)),
+    ...collectHrefs(filterNav(departments, privileges, scope)),
     ...collectHrefs(filterAccessNav(departments, privileges)),
   ];
 
@@ -222,21 +263,36 @@ export function canAccessPath(
 export function firstAllowedPath(
   departments: Array<DepartmentName | "*">,
   privileges: string[],
+  scope: GroupScope = "tenant",
 ) {
+  if (scope === "producer") {
+    if (privileges.includes("*")) return "/admin";
+    const hrefs = collectHrefs(filterNav(departments, privileges, "producer"));
+    return hrefs[0] ?? "/admin";
+  }
   if (privileges.includes("*")) return "/dashboard";
   const hrefs = collectHrefs(filterNav(departments, privileges));
   if (hrefs.includes("/dashboard")) return "/dashboard";
   return hrefs[0] ?? "/help";
 }
 
+export function homePathForSession(session: {
+  departments: Array<DepartmentName | "*">;
+  privileges: string[];
+  scope?: GroupScope;
+}) {
+  return firstAllowedPath(session.departments, session.privileges, sessionScope(session));
+}
+
 /** Derive department flags from which sidebar sections have any granted privileges. */
 export function departmentsFromPrivileges(
   privileges: string[],
+  scope: GroupScope = "tenant",
 ): Array<DepartmentName | "*"> {
   if (privileges.includes("*")) return ["*"];
-  const granted = expandPrivileges(privileges);
+  const granted = expandPrivileges(privileges, scope);
   const depts = new Set<DepartmentName>();
-  for (const section of NAV) {
+  for (const section of navFor(scope)) {
     const ids = section.items.flatMap(itemIds);
     if (ids.some((id) => granted.has(id))) depts.add(section.department);
   }
@@ -257,8 +313,10 @@ export function isIndeterminate(granted: Set<string>, node: AccessNode): boolean
   return some && !isChecked(granted, node);
 }
 
-export function compressPrivileges(granted: Set<string>): string[] {
-  if (granted.has("*") || allSidebarIds().every((id) => granted.has(id))) return ["*"];
+export function compressPrivileges(granted: Set<string>, scope: GroupScope = "tenant"): string[] {
+  if (granted.has("*")) return ["*"];
+  const sidebarIds = scope === "producer" ? producerSidebarIds() : allSidebarIds();
+  if (sidebarIds.length && sidebarIds.every((id) => granted.has(id))) return ["*"];
   const out: string[] = [];
 
   function walk(nodes: AccessNode[]) {
@@ -271,11 +329,11 @@ export function compressPrivileges(granted: Set<string>): string[] {
     }
   }
 
-  for (const section of accessTree()) walk(section.items);
+  for (const section of treeFor(scope)) walk(section.items);
   return out;
 }
 
-export function accessParentMap(): Map<string, string | undefined> {
+export function accessParentMap(scope: GroupScope = "tenant"): Map<string, string | undefined> {
   const map = new Map<string, string | undefined>();
   function walk(nodes: AccessNode[], parent?: string) {
     for (const node of nodes) {
@@ -283,7 +341,7 @@ export function accessParentMap(): Map<string, string | undefined> {
       if (node.children) walk(node.children, node.id);
     }
   }
-  for (const section of accessTree()) walk(section.items);
+  for (const section of treeFor(scope)) walk(section.items);
   return map;
 }
 

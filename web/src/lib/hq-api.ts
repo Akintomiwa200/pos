@@ -5,12 +5,9 @@ import {
   type ConsoleSession,
 } from "./access";
 import { NetworkError, resolveUserMessage } from "./errors";
-import { SEED_ACCOUNTS, SEED_GROUPS, isDefaultGroupId } from "./hq-seed";
+import { isDefaultGroupId } from "./hq-seed";
 
 export { NetworkError } from "./errors";
-
-const GROUPS_KEY = "hq.groups.v1";
-const ACCOUNTS_KEY = "hq.accounts.v1";
 
 export function authErrorMessage(err: unknown, fallback: string) {
   return resolveUserMessage(err, fallback);
@@ -119,6 +116,20 @@ export async function registerCompanyConsole(
     { method: "POST", body: JSON.stringify(input) },
   );
   return asSession(data);
+}
+
+export async function provisionCompanyConsole(
+  token: string,
+  input: CompanySignupInput,
+) {
+  return api<{
+    company: { id: string; name: string; email?: string };
+    owner: { id: string; name: string; email: string; username: string } | null;
+  }>("/api/console/admin/companies", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(input),
+  });
 }
 
 export async function fetchGoogleAuthConfig() {
@@ -290,144 +301,38 @@ export async function uploadProductImage(itemId: string, file: File): Promise<Hq
 }
 
 export async function listGroups(): Promise<ConsoleGroup[]> {
-  try {
-    return await api<ConsoleGroup[]>("/api/console/groups");
-  } catch (error) {
-    if (!(error instanceof NetworkError)) throw error;
-    const stored = readLocal(GROUPS_KEY, SEED_GROUPS);
-    const byId = new Map(stored.map((row) => [row.id, row]));
-    for (const seed of SEED_GROUPS) {
-      if (!byId.has(seed.id)) byId.set(seed.id, seed);
-    }
-    const groups = [...byId.values()];
-    writeLocal(GROUPS_KEY, groups);
-    return groups;
-  }
+  return api<ConsoleGroup[]>("/api/console/groups");
 }
 
 export async function saveGroup(group: ConsoleGroup): Promise<ConsoleGroup> {
-  try {
-    return await api<ConsoleGroup>("/api/console/groups", {
-      method: "POST",
-      body: JSON.stringify(group),
-    });
-  } catch (error) {
-    if (!(error instanceof NetworkError)) throw error;
-    const groups = readLocal(GROUPS_KEY, SEED_GROUPS);
-    const next = { ...group, id: group.id || `g-${Date.now()}` };
-    const index = groups.findIndex((row) => row.id === next.id);
-    if (index >= 0) groups[index] = next;
-    else groups.push(next);
-    writeLocal(GROUPS_KEY, groups);
-    return next;
-  }
+  return api<ConsoleGroup>("/api/console/groups", {
+    method: "POST",
+    body: JSON.stringify(group),
+  });
 }
 
 export async function deleteGroup(id: string) {
   if (isDefaultGroupId(id)) {
     throw new Error("Default groups cannot be deleted");
   }
-  try {
-    await api(`/api/console/groups/${id}`, { method: "DELETE" });
-  } catch (error) {
-    if (!(error instanceof NetworkError)) throw error;
-    const accounts = readLocal(ACCOUNTS_KEY, SEED_ACCOUNTS);
-    if (accounts.some((row) => row.groupId === id)) {
-      throw new Error("Reassign accounts before deleting this group");
-    }
-    writeLocal(
-      GROUPS_KEY,
-      readLocal(GROUPS_KEY, SEED_GROUPS).filter((row) => row.id !== id),
-    );
-  }
+  await api(`/api/console/groups/${id}`, { method: "DELETE" });
 }
 
 export async function listAccounts(): Promise<Omit<ConsoleAccount, "password">[]> {
-  try {
-    return await api<Omit<ConsoleAccount, "password">[]>("/api/console/accounts");
-  } catch (error) {
-    if (!(error instanceof NetworkError)) throw error;
-    const stored = readLocal(ACCOUNTS_KEY, SEED_ACCOUNTS);
-    const byId = new Map(stored.map((row) => [row.id, row]));
-    for (const seed of SEED_ACCOUNTS) {
-      if (!byId.has(seed.id)) byId.set(seed.id, seed);
-    }
-    const accounts = [...byId.values()];
-    writeLocal(ACCOUNTS_KEY, accounts);
-    return accounts.map(({ password: _password, ...rest }) => rest);
-  }
+  return api<Omit<ConsoleAccount, "password">[]>("/api/console/accounts");
 }
 
 export async function saveAccount(
   account: Partial<ConsoleAccount> & { id?: string },
 ): Promise<Omit<ConsoleAccount, "password">> {
-  try {
-    return await api("/api/console/accounts", {
-      method: "POST",
-      body: JSON.stringify(account),
-    });
-  } catch (error) {
-    if (!(error instanceof NetworkError)) throw error;
-    const accounts = readLocal(ACCOUNTS_KEY, SEED_ACCOUNTS);
-    const existing = account.id ? accounts.find((row) => row.id === account.id) : undefined;
-    const name = account.name?.trim() || "";
-    const email = account.email?.trim().toLowerCase() || "";
-    const username = account.username?.trim().toLowerCase() || "";
-    const groupId = account.groupId?.trim() || "";
-    const password = account.password?.trim() || "";
-
-    if (!name || !email || !username || !groupId) {
-      throw new Error("Name, email, username, and group are required");
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      throw new Error("Enter a valid email address");
-    }
-    if (!/^[a-z0-9._-]{3,32}$/.test(username)) {
-      throw new Error(
-        "Username must be 3–32 characters: letters, numbers, dots, underscores, or hyphens",
-      );
-    }
-    if (!existing && !password) {
-      throw new Error("Password is required for new accounts");
-    }
-    if (password && password.length < 6) {
-      throw new Error("Password must be at least 6 characters");
-    }
-
-    const next: ConsoleAccount = {
-      id: existing?.id ?? `a-${Date.now()}`,
-      name,
-      email,
-      username,
-      password: password || existing?.password || "",
-      groupId,
-      active: account.active ?? existing?.active ?? true,
-    };
-    const duplicate = accounts.find(
-      (row) =>
-        row.id !== next.id &&
-        (row.email === next.email || row.username === next.username),
-    );
-    if (duplicate) throw new Error("Email or username already in use");
-    const updated = existing
-      ? accounts.map((row) => (row.id === existing.id ? next : row))
-      : [...accounts, next];
-    writeLocal(ACCOUNTS_KEY, updated);
-    const { password: _password, ...rest } = next;
-    return rest;
-  }
+  return api("/api/console/accounts", {
+    method: "POST",
+    body: JSON.stringify(account),
+  });
 }
 
 export async function deleteAccount(id: string) {
-  try {
-    await api(`/api/console/accounts/${id}`, { method: "DELETE" });
-  } catch (error) {
-    if (!(error instanceof NetworkError)) throw error;
-    writeLocal(
-      ACCOUNTS_KEY,
-      readLocal(ACCOUNTS_KEY, SEED_ACCOUNTS).filter((row) => row.id !== id),
-    );
-  }
+  await api(`/api/console/accounts/${id}`, { method: "DELETE" });
 }
 
 export function refreshSessionFromGroup(
@@ -438,6 +343,7 @@ export function refreshSessionFromGroup(
   const next = {
     ...session,
     groupName: group.name,
+    scope: group.scope ?? session.scope,
     departments: group.departments,
     privileges: group.privileges,
   };
@@ -467,6 +373,8 @@ export type HqTill = {
   name: string;
   code: string;
   branchName: string;
+  branchId?: string;
+  storeId?: string;
   product: TillProduct;
   active: boolean;
   hardwareHex: string | null;

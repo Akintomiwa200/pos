@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ChevronDown, Menu, X } from "lucide-react";
 import { useAuth } from "../AuthProvider";
+import { homePathForSession } from "../../lib/access";
 import { HEADER_NAV, type SiteLink } from "../../lib/site";
 import { BrandLogo } from "./BrandLogo";
 
@@ -100,7 +101,7 @@ export function SiteHeader() {
             ) : null}
             {!loading && session ? (
               <Link
-                href="/dashboard"
+                href={homePathForSession(session)}
                 className="hidden rounded-full bg-pos-primary px-4 py-2 text-sm font-medium text-white shadow-pos-primary md:inline-flex md:px-5"
               >
                 My dashboard
@@ -140,7 +141,7 @@ export function SiteHeader() {
             {!loading && session ? (
               <div className="mt-2 border-t border-pos-border/80 pt-2">
                 <Link
-                  href="/dashboard"
+                  href={homePathForSession(session)}
                   className="block rounded-lg bg-pos-primary px-3 py-2.5 text-center text-sm font-medium text-white shadow-pos-primary"
                 >
                   My dashboard

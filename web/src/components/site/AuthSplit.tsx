@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type InputHTMLAttributes, type ReactNode } from "react";
+import { useState, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from "react";
 import { Eye, EyeOff } from "lucide-react";
+import { MenuSelect } from "@/components/ui/MenuSelect";
 
 /** Full-bleed split auth chrome — Figma layout, app theme tokens. */
 export function AuthSplit({
@@ -167,6 +168,15 @@ export function AuthInput({
       ) : null}
     </label>
   );
+}
+
+export function AuthSelect({
+  label,
+  ...props
+}: {
+  label: string;
+} & SelectHTMLAttributes<HTMLSelectElement>) {
+  return <MenuSelect tone="auth" label={label} {...props} />;
 }
 
 export function AuthPrimaryButton({

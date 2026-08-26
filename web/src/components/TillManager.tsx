@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Plus } from "lucide-react";
+import { useMemo, useState } from "react";
+import Link from "next/link";
+import { Plus, Wifi, WifiOff } from "lucide-react";
 import { toast } from "@/lib/toast";
-import { listBranches, type HqBranch } from "@/lib/hq-setup";
 import {
   TILL_PRODUCTS,
   deleteTill,
-  listTills,
   regenerateTillCode,
   renewTill,
   saveTill,
@@ -15,6 +14,7 @@ import {
   type HqTill,
   type TillProduct,
 } from "@/lib/hq-api";
+import { useLivePos } from "@/lib/live-pos";
 import { ManagerSkeleton } from "./Skeleton";
 import { SlideOver } from "./SlideOver";
 import {
@@ -27,11 +27,13 @@ import {
   fieldClass,
   secondaryButtonClass,
 } from "./setup/SetupChrome";
+import { useOrgLinks } from "@/lib/org-links";
 
 const blank = {
   id: "",
   name: "",
-  branchName: "Victoria Island",
+  storeId: "",
+  branchId: "",
   product: "supermarket" as TillProduct,
   active: true,
 };
@@ -61,52 +63,56 @@ const statusClass: Record<string, string> = {
 };
 
 export function TillManager() {
-  const [tills, setTills] = useState<HqTill[]>([]);
-  const [branches, setBranches] = useState<HqBranch[]>([]);
+  const links = useOrgLinks();
+  const { company, tills, stores, branches, live, ready } = useLivePos();
   const [draft, setDraft] = useState(blank);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [ready, setReady] = useState(false);
   const [search, setSearch] = useState("");
-
-  async function load() {
-    const [tillRows, branchRows] = await Promise.all([listTills(), listBranches().catch(() => [])]);
-    setTills(tillRows);
-    setBranches(branchRows);
-    setReady(true);
-  }
-
-  useEffect(() => {
-    load().catch((err) => {
-      toast.error(err, "Could not load tills");
-      setReady(true);
-    });
-    const timer = window.setInterval(() => {
-      load().catch(() => undefined);
-    }, 4000);
-    return () => window.clearInterval(timer);
-  }, []);
 
   const rows = useMemo(() => {
     const query = search.trim().toLowerCase();
     const sorted = [...tills].sort((a, b) => a.name.localeCompare(b.name));
     if (!query) return sorted;
-    return sorted.filter((row) =>
-      [row.name, row.code, row.branchName, tillProductLabel(row.product)].some((value) =>
-        value.toLowerCase().includes(query),
-      ),
-    );
-  }, [tills, search]);
+    return sorted.filter((row) => {
+      const store = stores.find((item) => item.id === row.storeId);
+      const branch = branches.find((item) => item.id === row.branchId);
+      return [
+        row.name,
+        row.code,
+        store?.name ?? "",
+        branch?.name ?? row.branchName,
+        tillProductLabel(row.product),
+      ].some((value) => value.toLowerCase().includes(query));
+    });
+  }, [tills, search, stores, branches]);
 
   const onlineCount = tills.filter((row) => row.online && row.active && !row.expired).length;
   const pairedCount = tills.filter((row) => Boolean(row.hardwareHex)).length;
   const expiredCount = tills.filter((row) => row.expired || !row.active).length;
 
+  function storeOf(till: HqTill) {
+    return stores.find((row) => row.id === till.storeId);
+  }
+
+  function branchOf(till: HqTill) {
+    return branches.find((row) => row.id === till.branchId);
+  }
+
+  function branchesOfStore(storeId: string) {
+    if (!storeId) return branches;
+    const linked = branches.filter((row) => row.storeId === storeId);
+    return linked.length ? linked : branches;
+  }
+
+  const storeBranches = branchesOfStore(draft.storeId);
+
   function edit(row: HqTill) {
     setDraft({
       id: row.id,
       name: row.name,
-      branchName: row.branchName,
+      storeId: row.storeId || stores[0]?.id || "",
+      branchId: row.branchId || "",
       product: row.product ?? "supermarket",
       active: row.active,
     });
@@ -118,10 +124,17 @@ export function TillManager() {
       toast.error("Enter a till name.");
       return;
     }
+    if (!draft.storeId) {
+      toast.error("Choose a store.");
+      return;
+    }
+    if (!draft.branchId) {
+      toast.error("Choose a branch. A till stays on that branch only.");
+      return;
+    }
     setBusy(true);
     try {
       const saved = await saveTill(draft);
-      await load();
       setDraft(blank);
       setOpen(false);
       toast.success(
@@ -140,7 +153,6 @@ export function TillManager() {
     setBusy(true);
     try {
       const next = await regenerateTillCode(id);
-      await load();
       toast.success(`New code issued: ${next.code}. The previous device must activate again.`);
     } catch (err) {
       toast.error(err, "Could not regenerate code");
@@ -153,7 +165,6 @@ export function TillManager() {
     setBusy(true);
     try {
       const next = await renewTill(id);
-      await load();
       toast.success(
         `Subscription extended to ${
           next.subscriptionExpiresAt
@@ -175,7 +186,6 @@ export function TillManager() {
   async function onDelete(id: string) {
     try {
       await deleteTill(id);
-      await load();
       if (draft.id === id) {
         setDraft(blank);
         setOpen(false);
@@ -200,21 +210,44 @@ export function TillManager() {
   return (
     <div>
       <SetupHeader
-        kicker="Analytics · Point of Sales"
+        kicker={links.area === "producer" ? "Producer · Companies" : "Analytics · Point of Sales"}
         title="Tills"
-        copy="Each physical register is one till. Issue a code, activate it on that device only, then renew yearly when the subscription ends."
+        copy={`${company?.name || "Company"} → store → till. Assign each till to one branch. It cannot be used at another branch.`}
         action={
-          <PrimaryButton
-            onClick={() => {
-              setDraft({ ...blank, branchName: branches[0]?.name ?? "Victoria Island" });
-              setOpen(true);
-            }}
-          >
-            <span className="inline-flex items-center gap-2">
-              <Plus size={16} />
-              Issue till
+          <div className="flex items-center gap-2">
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-xl border border-pos-border px-3 py-2.5 text-[12px] font-medium ${
+                live
+                  ? "bg-pos-success/10 text-pos-success"
+                  : "bg-pos-surface-muted text-pos-ink-faint"
+              }`}
+              title={live ? "Tills are live from HQ" : "Live sync offline"}
+            >
+              {live ? <Wifi size={13} /> : <WifiOff size={13} />}
+              {live ? "Live" : "Offline"}
             </span>
-          </PrimaryButton>
+            <PrimaryButton
+              disabled={stores.length === 0 || branches.length === 0}
+              onClick={() => {
+                const storeId = stores[0]?.id ?? "";
+                const storeBranches = storeId
+                  ? branches.filter((row) => row.storeId === storeId)
+                  : branches;
+                const branchPool = storeBranches.length ? storeBranches : branches;
+                setDraft({
+                  ...blank,
+                  storeId,
+                  branchId: branchPool[0]?.id ?? "",
+                });
+                setOpen(true);
+              }}
+            >
+              <span className="inline-flex items-center gap-2">
+                <Plus size={16} />
+                Issue till
+              </span>
+            </PrimaryButton>
+          </div>
         }
       />
 
@@ -225,12 +258,26 @@ export function TillManager() {
         <SetupStat label="Expired / off" value={String(expiredCount)} />
       </div>
 
+      {stores.length === 0 || branches.length === 0 ? (
+        <p className="mb-3 text-sm text-pos-ink-muted">
+          Create a{" "}
+          <Link href={links.store} className="font-medium text-pos-primary hover:underline">
+            store
+          </Link>{" "}
+          and a{" "}
+          <Link href={links.branch} className="font-medium text-pos-primary hover:underline">
+            branch
+          </Link>{" "}
+          first. Then issue a till for that one branch.
+        </p>
+      ) : null}
+
       <DataTable
-        columns={["Till", "Code", "Device", "Product", "Branch", "Expires", "Status", ""]}
+        columns={["Till", "Code", "Device", "Product", "Store · Branch", "Expires", "Status", ""]}
         toolbar={
           <input
             className={`${fieldClass} max-w-sm`}
-            placeholder="Search tills, codes, branches…"
+            placeholder="Search tills, codes, stores…"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
@@ -239,7 +286,7 @@ export function TillManager() {
         {rows.length === 0 ? (
           <tr>
             <td className="px-4 py-6 text-pos-ink-faint" colSpan={8}>
-              No tills issued yet. Create one and give the code to that device.
+              No tills issued yet. Create a store, then issue a till for that device.
             </td>
           </tr>
         ) : (
@@ -277,7 +324,21 @@ export function TillManager() {
                   ) : null}
                 </td>
                 <td className="px-4 py-3 text-pos-ink-muted">{tillProductLabel(row.product)}</td>
-                <td className="px-4 py-3 text-pos-ink-muted">{row.branchName || "—"}</td>
+                <td className="px-4 py-3 text-pos-ink-muted">
+                  {(() => {
+                    const store = storeOf(row);
+                    const branch = branchOf(row);
+                    if (!store && !branch) return row.branchName || "—";
+                    return (
+                      <span>
+                        {store?.name || "Store"}
+                        <span className="mt-1 block text-[11px] text-pos-ink-faint">
+                          {branch?.name || row.branchName || "No branch"} · locked
+                        </span>
+                      </span>
+                    );
+                  })()}
+                </td>
                 <td className="px-4 py-3 text-pos-ink-muted">{expiryLabel(row)}</td>
                 <td className="px-4 py-3">
                   <span
@@ -319,7 +380,7 @@ export function TillManager() {
       <SlideOver
         open={open}
         title={draft.id ? "Edit till" : "Issue a till"}
-        subtitle="The 16-character code is generated here and entered on that one device."
+        subtitle="Assigned to one branch only. Activate this code on that device — it will not work as another till at a different branch."
         onClose={() => setOpen(false)}
         footer={
           <div className="flex gap-2">
@@ -359,26 +420,48 @@ export function TillManager() {
             ))}
           </select>
         </Field>
-        <Field label="Branch">
-          {branches.length ? (
-            <select
-              className={fieldClass}
-              value={draft.branchName}
-              onChange={(event) => setDraft({ ...draft, branchName: event.target.value })}
-            >
-              {branches.map((row) => (
-                <option key={row.id} value={row.name}>
+        <Field label="Store">
+          <select
+            className={fieldClass}
+            value={draft.storeId}
+            disabled={Boolean(draft.id) || stores.length === 0}
+            onChange={(event) => {
+              const storeId = event.target.value;
+              const nextBranches = branchesOfStore(storeId);
+              const branchId = nextBranches.some((row) => row.id === draft.branchId)
+                ? draft.branchId
+                : (nextBranches[0]?.id ?? "");
+              setDraft({ ...draft, storeId, branchId });
+            }}
+          >
+            {stores.length === 0 ? (
+              <option value="">Add a store first</option>
+            ) : (
+              stores.map((row) => (
+                <option key={row.id} value={row.id}>
                   {row.name}
                 </option>
-              ))}
-            </select>
-          ) : (
-            <input
-              className={fieldClass}
-              value={draft.branchName}
-              onChange={(event) => setDraft({ ...draft, branchName: event.target.value })}
-            />
-          )}
+              ))
+            )}
+          </select>
+        </Field>
+        <Field label="Branch">
+          <select
+            className={fieldClass}
+            value={draft.branchId}
+            disabled={Boolean(draft.id) || storeBranches.length === 0}
+            onChange={(event) => setDraft({ ...draft, branchId: event.target.value })}
+          >
+            {storeBranches.length === 0 ? (
+              <option value="">Add a branch of this store first</option>
+            ) : (
+              storeBranches.map((row) => (
+                <option key={row.id} value={row.id}>
+                  {row.name}
+                </option>
+              ))
+            )}
+          </select>
         </Field>
         <ToggleField
           label="Active"

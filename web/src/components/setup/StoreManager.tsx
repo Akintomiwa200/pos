@@ -1,17 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { Plus, Wifi, WifiOff } from "lucide-react";
 import { toast } from "@/lib/toast";
-import {
-  deleteStore,
-  listBranches,
-  listStores,
-  saveStore,
-  type HqBranch,
-  type HqStore,
-} from "@/lib/hq-setup";
+import { deleteStore, saveStore, type HqStore } from "@/lib/hq-setup";
+import { useLivePos } from "@/lib/live-pos";
 import { ManagerSkeleton } from "../Skeleton";
 import { SlideOver } from "../SlideOver";
 import {
@@ -24,11 +18,10 @@ import {
   fieldClass,
   secondaryButtonClass,
 } from "./SetupChrome";
-import { useOrgLive } from "./org/useOrgLive";
+import { useOrgLinks } from "@/lib/org-links";
 
 const blank: Partial<HqStore> = {
   name: "",
-  branchId: "",
   kind: "retail",
   address: "",
   active: true,
@@ -41,96 +34,98 @@ const KIND_LABEL: Record<HqStore["kind"], string> = {
 };
 
 export function StoreManager() {
-  const [rows, setRows] = useState<HqStore[]>([]);
-  const [branches, setBranches] = useState<HqBranch[]>([]);
+  const links = useOrgLinks();
+  const { company, stores: rows, branches, tills, live, ready } = useLivePos();
   const [draft, setDraft] = useState(blank);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [ready, setReady] = useState(false);
   const [search, setSearch] = useState("");
 
-  const load = useCallback(async () => {
-    const [stores, branchRows] = await Promise.all([listStores(), listBranches()]);
-    setRows(stores);
-    setBranches(branchRows);
-  }, []);
-
-  useEffect(() => {
-    load()
-      .catch((err) => toast.error(err, "Could not load stores"))
-      .finally(() => setReady(true));
-  }, [load]);
-
-  useOrgLive(load);
+  const tillsByStore = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const till of tills) {
+      if (!till.storeId) continue;
+      map.set(till.storeId, (map.get(till.storeId) ?? 0) + 1);
+    }
+    return map;
+  }, [tills]);
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
     const sorted = [...rows].sort((a, b) => a.name.localeCompare(b.name));
     if (!query) return sorted;
-    return sorted.filter((row) => {
-      const branch = branches.find((item) => item.id === row.branchId)?.name ?? "";
-      return [row.name, branch, row.kind, row.address ?? ""].some((value) =>
+    return sorted.filter((row) =>
+      [row.name, row.kind, row.address ?? "", company?.name ?? ""].some((value) =>
         value.toLowerCase().includes(query),
-      );
-    });
-  }, [rows, branches, search]);
+      ),
+    );
+  }, [rows, search, company?.name]);
 
   const activeCount = rows.filter((row) => row.active).length;
-  const byKind = useMemo(() => {
-    const counts = { retail: 0, warehouse: 0, "dark-kitchen": 0 };
-    for (const row of rows) counts[row.kind] += 1;
-    return counts;
-  }, [rows]);
 
   if (!ready) return <ManagerSkeleton variant="table" />;
+
+  const orgName = company?.name || "your company";
 
   return (
     <div>
       <SetupHeader
-        kicker="Setup · Organization"
+        kicker={links.area === "producer" ? "Producer · Companies" : "Analytics · Point of Sales"}
         title="Stores"
-        copy="Stock and selling space inside a branch — retail floor, warehouse, or dark kitchen. Tills sell from a store; inventory is counted here."
+        copy={`${orgName} → store → tills. A store covers every branch. Issue each till to one branch — it cannot be used at another.`}
         action={
-          <PrimaryButton
-            disabled={branches.length === 0}
-            onClick={() => {
-              setDraft({ ...blank, branchId: branches[0]?.id ?? "" });
-              setOpen(true);
-            }}
-          >
-            <span className="inline-flex items-center gap-2">
-              <Plus size={16} />
-              New store
+          <div className="flex items-center gap-2">
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-xl border border-pos-border px-3 py-2.5 text-[12px] font-medium ${
+                live
+                  ? "bg-pos-success/10 text-pos-success"
+                  : "bg-pos-surface-muted text-pos-ink-faint"
+              }`}
+              title={live ? "Company, stores and tills are live" : "Live sync offline"}
+            >
+              {live ? <Wifi size={13} /> : <WifiOff size={13} />}
+              {live ? "Live" : "Offline"}
             </span>
-          </PrimaryButton>
+            <PrimaryButton
+              onClick={() => {
+                setDraft({ ...blank });
+                setOpen(true);
+              }}
+            >
+              <span className="inline-flex items-center gap-2">
+                <Plus size={16} />
+                New store
+              </span>
+            </PrimaryButton>
+          </div>
         }
       />
 
       <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <SetupStat label="Company" value={orgName} hint="Trading entity" />
         <SetupStat label="Stores" value={String(rows.length)} hint={`${activeCount} active`} />
-        <SetupStat label="Retail" value={String(byKind.retail)} tone="accent" />
-        <SetupStat label="Warehouse" value={String(byKind.warehouse)} />
-        <SetupStat label="Dark kitchen" value={String(byKind["dark-kitchen"])} />
+        <SetupStat label="Branches" value={String(branches.length)} hint="All locations" tone="accent" />
+        <SetupStat label="Tills" value={String(tills.length)} hint="Assigned per branch" />
       </div>
 
       <p className="mb-3 text-sm text-pos-ink-muted">
-        Stores sit on a{" "}
-        <Link href="/setup/others/branch" className="font-medium text-pos-primary hover:underline">
-          branch
-        </Link>
-        . Online shops are{" "}
-        <Link href="/setup/others/storefront" className="font-medium text-pos-primary hover:underline">
-          storefronts
-        </Link>
-        .
+        Add{" "}
+        <Link href={links.branch} className="font-medium text-pos-primary hover:underline">
+          branches
+        </Link>{" "}
+        as locations of this store, then{" "}
+        <Link href={links.till} className="font-medium text-pos-primary hover:underline">
+          issue tills
+        </Link>{" "}
+        to one branch each.
       </p>
 
       <DataTable
-        columns={["Name", "Branch", "Type", "Address", "Status"]}
+        columns={["Name", "Type", "Branches", "Tills", "Address", "Status"]}
         toolbar={
           <input
             className={`${fieldClass} max-w-sm`}
-            placeholder="Search stores, branches, types…"
+            placeholder="Search stores…"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
@@ -138,8 +133,8 @@ export function StoreManager() {
       >
         {filtered.length === 0 ? (
           <tr>
-            <td className="px-4 py-6 text-pos-ink-faint" colSpan={5}>
-              No stores yet. Add one under a branch.
+            <td className="px-4 py-6 text-pos-ink-faint" colSpan={6}>
+              No stores yet. Create the company store, then add branches and tills.
             </td>
           </tr>
         ) : (
@@ -153,10 +148,11 @@ export function StoreManager() {
               }}
             >
               <td className="px-4 py-3 font-medium">{row.name}</td>
-              <td className="px-4 py-3 text-pos-ink-muted">
-                {branches.find((item) => item.id === row.branchId)?.name ?? row.branchId}
-              </td>
               <td className="px-4 py-3">{KIND_LABEL[row.kind]}</td>
+              <td className="px-4 py-3 tabular-nums text-pos-ink-muted">{branches.length}</td>
+              <td className="px-4 py-3 tabular-nums text-pos-ink-muted">
+                {tillsByStore.get(row.id) ?? 0}
+              </td>
               <td className="max-w-[220px] truncate px-4 py-3 text-pos-ink-muted">
                 {row.address || "—"}
               </td>
@@ -179,6 +175,7 @@ export function StoreManager() {
       <SlideOver
         open={open}
         title={draft.id ? "Edit store" : "New store"}
+        subtitle="This store represents every branch of the company."
         onClose={() => setOpen(false)}
         footer={
           <div className="flex gap-2">
@@ -189,7 +186,6 @@ export function StoreManager() {
                 onClick={async () => {
                   try {
                     await deleteStore(draft.id!);
-                    await load();
                     setOpen(false);
                     toast.success("Store deleted.");
                   } catch (err) {
@@ -208,14 +204,9 @@ export function StoreManager() {
                   toast.error("Enter a store name.");
                   return;
                 }
-                if (!draft.branchId) {
-                  toast.error("Pick a branch.");
-                  return;
-                }
                 setBusy(true);
                 try {
-                  await saveStore(draft);
-                  await load();
+                  await saveStore({ ...draft, companyId: company?.id });
                   setOpen(false);
                   toast.success("Store saved.");
                 } catch (err) {
@@ -236,20 +227,6 @@ export function StoreManager() {
             value={draft.name ?? ""}
             onChange={(e) => setDraft({ ...draft, name: e.target.value })}
           />
-        </Field>
-        <Field label="Branch">
-          <select
-            className={fieldClass}
-            value={draft.branchId ?? ""}
-            onChange={(e) => setDraft({ ...draft, branchId: e.target.value })}
-          >
-            {!branches.length ? <option value="">No branches yet</option> : null}
-            {branches.map((row) => (
-              <option key={row.id} value={row.id}>
-                {row.name}
-              </option>
-            ))}
-          </select>
         </Field>
         <Field label="Type">
           <select

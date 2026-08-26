@@ -1,6 +1,7 @@
 "use client";
 
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type { ButtonHTMLAttributes, ReactNode, SelectHTMLAttributes } from "react";
+import { MenuSelect } from "@/components/ui/MenuSelect";
 
 export function SetupHeader({
   kicker = "Setup · Others",
@@ -74,9 +75,9 @@ export function Field({
   hint?: string;
 }) {
   return (
-    <label className="mb-3 block text-sm font-medium text-pos-ink">
+    <label className="mb-3 block min-w-0 text-sm font-medium text-pos-ink">
       {label}
-      <span className="mt-1 block font-normal">{children}</span>
+      <span className="mt-1 block min-w-0 font-normal">{children}</span>
       {error ? (
         <span className="mt-1.5 block text-[12px] font-normal text-pos-danger" role="alert">
           {error}
@@ -90,6 +91,13 @@ export function Field({
 
 export const fieldClass =
   "w-full rounded-2xl border-0 bg-pos-surface-muted px-3.5 py-2.5 text-sm text-pos-ink outline-none ring-1 ring-transparent transition focus:bg-pos-surface focus:ring-pos-primary/30";
+
+export const selectClass =
+  "h-[2.625rem] w-full min-w-0 cursor-pointer appearance-none truncate rounded-2xl border-0 bg-pos-surface-muted bg-none px-3.5 pr-10 text-sm leading-none text-pos-ink outline-none ring-1 ring-transparent transition focus:bg-pos-surface focus:ring-pos-primary/30";
+
+export function FormSelect(props: SelectHTMLAttributes<HTMLSelectElement> & { label?: string }) {
+  return <MenuSelect tone="setup" {...props} />;
+}
 
 export function ToggleField({
   label,

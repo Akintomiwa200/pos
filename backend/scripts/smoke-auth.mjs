@@ -171,10 +171,31 @@ const owner = await call("/console/login", {
 });
 const ownerToken = owner.data.token;
 
+const branch = await call("/console/setup/branches", {
+  method: "POST",
+  token: ownerToken,
+  body: { name: "Ikeja", city: "Ikeja", state: "Lagos" },
+  expect: 201,
+});
+check("branch created for till", Boolean(branch.data?.id));
+
+const store = await call("/console/setup/stores", {
+  method: "POST",
+  token: ownerToken,
+  body: { name: "Test Mart Store", kind: "retail" },
+  expect: 201,
+});
+check("store created for till", Boolean(store.data?.id));
+
 const till = await call("/console/tills", {
   method: "POST",
   token: ownerToken,
-  body: { name: "TILL-TEST-01", branchName: "Ikeja", product: "restaurant" },
+  body: {
+    name: "TILL-TEST-01",
+    storeId: store.data.id,
+    branchId: branch.data.id,
+    product: "restaurant",
+  },
   expect: 201,
 });
 check("till created with code", /^[0-9A-F]{4}(-[0-9A-F]{4}){3}$/.test(till.data.code));

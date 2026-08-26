@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Pencil, Trash2, Users } from "lucide-react";
@@ -8,16 +8,17 @@ import { toast } from "@/lib/toast";
 import {
   departmentsFromPrivileges,
   expandPrivileges,
+  groupScope,
   type ConsoleGroup,
 } from "@/lib/access";
 import { accessTree } from "@/lib/nav";
+import { producerAccessTree } from "@/lib/producer-nav";
 import {
   deleteGroup,
-  listAccounts,
-  listGroups,
   refreshSessionFromGroup,
   saveGroup,
 } from "@/lib/hq-api";
+import { useLiveDirectory } from "@/lib/live-directory";
 import { useAuth } from "@/components/AuthProvider";
 import { ManagerSkeleton } from "@/components/Skeleton";
 import {
@@ -30,39 +31,14 @@ import { GroupFormSheet } from "./GroupFormSheet";
 import { groupVisual, isAdminGroup, privilegeSummary, roleBlurb } from "./group-ui";
 import { isDefaultGroupId } from "@/lib/hq-seed";
 
-type AccountRow = {
-  id: string;
-  name: string;
-  email: string;
-  username: string;
-  groupId: string;
-  active: boolean;
-};
-
 export function GroupProfile({ groupId }: { groupId: string }) {
   const router = useRouter();
   const { session, setSession } = useAuth();
-  const [group, setGroup] = useState<ConsoleGroup | null>(null);
-  const [accounts, setAccounts] = useState<AccountRow[]>([]);
+  const { accounts, groups, ready } = useLiveDirectory();
+  const group = groups.find((row) => row.id === groupId) ?? null;
   const [draft, setDraft] = useState<ConsoleGroup | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [ready, setReady] = useState(false);
-
-  async function load() {
-    const [groups, rows] = await Promise.all([listGroups(), listAccounts()]);
-    const found = groups.find((row) => row.id === groupId) ?? null;
-    setGroup(found);
-    setAccounts(rows);
-    setReady(true);
-  }
-
-  useEffect(() => {
-    load().catch((err) => {
-      toast.error(err, "Could not load group");
-      setReady(true);
-    });
-  }, [groupId]);
 
   const members = useMemo(
     () => accounts.filter((row) => row.groupId === groupId),
@@ -72,9 +48,10 @@ export function GroupProfile({ groupId }: { groupId: string }) {
   const grantedLabels = useMemo(() => {
     if (!group) return [];
     if (group.privileges.includes("*")) return ["Everything in the sidebar"];
-    const granted = expandPrivileges(group.privileges);
+    const granted = expandPrivileges(group.privileges, groupScope(group));
     const labels: string[] = [];
-    for (const section of accessTree()) {
+    const tree = groupScope(group) === "producer" ? producerAccessTree() : accessTree();
+    for (const section of tree) {
       for (const item of section.items) {
         if (granted.has(item.id) || item.children?.some((child) => granted.has(child.id))) {
           labels.push(`${section.heading} · ${item.label}`);
@@ -105,9 +82,8 @@ export function GroupProfile({ groupId }: { groupId: string }) {
         privileges,
         departments: draft.privileges.includes("*")
           ? ["*"]
-          : departmentsFromPrivileges(privileges),
+          : departmentsFromPrivileges(privileges, groupScope(draft)),
       });
-      await load();
       setSheetOpen(false);
       if (session) setSession(refreshSessionFromGroup(session, saved));
       toast.success("Group saved. Sidebar updates for accounts in this group.");

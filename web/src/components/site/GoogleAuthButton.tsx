@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "@/lib/toast";
+import { googleClientId } from "@/lib/google-env";
 import { fetchGoogleAuthConfig } from "@/lib/hq-api";
 
 declare global {
@@ -14,6 +15,9 @@ declare global {
             callback: (response: { credential: string }) => void;
             auto_select?: boolean;
             cancel_on_tap_outside?: boolean;
+            ux_mode?: string;
+            context?: string;
+            itp_support?: boolean;
           }) => void;
           renderButton: (
             parent: HTMLElement,
@@ -23,6 +27,7 @@ declare global {
               width?: number;
               text?: string;
               shape?: string;
+              type?: string;
             },
           ) => void;
           prompt: () => void;
@@ -36,8 +41,6 @@ type Props = {
   intent: "login" | "signup";
   label: string;
   disabled?: boolean;
-  /** Required for company Google signup — read when Google returns. */
-  getCompany?: () => { name: string; email?: string; phone?: string; state?: string };
   onCredential: (credential: string) => Promise<void>;
 };
 
@@ -50,6 +53,10 @@ function loadGis(): Promise<void> {
   gisPromise = new Promise((resolve, reject) => {
     const existing = document.querySelector<HTMLScriptElement>('script[data-gis="1"]');
     if (existing) {
+      if (window.google?.accounts?.id) {
+        resolve();
+        return;
+      }
       existing.addEventListener("load", () => resolve());
       existing.addEventListener("error", () => reject(new Error("Google script failed")));
       return;
@@ -70,43 +77,52 @@ export function GoogleAuthButton({
   intent,
   label,
   disabled,
-  getCompany,
   onCredential,
 }: Props) {
-  const slotId = useId();
   const slotRef = useRef<HTMLDivElement>(null);
+  const [clientId, setClientId] = useState("");
   const [ready, setReady] = useState(false);
-  const [enabled, setEnabled] = useState(false);
   const [busy, setBusy] = useState(false);
-  const handlers = useRef({ getCompany, onCredential, intent });
-  handlers.current = { getCompany, onCredential, intent };
+  const handlers = useRef({ onCredential, intent });
+  handlers.current = { onCredential, intent };
 
   useEffect(() => {
     let cancelled = false;
-    async function boot() {
+    async function resolveId() {
+      let id = googleClientId();
       try {
         const config = await fetchGoogleAuthConfig();
-        if (cancelled) return;
-        if (!config.enabled || !config.clientId) {
-          setEnabled(false);
-          setReady(true);
-          return;
-        }
+        if (config.clientId) id = config.clientId;
+      } catch {
+        // API may be down; still use GOOGLE_CLIENT_ID from web/.env
+      }
+      if (cancelled) return;
+      setClientId(id);
+      setReady(true);
+    }
+    void resolveId();
+    return () => {
+      cancelled = true;
+    };
+  }, [intent]);
+
+  useEffect(() => {
+    if (!ready || !clientId || !slotRef.current) return;
+    let cancelled = false;
+
+    async function mountGis() {
+      try {
         await loadGis();
         if (cancelled || !window.google?.accounts?.id || !slotRef.current) return;
 
         window.google.accounts.id.initialize({
-          client_id: config.clientId,
+          client_id: clientId,
           cancel_on_tap_outside: true,
+          ux_mode: "popup",
+          itp_support: true,
+          context: intent === "signup" ? "signup" : "signin",
           callback: (response) => {
             void (async () => {
-              if (handlers.current.intent === "signup") {
-                const company = handlers.current.getCompany?.();
-                if (!company?.name?.trim()) {
-                  toast.error("Enter your company name before continuing with Google.");
-                  return;
-                }
-              }
               setBusy(true);
               try {
                 await handlers.current.onCredential(response.credential);
@@ -123,24 +139,39 @@ export function GoogleAuthButton({
         window.google.accounts.id.renderButton(slotRef.current, {
           theme: "outline",
           size: "large",
+          type: "standard",
           width: 380,
           text: intent === "signup" ? "signup_with" : "signin_with",
           shape: "rectangular",
         });
-        setEnabled(true);
-        setReady(true);
       } catch {
-        if (!cancelled) {
-          setEnabled(false);
-          setReady(true);
-        }
+        if (!cancelled) setClientId("");
       }
     }
-    void boot();
+
+    void mountGis();
     return () => {
       cancelled = true;
     };
-  }, [intent]);
+  }, [ready, clientId, intent]);
+
+  async function onClick() {
+    if (disabled || busy || !clientId) {
+      if (!clientId) {
+        toast.error(
+          "Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in backend/.env and web/.env, then restart both apps.",
+        );
+      }
+      return;
+    }
+    await loadGis();
+    const hidden = slotRef.current?.querySelector<HTMLElement>('[role="button"]');
+    if (hidden) {
+      hidden.click();
+      return;
+    }
+    window.google?.accounts.id.prompt();
+  }
 
   if (!ready) {
     return (
@@ -148,32 +179,24 @@ export function GoogleAuthButton({
     );
   }
 
-  if (!enabled) {
-    return (
+  return (
+    <div className="relative mt-7 w-full">
       <button
         type="button"
-        disabled={disabled || busy}
-        onClick={() =>
-          toast.error(
-            "Set GOOGLE_CLIENT_ID on the API and NEXT_PUBLIC_GOOGLE_CLIENT_ID on web to enable Google.",
-          )
-        }
-        className="mt-7 flex w-full items-center justify-center gap-3 rounded-[10px] border border-pos-border bg-pos-surface px-4 py-3 text-[14px] font-medium text-pos-ink transition hover:bg-pos-surface-muted disabled:opacity-60"
+        disabled={disabled || busy || !clientId}
+        onClick={() => void onClick()}
+        className="flex w-full items-center justify-center gap-3 rounded-[10px] border border-pos-border bg-pos-surface px-4 py-3 text-[14px] font-medium text-pos-ink transition hover:bg-pos-surface-muted disabled:opacity-60"
       >
         <GoogleGlyph />
         {label}
       </button>
-    );
-  }
-
-  return (
-    <div className="relative mt-7">
+      {/* GIS paints 0×0 under html color-scheme:dark; keep a light-scheme target for the real click. */}
       <div
-        id={slotId}
         ref={slotRef}
-        className={`flex w-full justify-center overflow-hidden rounded-[10px] ${
-          disabled || busy ? "pointer-events-none opacity-60" : ""
-        }`}
+        aria-hidden
+        inert
+        className="pointer-events-none absolute left-0 top-0 h-[44px] w-full overflow-hidden opacity-0"
+        style={{ colorScheme: "light" }}
       />
       {busy ? (
         <p className="mt-2 text-center text-[12px] text-pos-ink-faint">Syncing with Google…</p>

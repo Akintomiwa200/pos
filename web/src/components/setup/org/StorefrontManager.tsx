@@ -26,6 +26,7 @@ import {
   secondaryButtonClass,
 } from "@/components/setup/SetupChrome";
 import { useOrgLive } from "./useOrgLive";
+import { useOrgLinks } from "@/lib/org-links";
 
 const blank = (storeId = ""): Partial<HqStorefront> => ({
   name: "",
@@ -38,6 +39,7 @@ const blank = (storeId = ""): Partial<HqStorefront> => ({
 });
 
 export function StorefrontManager() {
+  const links = useOrgLinks();
   const [rows, setRows] = useState<HqStorefront[]>([]);
   const [stores, setStores] = useState<HqStore[]>([]);
   const [branchNames, setBranchNames] = useState<Map<string, string>>(new Map());
@@ -74,14 +76,15 @@ export function StorefrontManager() {
   const storeLabel = (id: string) => {
     const store = stores.find((s) => s.id === id);
     if (!store) return id || "—";
-    const branch = branchNames.get(store.branchId);
-    return branch ? `${store.name} · ${branch}` : store.name;
+    const n = branchNames.size;
+    if (n) return `${store.name} · ${n} branch${n === 1 ? "" : "es"}`;
+    return companyName ? `${store.name} · ${companyName}` : store.name;
   };
 
   return (
     <div>
       <SetupHeader
-        kicker="Setup · Organization"
+        kicker={links.area === "producer" ? "Producer · Companies" : "Setup · Organization"}
         title="Storefronts"
         copy="Online shop per store. Prices and stock can follow the live till catalog."
         action={
@@ -106,12 +109,12 @@ export function StorefrontManager() {
 
       {stores.length === 0 ? (
         <p className="mb-4 rounded-[16px] bg-pos-surface px-4 py-3 text-sm text-pos-ink-muted shadow-pos-sm">
-          Add a store under a branch first.{" "}
-          <Link href="/setup/others/store" className="font-medium text-pos-primary hover:underline">
+          Add a company store first. It covers every branch.{" "}
+          <Link href={links.store} className="font-medium text-pos-primary hover:underline">
             Open stores
           </Link>{" "}
           or{" "}
-          <Link href="/setup/others/branch" className="font-medium text-pos-primary hover:underline">
+          <Link href={links.branch} className="font-medium text-pos-primary hover:underline">
             branches
           </Link>
           .
@@ -119,7 +122,7 @@ export function StorefrontManager() {
       ) : (
         <p className="mb-3 text-sm text-pos-ink-muted">
           Each storefront belongs to one store.{" "}
-          <Link href="/setup/others/store" className="font-medium text-pos-primary hover:underline">
+          <Link href={links.store} className="font-medium text-pos-primary hover:underline">
             Manage stores
           </Link>
           .

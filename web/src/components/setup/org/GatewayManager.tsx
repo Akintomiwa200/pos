@@ -23,6 +23,7 @@ import {
   secondaryButtonClass,
 } from "@/components/setup/SetupChrome";
 import { useOrgLive } from "./useOrgLive";
+import { useOrgLinks } from "@/lib/org-links";
 
 const blank: Partial<HqGateway> = {
   name: "",
@@ -36,6 +37,7 @@ const blank: Partial<HqGateway> = {
 };
 
 export function GatewayManager() {
+  const links = useOrgLinks();
   const [rows, setRows] = useState<HqGateway[]>([]);
   const [companyName, setCompanyName] = useState("");
   const [draft, setDraft] = useState(blank);
@@ -68,7 +70,7 @@ export function GatewayManager() {
   return (
     <div>
       <SetupHeader
-        kicker="Setup · Organization"
+        kicker={links.area === "producer" ? "Producer · Payments" : "Setup · Organization"}
         title="Payment gateways"
         copy="Which rails tills can take. Cash and card stay on the register; online rails sync to HQ."
         action={
@@ -96,11 +98,11 @@ export function GatewayManager() {
 
       <p className="mb-3 text-sm text-pos-ink-muted">
         Settlement for{" "}
-        <Link href="/setup/others/company" className="font-medium text-pos-primary hover:underline">
+        <Link href={links.company} className="font-medium text-pos-primary hover:underline">
           {companyName || "company"}
         </Link>
         . Tax rates live under{" "}
-        <Link href="/setup/others/tax" className="font-medium text-pos-primary hover:underline">
+        <Link href={links.tax} className="font-medium text-pos-primary hover:underline">
           Tax
         </Link>
         .

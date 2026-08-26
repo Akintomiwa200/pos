@@ -1,5 +1,5 @@
-import { AdminDashboard } from "@/components/departments/AdminDashboard";
+import { SuperDashboard } from "@/components/super/SuperDashboard";
 
-export default function AdminPage() {
-  return <AdminDashboard />;
+export default function AdminHomePage() {
+  return <SuperDashboard />;
 }

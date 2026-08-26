@@ -8,6 +8,7 @@ import {
   activateDeviceTill,
   loadBranches,
   loadDeviceTill,
+  loadStores,
   saveDeviceTill,
   tillLabel,
   type TillRecord,
@@ -25,6 +26,7 @@ import {
 export function TillKeysSettings() {
   const { hex, live } = useHardwareHex();
   const [branches, setBranches] = useState(loadBranches);
+  const [stores, setStores] = useState(loadStores);
   const [till, setTill] = useState<TillRecord>(loadDeviceTill);
   const [codeDraft, setCodeDraft] = useState(() => loadDeviceTill().code);
   const [busy, setBusy] = useState(false);
@@ -32,6 +34,7 @@ export function TillKeysSettings() {
   useEffect(() => {
     const refresh = () => {
       setBranches(loadBranches());
+      setStores(loadStores());
       const next = loadDeviceTill();
       setTill(next);
       setCodeDraft(next.code);
@@ -75,8 +78,12 @@ export function TillKeysSettings() {
     }
   }
 
-  const branchName =
-    branches.find((row) => row.id === till.branchId)?.name ?? "No branch";
+  const storeId = till.storeId || stores[0]?.id || "";
+  const storeBranches = storeId
+    ? branches.filter((row) => !row.storeId || row.storeId === storeId)
+    : branches;
+  const branchPool = storeBranches.length ? storeBranches : branches;
+  const locked = till.paired;
 
   return (
     <>
@@ -88,7 +95,8 @@ export function TillKeysSettings() {
       <LiveNote>
         {till.paired ? (
           <>
-            This device is <strong>{tillLabel(till)}</strong> · {branchName} ·{" "}
+            This device is <strong>{tillLabel(till)}</strong> ·{" "}
+            {branchPool.find((row) => row.id === till.branchId)?.name ?? "No branch"} ·{" "}
             {tillProductLabel(till.product)} · licensed
             {till.subscriptionExpiresAt
               ? ` until ${new Date(till.subscriptionExpiresAt).toLocaleDateString("en-NG", {
@@ -167,11 +175,47 @@ export function TillKeysSettings() {
             ]}
           />
         </SetRow>
-        <SetRow label="Which branch is this till in?">
+        <SetRow
+          label="Store"
+          hint="Company store. Every branch of this store appears in the list below."
+        >
           <SelectField
-            value={till.branchId || branches[0]?.id || ""}
+            value={storeId}
+            disabled={locked || stores.length === 0}
+            onChange={(nextStoreId) => {
+              const nextBranches = branches.filter(
+                (row) => !row.storeId || row.storeId === nextStoreId,
+              );
+              const pool = nextBranches.length ? nextBranches : branches;
+              const branchId = pool.some((row) => row.id === till.branchId)
+                ? till.branchId
+                : (pool[0]?.id ?? "");
+              patch({ storeId: nextStoreId, branchId });
+            }}
+            options={
+              stores.length
+                ? stores.map((row) => ({ value: row.id, label: row.name }))
+                : [{ value: "", label: "Add a store in HQ first" }]
+            }
+          />
+        </SetRow>
+        <SetRow
+          label="Branch"
+          hint={
+            locked
+              ? "Assigned in HQ. This till cannot be used at another branch."
+              : "Branches of the selected store. Pick one location for this till."
+          }
+        >
+          <SelectField
+            value={till.branchId || branchPool[0]?.id || ""}
+            disabled={locked || branchPool.length === 0}
             onChange={(branchId) => patch({ branchId })}
-            options={branches.map((row) => ({ value: row.id, label: row.name }))}
+            options={
+              branchPool.length
+                ? branchPool.map((row) => ({ value: row.id, label: row.name }))
+                : [{ value: "", label: "Add a branch of this store first" }]
+            }
           />
         </SetRow>
         <SetRow label="Notes">

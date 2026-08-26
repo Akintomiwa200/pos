@@ -29,7 +29,7 @@ export function groupVisual(name: string, index = 0) {
   for (let i = 0; i < name.length; i += 1) hash = (hash + name.charCodeAt(i) * (i + 1)) % 997;
   const tone = GROUP_ICON_TONES[(hash + index) % GROUP_ICON_TONES.length];
   const key = name.toLowerCase();
-  if (key.includes("admin")) return { ...GROUP_ICON_TONES[0], Icon: Shield };
+  if (key.includes("super") || key.includes("ceo")) return { ...GROUP_ICON_TONES[0], Icon: Shield };
   if (key.includes("account")) return { ...GROUP_ICON_TONES[1], Icon: Calculator };
   if (key.includes("sales") || key.includes("cashier"))
     return { ...GROUP_ICON_TONES[2], Icon: ShoppingBag };
@@ -52,6 +52,8 @@ export function privilegeSummary(group: ConsoleGroup) {
 
 export function roleBlurb(name: string) {
   const key = name.toLowerCase();
+  if (key.includes("super")) return "Owns the producer console — register companies, billing, tills, and every privilege.";
+  if (key.includes("ceo")) return "Companies, subscriptions, and producer staff.";
   if (key.includes("admin")) return "Full console access — users, settings, and every department.";
   if (key.includes("store manager") || key.includes("manager"))
     return "Runs the floor — products, stock, sales, staff, and day-to-day ops.";

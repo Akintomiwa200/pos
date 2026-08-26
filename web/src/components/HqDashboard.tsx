@@ -38,14 +38,14 @@ import {
   YAxis,
 } from "recharts";
 import {
-  listAccounts,
   listCatalog,
   listSales,
   type HqCatalogItem,
   type HqSale,
 } from "../lib/hq-api";
-import type { ConsoleAccount } from "../lib/access";
+import { useLiveDirectory } from "../lib/live-directory";
 import { useThemeColors } from "../hooks/useThemeColors";
+import { compactMinor, formatMinor, useOrgLocale } from "../lib/org-locale";
 import { useAuth } from "./AuthProvider";
 import { DashboardSkeleton } from "./Skeleton";
 
@@ -99,19 +99,11 @@ function fillCashierBar(
 }
 
 function naira(minor: number) {
-  return (minor / 100).toLocaleString("en-NG", {
-    style: "currency",
-    currency: "NGN",
-    maximumFractionDigits: 2,
-  });
+  return formatMinor(minor, 2);
 }
 
 function nairaWhole(minor: number) {
-  return (minor / 100).toLocaleString("en-NG", {
-    style: "currency",
-    currency: "NGN",
-    maximumFractionDigits: 0,
-  });
+  return formatMinor(minor, 0);
 }
 
 function firstName(name: string) {
@@ -131,7 +123,7 @@ function compact(minor: number) {
 
 function displayMoney(minor: number) {
   const whole = nairaWhole(minor);
-  return whole.replace(/\s/g, "").length > 14 ? `₦${compact(minor)}` : whole;
+  return whole.replace(/\s+/g, "").length > 14 ? compactMinor(minor) : whole;
 }
 
 function moneyClass(text: string, kind: "hero" | "card" | "rail" | "cell" | "tile") {
@@ -498,7 +490,7 @@ function PeakPill({
       ? `${amount}%`
       : format === "count"
         ? String(amount)
-        : `₦${compact(amount)}`;
+        : compactMinor(amount);
   const width = Math.max(54, label.length * 6.6);
   return (
     <g transform={`translate(${x},${y})`}>
@@ -539,6 +531,7 @@ function PlatformMonthChart({
   focus: "revenue" | "tickets" | "mix";
 }) {
   const colors = useThemeColors();
+  useOrgLocale();
   const faces = people.length
     ? people
     : [{ name: "Ada O" }, { name: "Ben K" }, { name: "Cam L" }];
@@ -589,7 +582,7 @@ function PlatformMonthChart({
                   ? `${value}%`
                   : format === "count"
                     ? String(value)
-                    : `₦${compact(Number(value))}`
+                    : compactMinor(Number(value))
               }
             />
             <XAxis dataKey="month" hide />
@@ -1002,8 +995,9 @@ function buildMonths(rows: HqSale[], to: Date) {
 export function HqDashboard() {
   const router = useRouter();
   const { session } = useAuth();
+  useOrgLocale();
+  const { accounts } = useLiveDirectory();
   const [sales, setSales] = useState<HqSale[]>([]);
-  const [accounts, setAccounts] = useState<Omit<ConsoleAccount, "password">[]>([]);
   const [catalog, setCatalog] = useState<HqCatalogItem[]>([]);
   const [ready, setReady] = useState(false);
   const [days, setDays] = useState(90);
@@ -1018,14 +1012,12 @@ export function HqDashboard() {
     let cancelled = false;
     async function load(first = false) {
       try {
-        const [nextSales, nextAccounts, nextCatalog] = await Promise.all([
+        const [nextSales, nextCatalog] = await Promise.all([
           listSales(),
-          listAccounts(),
           listCatalog(),
         ]);
         if (cancelled) return;
         setSales(nextSales);
-        setAccounts(nextAccounts);
         setCatalog(nextCatalog);
       } catch {
         /* keep last good snapshot */

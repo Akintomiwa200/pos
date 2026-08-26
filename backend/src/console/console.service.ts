@@ -3,22 +3,28 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
+  OnModuleInit,
   UnauthorizedException,
 } from "@nestjs/common";
+import { Observable, Subject } from "rxjs";
 import { DbService } from "../db/db.service";
 import {
   isDefaultGroupId,
+  isProducerGroupId,
   publicAccount,
   type ConsoleAccount,
   type ConsoleGroup,
   type DepartmentName,
+  type GroupScope,
   type HqNotice,
 } from "./console.types";
 import { hashPassword, isHashedPassword, verifyPassword } from "./password.util";
 import { SetupService } from "./setup.service";
 import { EmailService } from "../email/email.service";
-import type { HqCompany } from "./setup.types";
+import type { HqCompany, HqBranch, HqStore } from "./setup.types";
+import { googleClientId } from "./google-env";
 import {
   addOneYear,
   generateSessionToken,
@@ -45,6 +51,7 @@ type GroupRow = {
   name: string;
   departments: Array<DepartmentName | "*">;
   privileges: string[];
+  scope?: string;
 };
 
 type AccountRow = {
@@ -81,6 +88,8 @@ type TillRow = {
   name: string;
   code: string;
   branch_name: string;
+  store_id: string | null;
+  branch_id: string | null;
   product: string;
   active: boolean;
   hardware_hex: string | null;
@@ -90,23 +99,55 @@ type TillRow = {
   subscription_expires_at: Date | null;
 };
 
+export type DirectoryEvent = {
+  type: "directory";
+  accounts: ReturnType<typeof publicAccount>[];
+  groups: ConsoleGroup[];
+  at: string;
+};
+
+export type PosEvent = {
+  type: "pos";
+  company: HqCompany;
+  tills: Array<Omit<HqTill, "sessionToken"> & { online: boolean; expired: boolean }>;
+  stores: HqStore[];
+  branches: HqBranch[];
+  at: string;
+};
+
 @Injectable()
-export class ConsoleService {
+export class ConsoleService implements OnModuleInit {
+  private readonly logger = new Logger(ConsoleService.name);
+  private readonly directoryEvents = new Subject<DirectoryEvent>();
+  private readonly posEvents = new Subject<PosEvent>();
+
   constructor(
     private readonly db: DbService,
     private readonly setup: SetupService,
     private readonly email: EmailService,
-  ) {}
+  ) {
+    this.setup.orgChanges.subscribe(() => this.publishPos());
+  }
+
+  async onModuleInit() {
+    void this.ensureSuperAdmin().catch((err) =>
+      this.logger.error(
+        `ensureSuperAdmin failed: ${err instanceof Error ? err.message : String(err)}`,
+      ),
+    );
+  }
 
   private mapGroup(row: {
     id: string;
     name: string;
     departments: unknown;
     privileges: unknown;
+    scope?: string;
   }): ConsoleGroup {
     return {
       id: row.id,
       name: row.name,
+      scope: row.scope === "producer" ? "producer" : "tenant",
       departments: (row.departments ?? []) as Array<DepartmentName | "*">,
       privileges: (row.privileges ?? []) as string[],
     };
@@ -149,6 +190,8 @@ export class ConsoleService {
       name: row.name,
       code: row.code,
       branchName: row.branch_name,
+      storeId: row.store_id || "",
+      branchId: row.branch_id || "",
       product: normalizeTillProduct(row.product),
       active: row.active,
       hardwareHex: row.hardware_hex,
@@ -163,42 +206,65 @@ export class ConsoleService {
 
   async listGroups(): Promise<ConsoleGroup[]> {
     const result = await this.db.query<GroupRow>(
-      `select id, name, departments, privileges from hq_groups order by created_at, id`,
+      `select id, name, departments, privileges, coalesce(scope, 'tenant') as scope from hq_groups order by created_at, id`,
     );
     return result.rows.map((row) => this.mapGroup(row));
   }
 
+  private tenantAdminGroup(groups: ConsoleGroup[]) {
+    return (
+      groups.find((row) => row.id === "g-admin") ??
+      groups.find(
+        (row) => (row.scope ?? "tenant") !== "producer" && row.privileges.includes("*"),
+      )
+    );
+  }
+
   private async findGroup(id: string): Promise<ConsoleGroup | undefined> {
     const result = await this.db.query<GroupRow>(
-      `select id, name, departments, privileges from hq_groups where id = $1`,
+      `select id, name, departments, privileges, coalesce(scope, 'tenant') as scope from hq_groups where id = $1`,
       [id],
     );
     return result.rows[0] ? this.mapGroup(result.rows[0]) : undefined;
   }
 
-  async saveGroup(group: ConsoleGroup) {
+  async saveGroup(group: ConsoleGroup, options?: { actorScope?: GroupScope }) {
     const name = group.name?.trim();
     if (!name) throw new BadRequestException("Group name is required");
+    const existing = group.id ? await this.findGroup(group.id) : undefined;
+    const scope: GroupScope =
+      existing?.scope === "producer" ||
+      group.scope === "producer" ||
+      isProducerGroupId(group.id || "")
+        ? "producer"
+        : "tenant";
+    if (scope === "producer" && !existing && options?.actorScope !== "producer") {
+      throw new ForbiddenException("Only producer staff can create producer departments");
+    }
     const next: ConsoleGroup = {
       id: group.id || `g-${Date.now()}`,
       name,
+      scope,
       departments: group.departments?.length ? group.departments : [],
       privileges: group.privileges ?? [],
     };
     await this.db.query(
-      `insert into hq_groups (id, name, departments, privileges)
-       values ($1, $2, $3::jsonb, $4::jsonb)
+      `insert into hq_groups (id, name, departments, privileges, scope)
+       values ($1, $2, $3::jsonb, $4::jsonb, $5)
        on conflict (id) do update
        set name = excluded.name,
            departments = excluded.departments,
-           privileges = excluded.privileges`,
+           privileges = excluded.privileges,
+           scope = excluded.scope`,
       [
         next.id,
         next.name,
         JSON.stringify(next.departments),
         JSON.stringify(next.privileges),
+        next.scope,
       ],
     );
+    this.publishDirectory();
     return next;
   }
 
@@ -215,6 +281,7 @@ export class ConsoleService {
     }
     const result = await this.db.query(`delete from hq_groups where id = $1`, [id]);
     if (!result.rowCount) throw new NotFoundException("Group not found");
+    this.publishDirectory();
     return { ok: true };
   }
 
@@ -236,6 +303,32 @@ export class ConsoleService {
       `select ${ConsoleService.ACCOUNT_COLUMNS} from hq_accounts order by created_at, id`,
     );
     return result.rows.map((row) => publicAccount(this.mapAccount(row)));
+  }
+
+  private async directorySnapshot(): Promise<DirectoryEvent> {
+    const [accounts, groups] = await Promise.all([this.listAccounts(), this.listGroups()]);
+    return {
+      type: "directory",
+      accounts,
+      groups,
+      at: new Date().toISOString(),
+    };
+  }
+
+  private publishDirectory() {
+    void this.directorySnapshot()
+      .then((event) => this.directoryEvents.next(event))
+      .catch(() => undefined);
+  }
+
+  directoryStream(): Observable<DirectoryEvent> {
+    return new Observable((subscriber) => {
+      void this.directorySnapshot()
+        .then((event) => subscriber.next(event))
+        .catch(() => undefined);
+      const sub = this.directoryEvents.subscribe(subscriber);
+      return () => sub.unsubscribe();
+    });
   }
 
   async login(emailOrUsername: string, password: string) {
@@ -262,11 +355,17 @@ export class ConsoleService {
 
   private async sessionPayload(token: string) {
     const result = await this.db.query<
-      AccountRow & { group_name: string; departments: unknown; privileges: unknown }
+      AccountRow & {
+        group_name: string;
+        departments: unknown;
+        privileges: unknown;
+        scope?: string;
+      }
     >(
       `select a.id, a.name, a.email, a.username, a.password_hash, a.group_id, a.active,
               a.google_id, a.auth_provider,
-              g.name as group_name, g.departments, g.privileges
+              g.name as group_name, g.departments, g.privileges,
+              coalesce(g.scope, 'tenant') as scope
        from hq_sessions s
        join hq_accounts a on a.id = s.account_id and a.active
        join hq_groups g on g.id = a.group_id
@@ -281,6 +380,7 @@ export class ConsoleService {
       user: {
         ...publicAccount(this.mapAccount(row)),
         groupName: row.group_name,
+        scope: row.scope === "producer" ? "producer" : "tenant",
         departments: row.departments as Array<DepartmentName | "*">,
         privileges: row.privileges as string[],
       },
@@ -310,6 +410,7 @@ export class ConsoleService {
       user: {
         ...publicAccount(account),
         groupName: group.name,
+        scope: group.scope ?? "tenant",
         departments: group.departments,
         privileges: group.privileges,
       },
@@ -349,23 +450,33 @@ export class ConsoleService {
   }
 
   googleConfig() {
-    const clientId = process.env.GOOGLE_CLIENT_ID?.trim() || "";
+    const clientId = googleClientId();
     return {
       enabled: Boolean(clientId),
       clientId: clientId || null,
     };
   }
 
-  /** Company onboarding — creates Administrator account + company profile in real time. */
-  async registerCompany(input: {
-    company?: Partial<HqCompany>;
-    account?: {
-      name?: string;
-      email?: string;
-      username?: string;
-      password?: string;
-    };
-  }) {
+  private async requireProducer(token: string) {
+    const session = await this.me(token);
+    if (session.user.scope !== "producer") {
+      throw new ForbiddenException("Only Super Admin can use this desk");
+    }
+    return session;
+  }
+
+  private async createCompanyWithOwner(
+    input: {
+      company?: Partial<HqCompany>;
+      account?: {
+        name?: string;
+        email?: string;
+        username?: string;
+        password?: string;
+      };
+    },
+    noticeHref: string,
+  ) {
     const companyName = input.company?.name?.trim();
     if (!companyName) throw new BadRequestException("Company name is required");
 
@@ -381,10 +492,7 @@ export class ConsoleService {
     }
 
     const groups = await this.listGroups();
-    const adminGroup =
-      groups.find((row) => row.id === "g-admin") ??
-      groups.find((row) => row.privileges.includes("*")) ??
-      groups[0];
+    const adminGroup = this.tenantAdminGroup(groups);
     if (!adminGroup) throw new BadRequestException("Administrator group is missing");
 
     await this.saveAccount(
@@ -418,7 +526,7 @@ export class ConsoleService {
       type: "company.onboarded",
       title: "Company onboarded",
       body: `${company.name} was created with owner ${name}.`,
-      href: "/setup/others/company",
+      href: noticeHref,
     });
 
     const owner = await this.findAccount(
@@ -429,8 +537,43 @@ export class ConsoleService {
       await this.sendCompanyOwnerEmail(owner, company.name);
     }
 
-    const session = await this.login(email, password);
-    return { ...session, company, onboarding: "company" as const };
+    return { company, owner, email, password };
+  }
+
+  /** Public signup — creates the owner and signs them into tenant HQ. */
+  async registerCompany(input: {
+    company?: Partial<HqCompany>;
+    account?: {
+      name?: string;
+      email?: string;
+      username?: string;
+      password?: string;
+    };
+  }) {
+    const created = await this.createCompanyWithOwner(input, "/setup/others/company");
+    const session = await this.login(created.email, created.password);
+    return { ...session, company: created.company, onboarding: "company" as const };
+  }
+
+  /** Super Admin onboarding — creates the owner without stealing this session. */
+  async provisionCompany(
+    token: string,
+    input: {
+      company?: Partial<HqCompany>;
+      account?: {
+        name?: string;
+        email?: string;
+        username?: string;
+        password?: string;
+      };
+    },
+  ) {
+    await this.requireProducer(token);
+    const created = await this.createCompanyWithOwner(input, "/admin/companies");
+    return {
+      company: created.company,
+      owner: created.owner ? publicAccount(created.owner) : null,
+    };
   }
 
   async googleAuth(input: {
@@ -479,10 +622,7 @@ export class ConsoleService {
     }
 
     const groups = await this.listGroups();
-    const adminGroup =
-      groups.find((row) => row.id === "g-admin") ??
-      groups.find((row) => row.privileges.includes("*")) ??
-      groups[0];
+    const adminGroup = this.tenantAdminGroup(groups);
     if (!adminGroup) throw new BadRequestException("Administrator group is missing");
 
     const usernameBase =
@@ -543,10 +683,10 @@ export class ConsoleService {
     const token = credential.trim();
     if (!token) throw new BadRequestException("Google credential is required");
 
-    const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
+    const clientId = googleClientId();
     if (!clientId) {
       throw new BadRequestException(
-        "Google sign-in is not configured. Set GOOGLE_CLIENT_ID on the API.",
+        "Google sign-in is not configured. Set GOOGLE_CLIENT_ID (and GOOGLE_CLIENT_SECRET) on the API.",
       );
     }
 
@@ -666,6 +806,8 @@ export class ConsoleService {
       invitedBy?: string;
       welcomePassword?: string;
       skipWelcomeEmail?: boolean;
+      actorScope?: GroupScope;
+      internal?: boolean;
     },
   ) {
     const name = input.name?.trim();
@@ -686,8 +828,17 @@ export class ConsoleService {
         "Username must be 3–32 characters: letters, numbers, dots, underscores, or hyphens",
       );
     }
-    if (!(await this.findGroup(groupId))) {
+    const group = await this.findGroup(groupId);
+    if (!group) {
       throw new BadRequestException("Select a group");
+    }
+    if (!options?.internal) {
+      if (group.scope === "producer" && options?.actorScope !== "producer") {
+        throw new ForbiddenException("Only producer staff can manage producer accounts");
+      }
+      if (groupId === "g-super-admin" && email !== this.superAdminEmail()) {
+        throw new BadRequestException("Super Admin is reserved for the designated account");
+      }
     }
     const existing = input.id
       ? await this.findAccount("id = $1", [input.id])
@@ -697,6 +848,14 @@ export class ConsoleService {
       [existing?.id ?? null, email, username],
     );
     if (duplicate) throw new BadRequestException("Email or username already in use");
+    if (
+      !options?.internal &&
+      existing &&
+      existing.email.toLowerCase() === this.superAdminEmail() &&
+      groupId !== "g-super-admin"
+    ) {
+      throw new BadRequestException("The Super Admin account cannot be moved to another group");
+    }
 
     const plainPassword = input.password?.trim() ?? "";
     const authProvider =
@@ -760,20 +919,28 @@ export class ConsoleService {
     };
 
     if (!existing) {
+      const producer = group.scope === "producer";
       await this.pushNotice({
         key: `account.created:${next.id}`,
         type: "account.created",
-        title: "New HQ account",
-        body: `${next.name} (${next.username}) joined. Review the group in Setup → Users.`,
-        href: "/setup/users/account",
+        title: producer ? "New producer account" : "New HQ account",
+        body: producer
+          ? `${next.name} (${next.username}) joined a producer department.`
+          : `${next.name} (${next.username}) joined. Review the group in Setup → Users.`,
+        href: producer ? "/admin/accounts" : "/setup/users/account",
       });
-      if (!options?.skipWelcomeEmail) {
-        await this.sendNewAccountEmail(next, {
-          invitedBy: options?.invitedBy,
-          password: options?.welcomePassword ?? plainPassword,
-        });
-      }
     }
+    const promotedToProducer =
+      Boolean(existing) &&
+      group.scope === "producer" &&
+      existing?.groupId !== groupId;
+    if (!options?.skipWelcomeEmail && (!existing || promotedToProducer)) {
+      await this.sendNewAccountEmail(next, {
+        invitedBy: options?.invitedBy,
+        password: options?.welcomePassword ?? plainPassword,
+      });
+    }
+    this.publishDirectory();
     return publicAccount(next);
   }
 
@@ -786,6 +953,12 @@ export class ConsoleService {
     );
     const target = await this.findAccount("id = $1", [id]);
     if (!target) throw new NotFoundException("Account not found");
+    if (
+      target.email.toLowerCase() === this.superAdminEmail() ||
+      target.groupId === "g-super-admin"
+    ) {
+      throw new BadRequestException("The Super Admin account cannot be deleted");
+    }
     const group = await this.findGroup(target.groupId);
     const isAdmin =
       group?.privileges.includes("*") || group?.departments.includes("*");
@@ -793,6 +966,7 @@ export class ConsoleService {
       throw new BadRequestException("Keep at least one administrator account");
     }
     await this.db.query(`delete from hq_accounts where id = $1`, [id]);
+    this.publishDirectory();
     return { ok: true };
   }
 
@@ -971,19 +1145,131 @@ export class ConsoleService {
       password?: string;
     } = {},
   ) {
-    const groupName = this.groupName(account.groupId, await this.listGroups());
+    const groups = await this.listGroups();
+    const group = groups.find((row) => row.id === account.groupId);
+    const groupName = group?.name ?? this.groupName(account.groupId, groups);
+    const producer = group?.scope === "producer";
     const company = this.setup.getCompany();
-    await this.email.sendAccountWelcome({
+    return this.email.sendAccountWelcome({
       to: account.email,
       name: account.name,
       username: account.username,
       groupName,
-      companyName: company.name,
+      companyName: producer ? "the producer console" : company.name,
       loginUrl: this.email.loginUrl(),
       password: input.password,
       invitedBy: input.invitedBy,
       authProvider: account.authProvider,
+      producer,
     });
+  }
+
+  private superAdminEmail() {
+    return (
+      process.env.SUPER_ADMIN_EMAIL?.trim().toLowerCase() ||
+      process.env.SUPER_ADMIN_EMAILS?.split(",")[0]?.trim().toLowerCase() ||
+      ""
+    );
+  }
+
+  private superAdminPassword() {
+    return process.env.SUPER_ADMIN_PASSWORD?.trim() || "";
+  }
+
+  private async ensureSuperAdmin() {
+    const email = this.superAdminEmail();
+    const password = this.superAdminPassword();
+    if (!email || password.length < 6) return;
+
+    await this.removeRetiredSuperAdmin(email);
+
+    await this.db.query(
+      `update hq_accounts set group_id = 'g-admin'
+       where group_id = 'g-super-admin' and lower(email) <> $1`,
+      [email],
+    );
+
+    const existing = await this.findAccount("lower(email) = $1", [email]);
+    const usernameBase = email.split("@")[0]?.replace(/[^a-z0-9._-]/gi, "").toLowerCase() || "admin";
+    let username = usernameBase.slice(0, 32);
+    if (!existing) {
+      let suffix = 0;
+      while (await this.findAccount("lower(username) = $1", [username])) {
+        suffix += 1;
+        username = `${usernameBase.slice(0, 28)}${suffix}`;
+      }
+    }
+
+    const wasProducer = existing?.groupId === "g-super-admin";
+    const saved = await this.saveAccount(
+      {
+        id: existing?.id,
+        name: existing?.name || "Super Admin",
+        email,
+        username: existing?.username || username,
+        password: existing && wasProducer ? undefined : password,
+        groupId: "g-super-admin",
+        active: true,
+        authProvider: existing?.authProvider === "google" ? "both" : existing?.authProvider ?? "password",
+      },
+      { skipWelcomeEmail: true, internal: true },
+    );
+
+    const mailedKey = `superadmin.welcome.mailed:${email}`;
+    const mailed = await this.db.query(
+      `select 1 from hq_notices where key = $1 limit 1`,
+      [mailedKey],
+    );
+    const createdOrPromoted = !existing || !wasProducer;
+    const shouldMail =
+      createdOrPromoted || (this.email.isConfigured() && !mailed.rowCount);
+
+    if (shouldMail) {
+      const result = await this.sendNewAccountEmail(
+        {
+          id: saved.id,
+          name: saved.name,
+          email: saved.email,
+          username: saved.username,
+          password: "",
+          groupId: "g-super-admin",
+          active: true,
+          authProvider: saved.authProvider,
+        },
+        { password },
+      );
+      if (result.sent) {
+        await this.pushNotice({
+          key: mailedKey,
+          type: "account.welcome",
+          title: "Super Admin welcome sent",
+          body: `Welcome email sent to ${email}.`,
+          href: "/admin",
+        });
+      } else if (!this.email.isConfigured()) {
+        this.logger.warn(
+          `Super Admin welcome for ${email} was not emailed (SMTP not configured)`,
+        );
+      }
+    }
+    this.logger.log(`Super Admin ready: ${email}`);
+  }
+
+  private async removeRetiredSuperAdmin(keepEmail: string) {
+    const retired = (process.env.SUPER_ADMIN_RETIRED_EMAILS ?? "")
+      .split(",")
+      .map((value) => value.trim().toLowerCase())
+      .filter((value) => value && value !== keepEmail);
+    for (const old of retired) {
+      if (old === keepEmail) continue;
+      const row = await this.findAccount("lower(email) = $1", [old]);
+      if (!row) continue;
+      await this.db.query(`delete from hq_accounts where id = $1`, [row.id]);
+      await this.db.query(`delete from hq_notices where key = $1`, [
+        `superadmin.welcome.mailed:${old}`,
+      ]);
+      this.logger.log(`Removed retired Super Admin account: ${old}`);
+    }
   }
 
   private async sendCompanyOwnerEmail(
@@ -1002,15 +1288,15 @@ export class ConsoleService {
 
   // ---------- tills ----------
 
+  private static TILL_COLUMNS = `id, name, code, branch_name, store_id, branch_id, product, active, hardware_hex, session_token,
+              paired_at, last_seen_at, subscription_expires_at`;
+
   private async listRawTills(): Promise<HqTill[]> {
     const result = await this.db.query(
-      `select id, name, code, branch_name, product, active, hardware_hex, session_token,
-              paired_at, last_seen_at, subscription_expires_at
+      `select ${ConsoleService.TILL_COLUMNS}
        from hq_tills order by created_at, id`,
     );
-    return result.rows.map((row) =>
-      this.mapTill(row as TillRow),
-    );
+    return result.rows.map((row) => this.mapTill(row as TillRow));
   }
 
   listTills() {
@@ -1026,10 +1312,36 @@ export class ConsoleService {
     })();
   }
 
+  private async posSnapshot(): Promise<PosEvent> {
+    return {
+      type: "pos",
+      company: this.setup.getCompany(),
+      tills: await this.listTills(),
+      stores: this.setup.listStores(),
+      branches: this.setup.listBranches(),
+      at: new Date().toISOString(),
+    };
+  }
+
+  private publishPos() {
+    void this.posSnapshot()
+      .then((event) => this.posEvents.next(event))
+      .catch(() => undefined);
+  }
+
+  posStream(): Observable<PosEvent> {
+    return new Observable((subscriber) => {
+      void this.posSnapshot()
+        .then((event) => subscriber.next(event))
+        .catch(() => undefined);
+      const sub = this.posEvents.subscribe(subscriber);
+      return () => sub.unsubscribe();
+    });
+  }
+
   private async getRawTill(id: string): Promise<HqTill | undefined> {
     const result = await this.db.query(
-      `select id, name, code, branch_name, product, active, hardware_hex, session_token,
-              paired_at, last_seen_at, subscription_expires_at
+      `select ${ConsoleService.TILL_COLUMNS}
        from hq_tills where id = $1 limit 1`,
       [id],
     );
@@ -1040,8 +1352,7 @@ export class ConsoleService {
 
   private async getTillByName(name: string): Promise<HqTill | undefined> {
     const result = await this.db.query(
-      `select id, name, code, branch_name, product, active, hardware_hex, session_token,
-              paired_at, last_seen_at, subscription_expires_at
+      `select ${ConsoleService.TILL_COLUMNS}
        from hq_tills where upper(name) = $1 limit 1`,
       [name.toUpperCase()],
     );
@@ -1052,8 +1363,7 @@ export class ConsoleService {
 
   private async getTillByCode(code: string): Promise<HqTill | undefined> {
     const result = await this.db.query(
-      `select id, name, code, branch_name, product, active, hardware_hex, session_token,
-              paired_at, last_seen_at, subscription_expires_at
+      `select ${ConsoleService.TILL_COLUMNS}
        from hq_tills where code = $1 limit 1`,
       [code],
     );
@@ -1067,6 +1377,8 @@ export class ConsoleService {
     fields: Partial<{
       code: string;
       branch_name: string;
+      store_id: string | null;
+      branch_id: string | null;
       product: string;
       active: boolean;
       hardware_hex: string | null;
@@ -1089,6 +1401,8 @@ export class ConsoleService {
   async saveTill(input: {
     id?: string;
     name?: string;
+    storeId?: string;
+    branchId?: string;
     branchName?: string;
     product?: string;
     active?: boolean;
@@ -1100,22 +1414,46 @@ export class ConsoleService {
     if (duplicate && duplicate.id !== existing?.id) {
       throw new BadRequestException("That till name is already issued");
     }
+    const storeId = (input.storeId ?? existing?.storeId ?? "").trim();
+    const store = storeId ? this.setup.listStores().find((row) => row.id === storeId) : undefined;
+    if (!store) throw new BadRequestException("Choose a store");
+    const branchId = (input.branchId ?? existing?.branchId ?? "").trim();
+    const branch = branchId ? this.setup.listBranches().find((row) => row.id === branchId) : undefined;
+    if (!branch) throw new BadRequestException("Choose a branch");
+    const companyId = this.setup.getCompany().id;
+    const storeCompany = store.companyId || companyId;
+    const branchCompany = branch.companyId || companyId;
+    if (storeCompany !== branchCompany) {
+      throw new BadRequestException("Store and branch must belong to the same company");
+    }
+    if (existing?.storeId && existing.storeId !== store.id) {
+      throw new BadRequestException("This till is already assigned to a store and cannot move");
+    }
+    if (existing?.branchId && existing.branchId !== branch.id) {
+      throw new BadRequestException(
+        `This till is assigned to ${existing.branchName || "another branch"} and cannot be used at ${branch.name}`,
+      );
+    }
     const id = existing?.id ?? `till-${Date.now()}`;
     const code = existing?.code ?? generateTillCode();
     const product = normalizeTillProduct(input.product ?? existing?.product);
     await this.db.query(
-      `insert into hq_tills (id, name, code, branch_name, product, active)
-       values ($1, $2, $3, $4, $5, $6)
+      `insert into hq_tills (id, name, code, branch_name, store_id, branch_id, product, active)
+       values ($1, $2, $3, $4, $5, $6, $7, $8)
        on conflict (id) do update
        set name = excluded.name,
            branch_name = excluded.branch_name,
+           store_id = excluded.store_id,
+           branch_id = excluded.branch_id,
            product = excluded.product,
            active = excluded.active`,
       [
         id,
         name,
         code,
-        input.branchName?.trim() || existing?.branchName || "",
+        branch.name,
+        store.id,
+        branch.id,
         product,
         input.active ?? existing?.active ?? true,
       ],
@@ -1125,10 +1463,11 @@ export class ConsoleService {
         key: `till.issued:${id}`,
         type: "till.issued",
         title: `${name} issued`,
-        body: `Enter the till code on that device at ${input.branchName?.trim() || "the branch"} to activate ${tillProductLabel(product)} for one year.`,
+        body: `Enter the till code on that device at ${store.name} · ${branch.name} to activate ${tillProductLabel(product)} for one year.`,
         href: "/setup/others/till",
       });
     }
+    this.publishPos();
     return (await this.getRawTill(id))!;
   }
 
@@ -1150,12 +1489,14 @@ export class ConsoleService {
       body: "The previous code no longer works. Enter the new code on that till.",
       href: "/setup/others/till",
     });
+    this.publishPos();
     return (await this.getRawTill(id))!;
   }
 
   async deleteTill(id: string) {
     const result = await this.db.query(`delete from hq_tills where id = $1`, [id]);
     if (!result.rowCount) throw new NotFoundException("Till not found");
+    this.publishPos();
     return { ok: true };
   }
 
@@ -1186,6 +1527,7 @@ export class ConsoleService {
       body: `The till at ${till.branchName || "the branch"} is licensed until ${new Date(subscriptionExpiresAt!).toLocaleDateString("en-NG")}.`,
       href: "/setup/others/till",
     });
+    this.publishPos();
     return (await this.getRawTill(till.id))!;
   }
 
@@ -1218,6 +1560,7 @@ export class ConsoleService {
         subscription_expires_at:
           till.subscriptionExpiresAt ?? addOneYear().toISOString(),
       });
+      this.publishPos();
       return (await this.getRawTill(till.id))!;
     }
 
@@ -1242,6 +1585,7 @@ export class ConsoleService {
       subscription_expires_at:
         till.subscriptionExpiresAt ?? addOneYear().toISOString(),
     });
+    this.publishPos();
     return (await this.getRawTill(till.id))!;
   }
 
@@ -1261,6 +1605,7 @@ export class ConsoleService {
       body: `Subscription now runs until ${new Date(subscriptionExpiresAt).toLocaleDateString("en-NG")}.`,
       href: "/setup/others/till",
     });
+    this.publishPos();
     return (await this.getRawTill(id))!;
   }
 }

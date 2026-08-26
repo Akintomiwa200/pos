@@ -2,8 +2,9 @@
 
 import type { ReactNode } from "react";
 import type { HqCompany, HqOrgSettings } from "@/lib/hq-setup";
-import { Field, PrimaryButton, fieldClass } from "@/components/setup/SetupChrome";
+import { Field, FormSelect, PrimaryButton, fieldClass } from "@/components/setup/SetupChrome";
 import { settingsFieldClass, type SettingsFieldErrors } from "@/lib/settings-validation";
+import { CURRENCIES, localeFromCurrency, withCurrent } from "@/lib/locale";
 import { ReceiptLivePreview } from "./DocumentPreviews";
 import { ReceiptPrintPreviewButton } from "./ReceiptPrintPreview";
 
@@ -276,10 +277,9 @@ export function ReceiptStudio({
             copy="Header and footer are optional. Edit live here or on the receipt preview."
           >
             <div className="space-y-1 px-5 py-2 sm:px-6">
-              <div className="grid gap-3 border-b border-pos-border/50 py-3 sm:grid-cols-2">
+              <div className="grid min-w-0 gap-3 border-b border-pos-border/50 py-3 sm:grid-cols-2 [&>*]:min-w-0">
                 <Field label="Paper width">
-                  <select
-                    className={fieldClass}
+                  <FormSelect
                     value={draft.receiptPaper}
                     onChange={(e) =>
                       patchField({
@@ -289,10 +289,19 @@ export function ReceiptStudio({
                   >
                     <option value="80mm">80 mm (standard)</option>
                     <option value="58mm">58 mm (compact)</option>
-                  </select>
+                  </FormSelect>
                 </Field>
                 <Field label="Currency on ticket">
-                  <input className={fieldClass} value={draft.currency} readOnly />
+                  <FormSelect
+                    value={draft.currency}
+                    onChange={(e) => patchField(localeFromCurrency(e.target.value, draft))}
+                  >
+                    {withCurrent(CURRENCIES, draft.currency).map((row) => (
+                      <option key={row.value} value={row.value}>
+                        {row.label}
+                      </option>
+                    ))}
+                  </FormSelect>
                 </Field>
               </div>
               <SettingRow

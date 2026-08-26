@@ -22,7 +22,19 @@ function navPathname(pathname: string) {
 function isActivePath(pathname: string, href?: string) {
   const path = navPathname(pathname);
   if (!href) return false;
+  if (href === "/admin") return path === "/admin";
   return path === href || path.startsWith(`${href}/`);
+}
+
+function allNavHrefs(nav: NavSection[]): string[] {
+  const hrefs: string[] = [];
+  for (const section of nav) {
+    for (const item of section.items) {
+      if (item.href) hrefs.push(item.href);
+      if (item.children?.length) hrefs.push(...collectLeafHrefs(item.children));
+    }
+  }
+  return hrefs;
 }
 
 function collectLeafHrefs(nodes: NavNode[]): string[] {
@@ -163,16 +175,18 @@ function NavRow({
   pathname,
   expanded,
   onToggle,
+  leafHrefs,
 }: {
   item: NavItem;
   pathname: string;
   expanded: boolean;
   onToggle: () => void;
+  leafHrefs: string[];
 }) {
   const Icon = item.icon;
   const dropdown = Array.isArray(item.children);
   const branchActive = itemMatches(pathname, item);
-  const selfActive = !dropdown && isActivePath(pathname, item.href);
+  const selfActive = !dropdown && Boolean(item.href) && isLeafNavActive(pathname, item.href!, leafHrefs);
 
   let rowClass =
     "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] transition ";
@@ -247,6 +261,7 @@ export function Sidebar({
       section.heading === "Settings" &&
       section.items.some((item) => item.id === "others-settings"),
   );
+  const navHrefs = allNavHrefs(nav);
 
   useEffect(() => {
     setOpenMenus((current) => ({ ...current, ...openIdsForPath(pathname, nav) }));
@@ -274,6 +289,7 @@ export function Sidebar({
                   pathname={pathname}
                   expanded={expanded}
                   onToggle={() => toggle(item.id)}
+                  leafHrefs={navHrefs}
                 />
                 {dropdown && expanded && (item.children?.length ?? 0) > 0 && (
                   <NestedList
@@ -323,6 +339,11 @@ export function Sidebar({
         <div className="flex items-center gap-2 px-5 py-5">
           <div className="min-w-0 flex-1">
             <BrandLogo href={homeHref} size="sm" />
+            {session.scope === "producer" ? (
+              <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-pos-primary">
+                Super Admin
+              </p>
+            ) : null}
           </div>
           <button
             type="button"
@@ -371,6 +392,7 @@ export function Sidebar({
                       pathname={pathname}
                       expanded={expanded}
                       onToggle={() => toggle(item.id)}
+                      leafHrefs={navHrefs}
                     />
                     {dropdown && expanded && (item.children?.length ?? 0) > 0 && (
                       <NestedList
@@ -394,6 +416,8 @@ export function Sidebar({
 
           {otherSections.map((section) => renderSection(section))}
 
+          {settingsAllowed ||
+          (settingsSection?.items.filter((item) => item.id !== "others-settings").length ?? 0) > 0 ? (
           <div className="mb-2">
             <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-pos-sidebar-muted">
               Settings
@@ -412,6 +436,7 @@ export function Sidebar({
                         pathname={pathname}
                         expanded={expanded}
                         onToggle={() => toggle(item.id)}
+                        leafHrefs={navHrefs}
                       />
                       {dropdown && expanded && (item.children?.length ?? 0) > 0 && (
                         <NestedList
@@ -442,6 +467,12 @@ export function Sidebar({
                   <span className="flex-1">Settings</span>
                 </Link>
               ) : null}
+            </div>
+          </div>
+          ) : null}
+
+          <div className="mb-2">
+            <div className="flex flex-col gap-0.5">
               <button
                 type="button"
                 onClick={() => void handleLogout()}

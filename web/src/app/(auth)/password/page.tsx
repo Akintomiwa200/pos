@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "@/lib/toast";
+import { homePathForSession } from "@/lib/access";
 import { useAuth } from "../../../components/AuthProvider";
 import {
   AuthFooterLink,
@@ -55,7 +55,7 @@ export default function ChangePasswordPage() {
       mode="other"
       footer={
         <>
-          <AuthFooterLink href="/dashboard">Back to HQ</AuthFooterLink>
+          <AuthFooterLink href={homePathForSession(session)}>Back</AuthFooterLink>
         </>
       }
     >

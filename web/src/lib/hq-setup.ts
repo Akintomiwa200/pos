@@ -17,6 +17,7 @@ export type HqCompany = {
 export type HqBranch = {
   id: string;
   companyId: string;
+  storeId?: string;
   name: string;
   city: string;
   state: string;
@@ -28,7 +29,8 @@ export type HqBranch = {
 
 export type HqStore = {
   id: string;
-  branchId: string;
+  companyId?: string;
+  branchId?: string;
   name: string;
   kind: "retail" | "warehouse" | "dark-kitchen";
   address: string;

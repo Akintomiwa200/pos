@@ -1,18 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { MapPin, Plus } from "lucide-react";
+import { MapPin, Plus, Wifi, WifiOff } from "lucide-react";
 import { toast } from "@/lib/toast";
-import {
-  deleteBranch,
-  getCompany,
-  listBranches,
-  listStores,
-  saveBranch,
-  type HqBranch,
-  type HqCompany,
-} from "@/lib/hq-setup";
+import { deleteBranch, saveBranch, type HqBranch, type HqCompany } from "@/lib/hq-setup";
+import { useLivePos } from "@/lib/live-pos";
 import { ManagerSkeleton } from "@/components/Skeleton";
 import {
   DataTable,
@@ -24,7 +17,8 @@ import {
   fieldClass,
   secondaryButtonClass,
 } from "@/components/setup/SetupChrome";
-import { useOrgLive } from "./useOrgLive";
+import { SetupStateSelect } from "@/components/geo/CountryStateFields";
+import { useOrgLinks } from "@/lib/org-links";
 
 type Draft = Partial<HqBranch> & {
   name: string;
@@ -36,7 +30,7 @@ type Draft = Partial<HqBranch> & {
   active: boolean;
 };
 
-const blank = (company?: HqCompany | null): Draft => ({
+const blank = (company?: HqCompany | null, storeId = ""): Draft => ({
   name: "",
   city: "",
   state: company?.state || "Lagos",
@@ -45,39 +39,21 @@ const blank = (company?: HqCompany | null): Draft => ({
   manager: "",
   active: true,
   companyId: company?.id,
+  storeId,
 });
 
 export function BranchManager() {
-  const [company, setCompany] = useState<HqCompany | null>(null);
-  const [rows, setRows] = useState<HqBranch[]>([]);
-  const [storeCount, setStoreCount] = useState<Map<string, number>>(new Map());
+  const links = useOrgLinks();
+  const { company, branches: rows, tills, stores, live, ready } = useLivePos();
   const [draft, setDraft] = useState<Draft>(blank());
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [ready, setReady] = useState(false);
 
-  const load = useCallback(async () => {
-    const [companyRow, branches, stores] = await Promise.all([
-      getCompany(),
-      listBranches(),
-      listStores().catch(() => []),
-    ]);
-    setCompany(companyRow);
-    setRows(branches);
-    const counts = new Map<string, number>();
-    for (const store of stores) {
-      counts.set(store.branchId, (counts.get(store.branchId) ?? 0) + 1);
-    }
-    setStoreCount(counts);
-  }, []);
-
-  useEffect(() => {
-    load()
-      .catch((err) => toast.error(err, "Could not load branches"))
-      .finally(() => setReady(true));
-  }, [load]);
-
-  useOrgLive(load);
+  const tillCount = new Map<string, number>();
+  for (const till of tills) {
+    if (!till.branchId) continue;
+    tillCount.set(till.branchId, (tillCount.get(till.branchId) ?? 0) + 1);
+  }
 
   if (!ready) return <ManagerSkeleton variant="table" />;
 
@@ -86,45 +62,62 @@ export function BranchManager() {
   return (
     <div>
       <SetupHeader
-        kicker="Setup · Organization"
+        kicker={links.area === "producer" ? "Producer · Companies" : "Setup · Organization"}
         title="Branches"
-        copy={`Physical locations under ${company?.name || "your company"}. Stores and tills sit on a branch.`}
+        copy={`Locations of ${company?.name || "your company"}. The store covers all of them. A till assigned here cannot be used at another branch.`}
         action={
-          <PrimaryButton
-            onClick={() => {
-              setDraft(blank(company));
-              setOpen(true);
-            }}
-          >
-            <Plus size={16} />
-            New branch
-          </PrimaryButton>
+          <div className="flex items-center gap-2">
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-xl border border-pos-border px-3 py-2.5 text-[12px] font-medium ${
+                live
+                  ? "bg-pos-success/10 text-pos-success"
+                  : "bg-pos-surface-muted text-pos-ink-faint"
+              }`}
+              title={live ? "Branches are live from HQ" : "Live sync offline"}
+            >
+              {live ? <Wifi size={13} /> : <WifiOff size={13} />}
+              {live ? "Live" : "Offline"}
+            </span>
+            <PrimaryButton
+              onClick={() => {
+                setDraft(blank(company, stores[0]?.id ?? ""));
+                setOpen(true);
+              }}
+            >
+              <Plus size={16} />
+              New branch
+            </PrimaryButton>
+          </div>
         }
       />
 
       <div className="mb-6 grid gap-3 sm:grid-cols-3">
         <SetupStat label="Branches" value={String(rows.length)} hint={`${activeCount} active`} />
         <SetupStat label="Active" value={String(activeCount)} tone="accent" />
-        <SetupStat label="Company" value={company?.name || "—"} hint="Linked trading entity" />
+        <SetupStat label="Company" value={company?.name || "—"} hint={`${stores.length} store${stores.length === 1 ? "" : "s"}`} />
       </div>
 
       <p className="mb-3 text-sm text-pos-ink-muted">
         Linked to{" "}
-        <Link href="/setup/others/company" className="font-medium text-pos-primary hover:underline">
+        <Link href={links.company} className="font-medium text-pos-primary hover:underline">
           {company?.name || "company"}
         </Link>
         . Open a row to edit.{" "}
-        <Link href="/setup/others/store" className="font-medium text-pos-primary hover:underline">
+        <Link href={links.store} className="font-medium text-pos-primary hover:underline">
           Manage stores
+        </Link>
+        {" · "}
+        <Link href={links.till} className="font-medium text-pos-primary hover:underline">
+          Issue tills
         </Link>
         .
       </p>
 
-      <DataTable columns={["Name", "City", "Phone", "Manager", "Stores", "Status"]}>
+      <DataTable columns={["Name", "City", "Phone", "Manager", "Tills", "Status"]}>
         {rows.length === 0 ? (
           <tr>
             <td className="px-4 py-8 text-center text-pos-ink-faint" colSpan={6}>
-              No branches yet. Create the first location for tills and stores.
+              No branches yet. Create a location, then issue tills that stay on that branch only.
             </td>
           </tr>
         ) : (
@@ -148,7 +141,7 @@ export function BranchManager() {
               </td>
               <td className="px-4 py-3 text-pos-ink-muted">{row.phone || "—"}</td>
               <td className="px-4 py-3 text-pos-ink-muted">{row.manager || "—"}</td>
-              <td className="px-4 py-3 tabular-nums">{storeCount.get(row.id) ?? 0}</td>
+              <td className="px-4 py-3 tabular-nums">{tillCount.get(row.id) ?? 0}</td>
               <td className="px-4 py-3">{row.active ? "Active" : "Closed"}</td>
             </tr>
           ))
@@ -181,6 +174,23 @@ export function BranchManager() {
                   required
                 />
               </Field>
+              <Field label="Store">
+                <select
+                  className={fieldClass}
+                  value={draft.storeId || stores[0]?.id || ""}
+                  onChange={(e) => setDraft({ ...draft, storeId: e.target.value })}
+                >
+                  {stores.length === 0 ? (
+                    <option value="">Add a store first</option>
+                  ) : (
+                    stores.map((row) => (
+                      <option key={row.id} value={row.id}>
+                        {row.name}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </Field>
               <div className="grid grid-cols-2 gap-3">
                 <Field label="City">
                   <input
@@ -190,10 +200,10 @@ export function BranchManager() {
                   />
                 </Field>
                 <Field label="State">
-                  <input
-                    className={fieldClass}
+                  <SetupStateSelect
+                    country={company?.country || "Nigeria"}
                     value={draft.state}
-                    onChange={(e) => setDraft({ ...draft, state: e.target.value })}
+                    onChange={(state) => setDraft({ ...draft, state })}
                   />
                 </Field>
               </div>
@@ -234,7 +244,6 @@ export function BranchManager() {
                     setBusy(true);
                     try {
                       await deleteBranch(draft.id!);
-                      await load();
                       setOpen(false);
                       toast.success("Branch deleted.");
                     } catch (err) {
@@ -265,7 +274,6 @@ export function BranchManager() {
                       ...draft,
                       companyId: draft.companyId || company?.id,
                     });
-                    await load();
                     setOpen(false);
                     toast.success("Branch saved.");
                   } catch (err) {

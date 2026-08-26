@@ -16,9 +16,9 @@ import { memoryStorage } from "multer";
 import { map, Observable } from "rxjs";
 import { CatalogService, type CatalogRow } from "../catalog/catalog.service";
 import { MAX_PRODUCT_IMAGE_BYTES } from "../catalog/cloudinary.service";
-import { ConsoleService } from "./console.service";
+import { ConsoleService, type DirectoryEvent, type PosEvent } from "./console.service";
 import { SetupService, type SettingsEvent } from "./setup.service";
-import type { ConsoleAccount, ConsoleGroup } from "./console.types";
+import type { ConsoleAccount, ConsoleGroup, GroupScope } from "./console.types";
 import type {
   HqBranch,
   HqCompany,
@@ -86,6 +86,23 @@ export class ConsoleController {
     return this.consoleService.registerCompany(body);
   }
 
+  @Post("admin/companies")
+  provisionCompany(
+    @Headers("authorization") authorization: string,
+    @Body()
+    body: {
+      company?: Partial<HqCompany>;
+      account?: {
+        name?: string;
+        email?: string;
+        username?: string;
+        password?: string;
+      };
+    },
+  ) {
+    return this.consoleService.provisionCompany(bearer(authorization), body);
+  }
+
   @Post("forgot-password")
   forgotPassword(@Body() body: { email?: string; username?: string }) {
     return this.consoleService.forgotPassword(body.email ?? body.username ?? "");
@@ -145,8 +162,18 @@ export class ConsoleController {
   }
 
   @Post("groups")
-  saveGroup(@Body() body: ConsoleGroup) {
-    return this.consoleService.saveGroup(body);
+  async saveGroup(
+    @Body() body: ConsoleGroup,
+    @Headers("authorization") authorization?: string,
+  ) {
+    let actorScope: GroupScope | undefined;
+    try {
+      const me = await this.consoleService.me(bearer(authorization));
+      actorScope = me.user.scope === "producer" ? "producer" : "tenant";
+    } catch {
+      actorScope = undefined;
+    }
+    return this.consoleService.saveGroup(body, { actorScope });
   }
 
   @Delete("groups/:id")
@@ -159,20 +186,29 @@ export class ConsoleController {
     return this.consoleService.listAccounts();
   }
 
+  @Sse("directory/stream")
+  directoryStream(): Observable<{ data: DirectoryEvent }> {
+    return this.consoleService.directoryStream().pipe(map((data) => ({ data })));
+  }
+
   @Post("accounts")
   async saveAccount(
     @Body() body: Partial<ConsoleAccount>,
     @Headers("authorization") authorization?: string,
   ) {
     let invitedBy: string | undefined;
+    let actorScope: GroupScope | undefined;
     try {
       const me = await this.consoleService.me(bearer(authorization));
       invitedBy = me.user.name;
+      actorScope = me.user.scope === "producer" ? "producer" : "tenant";
     } catch {
       invitedBy = undefined;
+      actorScope = undefined;
     }
     return this.consoleService.saveAccount(body, {
       invitedBy,
+      actorScope,
       welcomePassword: body.password?.trim() || undefined,
     });
   }
@@ -187,12 +223,19 @@ export class ConsoleController {
     return this.consoleService.listTills();
   }
 
+  @Sse("pos/stream")
+  posStream(): Observable<{ data: PosEvent }> {
+    return this.consoleService.posStream().pipe(map((data) => ({ data })));
+  }
+
   @Post("tills")
   saveTill(
     @Body()
     body: {
       id?: string;
       name?: string;
+      storeId?: string;
+      branchId?: string;
       branchName?: string;
       product?: string;
       active?: boolean;

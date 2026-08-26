@@ -1,11 +1,12 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "@/lib/toast";
-import { firstAllowedPath } from "@/lib/access";
+import { homePathForSession } from "@/lib/access";
 import { useAuth } from "../../../components/AuthProvider";
 import { GoogleAuthButton } from "../../../components/site/GoogleAuthButton";
+import { writeGoogleSignupCredential } from "@/lib/google-signup";
 import {
   AuthFooterLink,
   AuthInput,
@@ -13,32 +14,18 @@ import {
   AuthSectionLabel,
   AuthSplit,
 } from "../../../components/site/AuthSplit";
+import { AuthCountryStateFields } from "@/components/geo/CountryStateFields";
 
 export default function RegisterPage() {
   const router = useRouter();
-  const { registerCompany, signupCompanyWithGoogle, session, loading } = useAuth();
+  const { registerCompany, session, loading } = useAuth();
   const [busy, setBusy] = useState(false);
-  const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     if (!loading && session) {
-      router.replace(firstAllowedPath(session.departments, session.privileges));
+      router.replace(homePathForSession(session));
     }
   }, [loading, session, router]);
-
-  function readCompanyFromForm() {
-    const form = formRef.current;
-    if (!form) return { name: "" };
-    const data = new FormData(form);
-    return {
-      name: String(data.get("companyName") ?? "").trim(),
-      email: String(data.get("companyEmail") ?? "").trim() || undefined,
-      phone: String(data.get("companyPhone") ?? "").trim() || undefined,
-      state: String(data.get("companyState") ?? "").trim() || undefined,
-      country: String(data.get("companyCountry") ?? "").trim() || "Nigeria",
-      currency: "NGN",
-    };
-  }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -86,19 +73,17 @@ export default function RegisterPage() {
   return (
     <AuthSplit
       title="Sign up"
-      subtitle="Onboard your company in real time. Creates the organisation and your administrator account."
+      subtitle="Sign up with Google, then onboard your company — or fill the form and create it directly."
       mode="signup"
       googleSlot={
         <GoogleAuthButton
           intent="signup"
           label="Sign up with Google"
           disabled={busy}
-          getCompany={readCompanyFromForm}
           onCredential={async (credential) => {
-            const company = readCompanyFromForm();
-            await signupCompanyWithGoogle(credential, company);
-            toast.success("Company onboarded with Google.");
-            router.replace("/setup/others/company");
+            writeGoogleSignupCredential(credential);
+            toast.success("Google connected. Onboard your company next.");
+            router.push("/register/company");
           }}
         />
       }
@@ -109,7 +94,7 @@ export default function RegisterPage() {
         </>
       }
     >
-      <form ref={formRef} onSubmit={(event) => void onSubmit(event)}>
+      <form onSubmit={(event) => void onSubmit(event)}>
         <AuthSectionLabel>Company</AuthSectionLabel>
         <AuthInput label="Company name" name="companyName" autoComplete="organization" required />
         <AuthInput label="Legal name (optional)" name="legalName" autoComplete="organization" />
@@ -120,10 +105,7 @@ export default function RegisterPage() {
           autoComplete="organization"
         />
         <AuthInput label="Phone" name="companyPhone" autoComplete="tel" />
-        <div className="grid grid-cols-2 gap-3">
-          <AuthInput label="State" name="companyState" />
-          <AuthInput label="Country" name="companyCountry" defaultValue="Nigeria" />
-        </div>
+        <AuthCountryStateFields />
 
         <AuthSectionLabel>Administrator</AuthSectionLabel>
         <AuthInput label="Full name" name="name" autoComplete="name" required />

@@ -3,19 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Building2, Plus, Users } from "lucide-react";
+import { Building2, Plus, Users, Wifi, WifiOff } from "lucide-react";
 import { toast } from "@/lib/toast";
-import {
-  departmentsFromPrivileges,
-  type ConsoleAccount,
-  type ConsoleGroup,
-} from "../lib/access";
-import {
-  listAccounts,
-  listGroups,
-  refreshSessionFromGroup,
-  saveGroup,
-} from "../lib/hq-api";
+import { departmentsFromPrivileges, groupScope, type ConsoleGroup } from "../lib/access";
+import { refreshSessionFromGroup, saveGroup } from "../lib/hq-api";
+import { useLiveDirectory } from "../lib/live-directory";
 import { getCompany, type HqCompany } from "../lib/hq-setup";
 import { useAuth } from "./AuthProvider";
 import { ManagerSkeleton } from "./Skeleton";
@@ -27,8 +19,6 @@ import {
   isAdminGroup,
   privilegeSummary,
 } from "./setup/groups/group-ui";
-
-type AccountRow = Omit<ConsoleAccount, "password">;
 
 function GroupCard({
   group,
@@ -67,32 +57,23 @@ function GroupCard({
 export function GroupManager() {
   const router = useRouter();
   const { session, setSession } = useAuth();
-  const [groups, setGroups] = useState<ConsoleGroup[]>([]);
-  const [accounts, setAccounts] = useState<AccountRow[]>([]);
+  const { accounts, groups: allGroups, live, ready } = useLiveDirectory();
+  const groups = useMemo(
+    () => allGroups.filter((row) => groupScope(row) === "tenant"),
+    [allGroups],
+  );
   const [company, setCompany] = useState<HqCompany | null>(null);
   const [draft, setDraft] = useState<ConsoleGroup>(emptyGroup());
   const [sheetOpen, setSheetOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [ready, setReady] = useState(false);
   const [tab, setTab] = useState<"overview" | "teams">("overview");
-
-  async function load() {
-    const [groupRows, accountRows, companyRow] = await Promise.all([
-      listGroups(),
-      listAccounts().catch(() => [] as AccountRow[]),
-      getCompany().catch(() => null),
-    ]);
-    setGroups(groupRows);
-    setAccounts(accountRows);
-    setCompany(companyRow);
-    setReady(true);
-  }
+  const [companyReady, setCompanyReady] = useState(false);
 
   useEffect(() => {
-    load().catch((err) => {
-      toast.error(err, "Could not load groups");
-      setReady(true);
-    });
+    getCompany()
+      .then((companyRow) => setCompany(companyRow))
+      .catch(() => setCompany(null))
+      .finally(() => setCompanyReady(true));
   }, []);
 
   const memberCount = useMemo(() => {
@@ -138,9 +119,8 @@ export function GroupManager() {
         privileges,
         departments: privileges.includes("*")
           ? ["*"]
-          : departmentsFromPrivileges(privileges),
+          : departmentsFromPrivileges(privileges, "tenant"),
       });
-      await load();
       setSheetOpen(false);
       if (session) setSession(refreshSessionFromGroup(session, saved));
       toast.success("Group created.");
@@ -152,7 +132,7 @@ export function GroupManager() {
     }
   }
 
-  if (!ready) return <ManagerSkeleton variant="groups" />;
+  if (!ready || !companyReady) return <ManagerSkeleton variant="groups" />;
 
   const orgName = company?.name || "Your company";
   const orgHandle = `@${(company?.name || "hq")
@@ -167,12 +147,25 @@ export function GroupManager() {
         title="Groups"
         copy="Open a group card for members and access details. Edit privileges from the group page."
         action={
-          <PrimaryButton onClick={openNew}>
-            <span className="inline-flex items-center gap-2">
-              <Plus size={16} />
-              New group
+          <div className="flex items-center gap-2">
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-xl border border-pos-border px-3 py-2.5 text-[12px] font-medium ${
+                live
+                  ? "bg-pos-success/10 text-pos-success"
+                  : "bg-pos-surface-muted text-pos-ink-faint"
+              }`}
+              title={live ? "Groups are live from HQ" : "Live sync offline"}
+            >
+              {live ? <Wifi size={13} /> : <WifiOff size={13} />}
+              {live ? "Live" : "Offline"}
             </span>
-          </PrimaryButton>
+            <PrimaryButton onClick={openNew}>
+              <span className="inline-flex items-center gap-2">
+                <Plus size={16} />
+                New group
+              </span>
+            </PrimaryButton>
+          </div>
         }
       />
 

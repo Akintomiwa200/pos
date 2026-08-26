@@ -17,6 +17,7 @@ import {
   YAxis,
 } from "recharts";
 import { naira } from "@/lib/hq-ops";
+import { compactMinor, useOrgLocale } from "@/lib/org-locale";
 import { useThemeColors } from "@/hooks/useThemeColors";
 
 export function PageHeader({
@@ -179,12 +180,13 @@ export function ChartCard({
 
 export function TrendLineChart({ data }: { data: Array<{ label: string; value: number }> }) {
   const colors = useThemeColors();
+  useOrgLocale();
   const axis = { stroke: colors.inkFaint, fontSize: 11 };
   return (
     <LineChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
       <CartesianGrid stroke={colors.chartGrid} vertical={false} />
       <XAxis dataKey="label" tickLine={false} axisLine={false} {...axis} />
-      <YAxis tickLine={false} axisLine={false} width={56} {...axis} tickFormatter={(v: number) => `₦${compact(v / 100)}`} />
+      <YAxis tickLine={false} axisLine={false} width={56} {...axis} tickFormatter={(v: number) => compactMinor(v)} />
       <Tooltip
         formatter={(value) => [naira(Number(value)), "Revenue"]}
         contentStyle={{
@@ -207,6 +209,7 @@ export function RankBarChart({
   money?: boolean;
 }) {
   const colors = useThemeColors();
+  useOrgLocale();
   if (!data.length) {
     return (
       <div className="grid h-full place-items-center text-sm text-pos-ink-faint">No data yet.</div>
@@ -234,6 +237,7 @@ const PIE_COLORS = ["primary", "chartSlice2", "chartSlice3", "chartSlice4"] as c
 
 export function SharePieChart({ data }: { data: Array<{ label: string; value: number }> }) {
   const colors = useThemeColors();
+  useOrgLocale();
   if (!data.length) {
     return (
       <div className="grid h-full place-items-center text-sm text-pos-ink-faint">No data yet.</div>
@@ -260,11 +264,4 @@ export function SharePieChart({ data }: { data: Array<{ label: string; value: nu
       </Pie>
     </PieChart>
   );
-}
-
-function compact(value: number) {
-  if (Math.abs(value) >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1)}bn`;
-  if (Math.abs(value) >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}m`;
-  if (Math.abs(value) >= 1_000) return `${(value / 1_000).toFixed(1)}k`;
-  return `${Math.round(value)}`;
 }

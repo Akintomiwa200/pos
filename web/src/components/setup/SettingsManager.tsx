@@ -36,7 +36,18 @@ import {
 import { useAuth } from "@/components/AuthProvider";
 import { ManagerSkeleton } from "@/components/Skeleton";
 import {
+  CURRENCIES,
+  LANGUAGES,
+  listTimezones,
+  localeFromCurrency,
+  localeFromLanguage,
+  localeFromTimezone,
+  withCurrent,
+  withCurrentValue,
+} from "@/lib/locale";
+import {
   Field,
+  FormSelect,
   PrimaryButton,
   SetupHeader,
   fieldClass,
@@ -324,32 +335,65 @@ export function SettingsManager() {
             <>
               <SettingsCard
                 title="Locale & currency"
-                copy="Timezone, language, and currency used across HQ and tills."
+                copy="Pick timezone, language, or currency — the other two update to match in real time."
               >
-                <div className="grid gap-4 px-5 py-5 sm:grid-cols-3 sm:px-6">
+                <div className="grid min-w-0 gap-4 px-5 py-5 sm:grid-cols-3 sm:px-6 [&>*]:min-w-0">
                   <Field label="Timezone" error={errors.timezone}>
-                    <input
-                      className={settingsFieldClass(fieldClass, errors.timezone)}
+                    <FormSelect
+                      className={settingsFieldClass("", errors.timezone)}
                       value={draft.timezone}
                       aria-invalid={Boolean(errors.timezone)}
-                      onChange={(e) => onLiveChange({ ...draft, timezone: e.target.value })}
-                    />
+                      onChange={(e) =>
+                        onLiveChange({
+                          ...draft,
+                          ...localeFromTimezone(e.target.value, draft),
+                        })
+                      }
+                    >
+                      {withCurrentValue(listTimezones(), draft.timezone).map((zone) => (
+                        <option key={zone} value={zone}>
+                          {zone}
+                        </option>
+                      ))}
+                    </FormSelect>
                   </Field>
                   <Field label="Language" error={errors.language}>
-                    <input
-                      className={settingsFieldClass(fieldClass, errors.language)}
+                    <FormSelect
+                      className={settingsFieldClass("", errors.language)}
                       value={draft.language}
                       aria-invalid={Boolean(errors.language)}
-                      onChange={(e) => onLiveChange({ ...draft, language: e.target.value })}
-                    />
+                      onChange={(e) =>
+                        onLiveChange({
+                          ...draft,
+                          ...localeFromLanguage(e.target.value, draft),
+                        })
+                      }
+                    >
+                      {withCurrent(LANGUAGES, draft.language).map((row) => (
+                        <option key={row.value} value={row.value}>
+                          {row.label}
+                        </option>
+                      ))}
+                    </FormSelect>
                   </Field>
                   <Field label="Currency" error={errors.currency}>
-                    <input
-                      className={settingsFieldClass(fieldClass, errors.currency)}
+                    <FormSelect
+                      className={settingsFieldClass("", errors.currency)}
                       value={draft.currency}
                       aria-invalid={Boolean(errors.currency)}
-                      onChange={(e) => onLiveChange({ ...draft, currency: e.target.value })}
-                    />
+                      onChange={(e) =>
+                        onLiveChange({
+                          ...draft,
+                          ...localeFromCurrency(e.target.value, draft),
+                        })
+                      }
+                    >
+                      {withCurrent(CURRENCIES, draft.currency).map((row) => (
+                        <option key={row.value} value={row.value}>
+                          {row.label}
+                        </option>
+                      ))}
+                    </FormSelect>
                   </Field>
                 </div>
               </SettingsCard>

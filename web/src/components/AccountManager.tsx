@@ -27,11 +27,14 @@ import {
   ArrowUpDown,
   Table2,
   UserRound,
+  Wifi,
+  WifiOff,
   X,
 } from "lucide-react";
 import { toast } from "@/lib/toast";
-import type { ConsoleGroup } from "../lib/access";
-import { deleteAccount, listAccounts, listGroups, saveAccount } from "../lib/hq-api";
+import { groupScope, type ConsoleGroup, type GroupScope } from "../lib/access";
+import { deleteAccount, saveAccount } from "../lib/hq-api";
+import { useLiveDirectory } from "../lib/live-directory";
 import { useAuth } from "./AuthProvider";
 import { ManagerSkeleton } from "./Skeleton";
 import { PrimaryButton, SetupHeader } from "./setup/SetupChrome";
@@ -154,15 +157,31 @@ function MenuItem({
   );
 }
 
-export function AccountManager() {
+export function AccountManager({
+  scope = "tenant",
+  kicker,
+  title,
+  copy,
+}: {
+  scope?: GroupScope;
+  kicker?: string;
+  title?: string;
+  copy?: string;
+}) {
   const router = useRouter();
   const { session, setSession } = useAuth();
-  const [accounts, setAccounts] = useState<AccountRow[]>([]);
-  const [groups, setGroups] = useState<ConsoleGroup[]>([]);
+  const { accounts: allAccounts, groups: allGroups, live, ready } = useLiveDirectory();
+  const groups = useMemo(
+    () => allGroups.filter((row) => groupScope(row) === scope),
+    [allGroups, scope],
+  );
+  const accounts = useMemo(() => {
+    const allowed = new Set(groups.map((row) => row.id));
+    return allAccounts.filter((row) => allowed.has(row.groupId));
+  }, [allAccounts, groups]);
   const [draft, setDraft] = useState(blank());
   const [sheetOpen, setSheetOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [ready, setReady] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [previewAnchor, setPreviewAnchor] = useState<{ top: number; left: number } | null>(null);
@@ -193,20 +212,6 @@ export function AccountManager() {
     setPreviewId(id);
     setPreviewAnchor({ top, left });
   }
-
-  async function load() {
-    const [rows, groupRows] = await Promise.all([listAccounts(), listGroups()]);
-    setAccounts(rows);
-    setGroups(groupRows);
-    setReady(true);
-  }
-
-  useEffect(() => {
-    load().catch((err) => {
-      toast.error(err, "Could not load accounts");
-      setReady(true);
-    });
-  }, []);
 
   useEffect(() => {
     function onPointerDown(event: MouseEvent) {
@@ -375,12 +380,12 @@ export function AccountManager() {
             username: saved.username,
             groupId: saved.groupId,
             groupName: group.name,
+            scope: group.scope ?? session.scope,
             departments: group.departments,
             privileges: group.privileges,
           });
         }
       }
-      await load();
       setSheetOpen(false);
       setDraft(blank(defaultGroupId));
       toast.success(
@@ -400,7 +405,6 @@ export function AccountManager() {
     setBusy(true);
     try {
       await deleteAccount(draft.id);
-      await load();
       setSheetOpen(false);
       setSelected((current) => {
         const next = new Set(current);
@@ -421,16 +425,36 @@ export function AccountManager() {
   return (
     <div ref={rootRef}>
       <SetupHeader
-        kicker="Setup · Users"
-        title="Accounts"
-        copy="Assign each person to a group. The sidebar they see comes from that group's departments and privileges."
+        kicker={
+          kicker ?? (scope === "producer" ? "Producer · People" : "Setup · Users")
+        }
+        title={title ?? (scope === "producer" ? "Producer staff" : "Accounts")}
+        copy={
+          copy ??
+          (scope === "producer"
+            ? "Staff of the producer company. Privileges on their role decide which Super Admin menus they see."
+            : "Assign each person to a group. The sidebar they see comes from that group's departments and privileges.")
+        }
         action={
-          <PrimaryButton onClick={openNew}>
-            <span className="inline-flex items-center gap-2">
-              <Plus size={16} />
-              New account
+          <div className="flex items-center gap-2">
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-xl border border-pos-border px-3 py-2.5 text-[12px] font-medium ${
+                live
+                  ? "bg-pos-success/10 text-pos-success"
+                  : "bg-pos-surface-muted text-pos-ink-faint"
+              }`}
+              title={live ? "Accounts are live from HQ" : "Live sync offline"}
+            >
+              {live ? <Wifi size={13} /> : <WifiOff size={13} />}
+              {live ? "Live" : "Offline"}
             </span>
-          </PrimaryButton>
+            <PrimaryButton onClick={openNew}>
+              <span className="inline-flex items-center gap-2">
+                <Plus size={16} />
+                New account
+              </span>
+            </PrimaryButton>
+          </div>
         }
       />
 

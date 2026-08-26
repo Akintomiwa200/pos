@@ -33,6 +33,7 @@ import {
   settingsPatchFromAppearance,
   subscribeSettingsStream,
 } from "@/lib/settings-live";
+import { hydrateOrgLocaleFromStorage, setOrgLocale } from "@/lib/org-locale";
 
 type AppearanceContextValue = {
   preference: ThemePreference;
@@ -76,13 +77,20 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
+    hydrateOrgLocaleFromStorage();
     const storedTheme = localStorage.getItem(THEME_STORAGE_KEY);
     if (isThemePreference(storedTheme)) setPreferenceState(storedTheme);
     setAppearance(readAppearance());
 
     void getOrgSettings()
       .then((raw) => {
-        applyFromHq(appearanceFromSettings(normalizeSettings(raw)));
+        const settings = normalizeSettings(raw);
+        applyFromHq(appearanceFromSettings(settings));
+        setOrgLocale({
+          currency: settings.currency,
+          language: settings.language,
+          timezone: settings.timezone,
+        });
         setHqSynced(true);
       })
       .catch(() => {
@@ -91,7 +99,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
     return subscribeSettingsStream((event) => {
       if (Date.now() < localEditUntil.current) return;
-      applyFromHq(appearanceFromSettings(normalizeSettings(event.settings)));
+      const settings = normalizeSettings(event.settings);
+      applyFromHq(appearanceFromSettings(settings));
+      setOrgLocale({
+        currency: settings.currency,
+        language: settings.language,
+        timezone: settings.timezone,
+      });
       setHqSynced(true);
     });
   }, [applyFromHq]);

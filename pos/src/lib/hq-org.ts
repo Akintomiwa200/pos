@@ -14,12 +14,18 @@ export type HqOrgSnapshot = {
   branches: Array<{
     id: string;
     name: string;
+    storeId?: string;
     address: string;
     city: string;
     state: string;
     phone: string;
     manager: string;
     active: boolean;
+  }>;
+  stores: Array<{
+    id: string;
+    name: string;
+    active?: boolean;
   }>;
   storefronts: Array<{
     url: string;

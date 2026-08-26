@@ -44,6 +44,7 @@ export class SetupService implements OnModuleInit {
   private taxes: HqTax[] = [];
   private settings: HqOrgSettings = SEED_SETTINGS;
   private readonly settingsEvents = new Subject<SettingsEvent>();
+  readonly orgChanges = new Subject<void>();
 
   constructor(private readonly db: DbService) {}
 
@@ -52,17 +53,41 @@ export class SetupService implements OnModuleInit {
       `select key, data from hq_org_kv`,
     );
     const stored = new Map(rows.rows.map((row) => [row.key, row.data]));
+    const demo = this.db.isMemoryMode;
     this.company = this.pick<HqCompany>(stored, "company", SEED_COMPANY);
-    this.branches = this.pick<HqBranch[]>(stored, "branches", SEED_BRANCHES);
-    this.stores = this.pick<HqStore[]>(stored, "stores", SEED_STORES);
-    this.storefronts = this.pick<HqStorefront[]>(stored, "storefronts", SEED_STOREFRONTS);
+    this.branches = this.pick<HqBranch[]>(stored, "branches", demo ? SEED_BRANCHES : []);
+    this.stores = this.pick<HqStore[]>(stored, "stores", demo ? SEED_STORES : []);
+    this.storefronts = this.pick<HqStorefront[]>(
+      stored,
+      "storefronts",
+      demo ? SEED_STOREFRONTS : [],
+    );
     this.gateways = this.pick<HqGateway[]>(stored, "gateways", SEED_GATEWAYS);
     this.taxes = this.pick<HqTax[]>(stored, "taxes", SEED_TAXES);
     this.settings = {
       ...SEED_SETTINGS,
       ...this.pick<HqOrgSettings>(stored, "settings", SEED_SETTINGS),
     };
+    if (!demo) this.stripSeedLocations();
     await this.persist();
+  }
+
+  private stripSeedLocations() {
+    const seedStoreIds = new Set(SEED_STORES.map((row) => row.id));
+    const seedBranchIds = new Set(SEED_BRANCHES.map((row) => row.id));
+    const seedFrontIds = new Set(SEED_STOREFRONTS.map((row) => row.id));
+    this.stores = this.stores.filter((row) => !seedStoreIds.has(row.id));
+    this.storefronts = this.storefronts.filter(
+      (row) => !seedFrontIds.has(row.id) && !seedStoreIds.has(row.storeId),
+    );
+    const inUse = new Set(
+      this.stores.map((row) => row.branchId).filter((id): id is string => Boolean(id)),
+    );
+    this.branches = this.branches.filter((row) => !seedBranchIds.has(row.id) || inUse.has(row.id));
+  }
+
+  private notifyOrg() {
+    this.orgChanges.next();
   }
 
   private pick<T>(stored: Map<string, unknown>, key: string, fallback: T): T {
@@ -124,6 +149,7 @@ export class SetupService implements OnModuleInit {
       currency: input.currency?.trim() || this.company.currency,
     };
     await this.persist();
+    this.notifyOrg();
     return this.company;
   }
 
@@ -138,6 +164,10 @@ export class SetupService implements OnModuleInit {
     const next: HqBranch = {
       id: existing?.id ?? nid("br"),
       companyId: input.companyId || existing?.companyId || this.company.id,
+      storeId:
+        input.storeId ||
+        existing?.storeId ||
+        (this.stores.length === 1 ? this.stores[0]!.id : undefined),
       name,
       city: input.city?.trim() || existing?.city || "",
       state: input.state?.trim() || existing?.state || this.company.state,
@@ -150,16 +180,22 @@ export class SetupService implements OnModuleInit {
       ? this.branches.map((row) => (row.id === existing.id ? next : row))
       : [...this.branches, next];
     await this.persist();
+    this.notifyOrg();
     return next;
   }
 
   async deleteBranch(id: string) {
-    if (this.stores.some((row) => row.branchId === id)) {
-      throw new BadRequestException("Move or delete stores on this branch first");
+    const tills = await this.db.query(
+      `select 1 from hq_tills where branch_id = $1 limit 1`,
+      [id],
+    );
+    if (tills.rowCount) {
+      throw new BadRequestException("This branch has tills. Delete or reissue those tills first");
     }
     if (!this.branches.some((row) => row.id === id)) throw new NotFoundException("Branch not found");
     this.branches = this.branches.filter((row) => row.id !== id);
     await this.persist();
+    this.notifyOrg();
     return { ok: true };
   }
 
@@ -170,16 +206,13 @@ export class SetupService implements OnModuleInit {
   async saveStore(input: Partial<HqStore>) {
     const name = input.name?.trim();
     if (!name) throw new BadRequestException("Store name is required");
-    if (!input.branchId && !this.stores.find((row) => row.id === input.id)?.branchId) {
-      throw new BadRequestException("Choose a branch");
-    }
     const existing = input.id ? this.stores.find((row) => row.id === input.id) : undefined;
     const kind = (["retail", "warehouse", "dark-kitchen"].includes(input.kind ?? "")
       ? input.kind
       : existing?.kind ?? "retail") as StoreKind;
     const next: HqStore = {
       id: existing?.id ?? nid("st"),
-      branchId: input.branchId || existing?.branchId || "",
+      companyId: input.companyId || existing?.companyId || this.company.id,
       name,
       kind,
       address: input.address?.trim() || existing?.address || "",
@@ -188,7 +221,18 @@ export class SetupService implements OnModuleInit {
     this.stores = existing
       ? this.stores.map((row) => (row.id === existing.id ? next : row))
       : [...this.stores, next];
+    const companyStores = this.stores.filter(
+      (row) => (row.companyId || this.company.id) === next.companyId,
+    );
+    if (companyStores.length === 1) {
+      this.branches = this.branches.map((row) => {
+        if (row.storeId) return row;
+        if (row.companyId && row.companyId !== next.companyId) return row;
+        return { ...row, storeId: next.id, companyId: row.companyId || next.companyId };
+      });
+    }
     await this.persist();
+    this.notifyOrg();
     return next;
   }
 
@@ -196,9 +240,17 @@ export class SetupService implements OnModuleInit {
     if (this.storefronts.some((row) => row.storeId === id)) {
       throw new BadRequestException("Remove storefronts on this store first");
     }
+    const tills = await this.db.query(
+      `select 1 from hq_tills where store_id = $1 limit 1`,
+      [id],
+    );
+    if (tills.rowCount) {
+      throw new BadRequestException("Reassign tills before deleting this store");
+    }
     if (!this.stores.some((row) => row.id === id)) throw new NotFoundException("Store not found");
     this.stores = this.stores.filter((row) => row.id !== id);
     await this.persist();
+    this.notifyOrg();
     return { ok: true };
   }
 
@@ -344,6 +396,9 @@ export class SetupService implements OnModuleInit {
       ...this.settings,
       ...validated,
     };
+    if (this.settings.currency && this.settings.currency !== this.company.currency) {
+      this.company = { ...this.company, currency: this.settings.currency };
+    }
     await this.persist();
     this.publishSettings();
     return this.settings;

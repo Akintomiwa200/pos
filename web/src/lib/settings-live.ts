@@ -17,6 +17,7 @@ import {
   type ThemePreference,
   isThemePreference,
 } from "@/lib/appearance";
+import { setOrgLocale } from "@/lib/org-locale";
 
 export type SettingsLiveEvent = {
   type: "settings";
@@ -226,7 +227,13 @@ export function useLiveOrgSettings() {
 
   const applyRemote = useCallback((next: HqOrgSettings, at?: string) => {
     if (Date.now() < localEditUntil.current) return;
-    setSettings(normalizeSettings(next));
+    const settings = normalizeSettings(next);
+    setSettings(settings);
+    setOrgLocale({
+      currency: settings.currency,
+      language: settings.language,
+      timezone: settings.timezone,
+    });
     if (at) setSyncedAt(at);
   }, []);
 
@@ -235,8 +242,14 @@ export function useLiveOrgSettings() {
       getOrgSettings(),
       getCompany().catch(() => null),
     ]);
-    setSettings(normalizeSettings(next));
+    const settings = normalizeSettings(next);
+    setSettings(settings);
     setCompany(companyRow);
+    setOrgLocale({
+      currency: settings.currency,
+      language: settings.language,
+      timezone: settings.timezone,
+    });
     setSyncedAt(new Date().toISOString());
   }, []);
 
@@ -263,11 +276,24 @@ export function useLiveOrgSettings() {
 
   const patch = useCallback(async (partial: Partial<HqOrgSettings>, opts?: { silent?: boolean }) => {
     localEditUntil.current = Date.now() + 1200;
-    setSettings((prev) => normalizeSettings({ ...(prev ?? SETTINGS_DEFAULTS), ...partial }));
+    setSettings((prev) => {
+      const next = normalizeSettings({ ...(prev ?? SETTINGS_DEFAULTS), ...partial });
+      setOrgLocale({
+        currency: next.currency,
+        language: next.language,
+        timezone: next.timezone,
+      });
+      return next;
+    });
     setSaving(true);
     try {
       const saved = await saver.current.push(partial);
       setSettings(saved);
+      setOrgLocale({
+        currency: saved.currency,
+        language: saved.language,
+        timezone: saved.timezone,
+      });
       setSyncedAt(new Date().toISOString());
       return saved;
     } finally {
@@ -278,10 +304,20 @@ export function useLiveOrgSettings() {
   const replace = useCallback(async (next: HqOrgSettings) => {
     localEditUntil.current = Date.now() + 1200;
     setSettings(next);
+    setOrgLocale({
+      currency: next.currency,
+      language: next.language,
+      timezone: next.timezone,
+    });
     setSaving(true);
     try {
       const saved = await saver.current.push(next);
       setSettings(saved);
+      setOrgLocale({
+        currency: saved.currency,
+        language: saved.language,
+        timezone: saved.timezone,
+      });
       setSyncedAt(new Date().toISOString());
       return saved;
     } finally {
@@ -306,6 +342,11 @@ export function useLiveOrgSettings() {
   const setSettingsLocal = useCallback((next: HqOrgSettings) => {
     localEditUntil.current = Date.now() + 1200;
     setSettings(next);
+    setOrgLocale({
+      currency: next.currency,
+      language: next.language,
+      timezone: next.timezone,
+    });
   }, []);
 
   return {

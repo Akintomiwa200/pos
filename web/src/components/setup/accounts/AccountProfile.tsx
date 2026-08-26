@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -13,13 +13,13 @@ import {
   UserRound,
 } from "lucide-react";
 import { toast } from "@/lib/toast";
-import type { ConsoleGroup } from "@/lib/access";
 import {
   firstAccountError,
   validateAccountDraft,
   type AccountDraft,
 } from "@/lib/account-validation";
-import { deleteAccount, listAccounts, listGroups, saveAccount } from "@/lib/hq-api";
+import { deleteAccount, saveAccount } from "@/lib/hq-api";
+import { useLiveDirectory } from "@/lib/live-directory";
 import { useAuth } from "@/components/AuthProvider";
 import { ManagerSkeleton } from "@/components/Skeleton";
 import {
@@ -33,7 +33,6 @@ import {
   ProfileBanner,
   groupTone,
   statusTone,
-  type AccountRow,
 } from "./account-ui";
 
 const blank = (groupId = ""): AccountDraft => ({
@@ -49,27 +48,11 @@ const blank = (groupId = ""): AccountDraft => ({
 export function AccountProfile({ accountId }: { accountId: string }) {
   const router = useRouter();
   const { session, setSession } = useAuth();
-  const [account, setAccount] = useState<AccountRow | null>(null);
-  const [groups, setGroups] = useState<ConsoleGroup[]>([]);
+  const { accounts, groups, ready } = useLiveDirectory();
+  const account = accounts.find((item) => item.id === accountId) ?? null;
   const [draft, setDraft] = useState<AccountDraft>(blank());
   const [sheetOpen, setSheetOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [ready, setReady] = useState(false);
-
-  async function load() {
-    const [rows, groupRows] = await Promise.all([listAccounts(), listGroups()]);
-    setGroups(groupRows);
-    const row = rows.find((item) => item.id === accountId) ?? null;
-    setAccount(row);
-    setReady(true);
-  }
-
-  useEffect(() => {
-    load().catch((err) => {
-      toast.error(err, "Could not load account");
-      setReady(true);
-    });
-  }, [accountId]);
 
   const group = account
     ? groups.find((row) => row.id === account.groupId)
@@ -111,7 +94,6 @@ export function AccountProfile({ accountId }: { accountId: string }) {
           });
         }
       }
-      await load();
       setSheetOpen(false);
       toast.success("Account saved.");
     } catch (err) {

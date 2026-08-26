@@ -23,6 +23,7 @@ import {
   secondaryButtonClass,
 } from "@/components/setup/SetupChrome";
 import { useOrgLive } from "./useOrgLive";
+import { useOrgLinks } from "@/lib/org-links";
 
 const blank: Partial<HqTax> = {
   name: "",
@@ -34,6 +35,7 @@ const blank: Partial<HqTax> = {
 };
 
 export function TaxManager() {
+  const links = useOrgLinks();
   const [rows, setRows] = useState<HqTax[]>([]);
   const [companyName, setCompanyName] = useState("");
   const [draft, setDraft] = useState(blank);
@@ -66,7 +68,7 @@ export function TaxManager() {
   return (
     <div>
       <SetupHeader
-        kicker="Setup · Organization"
+        kicker={links.area === "producer" ? "Producer · Payments" : "Setup · Organization"}
         title="Tax"
         copy="VAT and service charge used on tickets. The default rate is what tills apply first."
         action={
@@ -95,11 +97,11 @@ export function TaxManager() {
 
       <p className="mb-3 text-sm text-pos-ink-muted">
         Applied for{" "}
-        <Link href="/setup/others/company" className="font-medium text-pos-primary hover:underline">
+        <Link href={links.company} className="font-medium text-pos-primary hover:underline">
           {companyName || "company"}
         </Link>
         . Checkout rails are under{" "}
-        <Link href="/setup/others/payment-gateway" className="font-medium text-pos-primary hover:underline">
+        <Link href={links.gateway} className="font-medium text-pos-primary hover:underline">
           Payment gateways
         </Link>
         .

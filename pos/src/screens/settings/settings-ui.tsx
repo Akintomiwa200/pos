@@ -155,16 +155,19 @@ export function SelectField({
   value,
   onChange,
   options,
+  disabled,
 }: {
   value: string;
   onChange: (next: string) => void;
   options: { value: string; label: string }[];
+  disabled?: boolean;
 }) {
   return (
     <label className="set-select-wrap">
       <select
         className="set-select"
         value={value}
+        disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
       >
         {options.map((option) => (

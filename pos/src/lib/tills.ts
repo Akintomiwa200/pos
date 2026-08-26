@@ -5,13 +5,21 @@ import { apiUrl } from "./api-base";
 
 const KEY = "pos.tills.v1";
 const BRANCH_KEY = "pos.branches.v1";
+const STORE_KEY = "pos.stores.v1";
 export const TILLS_EVENT = "pos-tills";
 export const TILL_TAKEN_EVENT = "pos-till-taken";
 export const TILL_EXPIRED_EVENT = "pos-till-expired";
 
+export type StoreRecord = {
+  id: string;
+  name: string;
+  active: boolean;
+};
+
 export type BranchRecord = {
   id: string;
   name: string;
+  storeId: string;
   address: string;
   city: string;
   state: string;
@@ -28,6 +36,7 @@ export type TillRecord = {
   code: string;
   paired: boolean;
   sessionToken: string;
+  storeId: string;
   branchId: string;
   active: boolean;
   type: TillType;
@@ -38,28 +47,7 @@ export type TillRecord = {
 };
 
 export function defaultBranches(): BranchRecord[] {
-  return [
-    {
-      id: "br-vi",
-      name: "Victoria Island",
-      address: "14 Adeola Odeku Street",
-      city: "Lagos",
-      state: "Lagos",
-      phone: "+234 801 234 5678",
-      manager: "Chika Obi",
-      active: true,
-    },
-    {
-      id: "br-ikeja",
-      name: "Ikeja",
-      address: "Allen Avenue",
-      city: "Ikeja",
-      state: "Lagos",
-      phone: "+234 802 111 2233",
-      manager: "Emma Bello",
-      active: true,
-    },
-  ];
+  return [];
 }
 
 export function defaultDeviceTill(): TillRecord {
@@ -69,7 +57,8 @@ export function defaultDeviceTill(): TillRecord {
     code: "",
     paired: false,
     sessionToken: "",
-    branchId: "br-vi",
+    storeId: "",
+    branchId: "",
     active: true,
     type: "counter",
     notes: "",
@@ -88,6 +77,7 @@ function migrateBranch(row: Partial<BranchRecord> & { id: string; name: string }
   return {
     id: row.id,
     name: row.name,
+    storeId: row.storeId ?? fallback?.storeId ?? "",
     address: row.address ?? fallback?.address ?? "",
     city: row.city ?? fallback?.city ?? "",
     state: row.state ?? fallback?.state ?? "Lagos",
@@ -118,6 +108,7 @@ function migrateTill(row: Partial<TillRecord> & { id: string } & { key?: string 
     code,
     paired,
     sessionToken: row.sessionToken ?? "",
+    storeId: row.storeId ?? fallback.storeId,
     branchId: row.branchId ?? fallback.branchId,
     active: row.active ?? true,
     type: row.type ?? "counter",
@@ -145,15 +136,63 @@ function emit() {
 }
 
 export function loadBranches(): BranchRecord[] {
-  return readList<Partial<BranchRecord> & { id: string; name: string }>(
-    BRANCH_KEY,
-    defaultBranches(),
-  ).map(migrateBranch);
+  const seedIds = new Set(["br-vi", "br-ikeja"]);
+  return readList<Partial<BranchRecord> & { id: string; name: string }>(BRANCH_KEY, [])
+    .map(migrateBranch)
+    .filter((row) => !seedIds.has(row.id));
 }
 
 export function saveBranches(rows: BranchRecord[]) {
   localStorage.setItem(BRANCH_KEY, JSON.stringify(rows));
   emit();
+}
+
+export function loadStores(): StoreRecord[] {
+  return readList<Partial<StoreRecord> & { id: string; name: string }>(STORE_KEY, [])
+    .filter((row) => row.id && row.name)
+    .map((row) => ({
+      id: row.id,
+      name: row.name,
+      active: row.active ?? true,
+    }));
+}
+
+export function saveStores(rows: StoreRecord[]) {
+  localStorage.setItem(STORE_KEY, JSON.stringify(rows));
+  emit();
+}
+
+export function persistOrgLocations(org: HqOrgSnapshot) {
+  if (org.stores?.length) {
+    saveStores(
+      org.stores.map((row) => ({
+        id: row.id,
+        name: row.name,
+        active: row.active ?? true,
+      })),
+    );
+  }
+  if (!org.branches?.length) return;
+  const remote = org.branches.map((row) => ({
+    id: row.id,
+    name: row.name,
+    storeId: row.storeId ?? "",
+    address: row.address,
+    city: row.city,
+    state: row.state,
+    phone: row.phone,
+    manager: row.manager,
+    active: row.active,
+  }));
+  const current = loadBranches();
+  const byId = new Map(current.map((row) => [row.id, row]));
+  saveBranches([
+    ...remote.map((row) => {
+      const local = byId.get(row.id);
+      return local ? { ...local, ...row } : row;
+    }),
+    ...current.filter((row) => !remote.some((entry) => entry.id === row.id)),
+  ]);
 }
 
 function readStoredTills(): TillRecord[] {
@@ -256,7 +295,9 @@ export async function activateDeviceTill(code: string, hardwareHex: string) {
   const body = (await response.json().catch(() => ({}))) as {
     name?: string;
     code?: string;
+    storeId?: string;
     branchName?: string;
+    branchId?: string;
     product?: string;
     sessionToken?: string;
     subscriptionExpiresAt?: string | null;
@@ -269,32 +310,22 @@ export async function activateDeviceTill(code: string, hardwareHex: string) {
   }
   if (body.org) {
     applyHqOrg(body.org);
-    if (body.org.branches?.length) {
-      saveBranches(
-        body.org.branches.map((row) => ({
-          id: row.id,
-          name: row.name,
-          address: row.address,
-          city: row.city,
-          state: row.state,
-          phone: row.phone,
-          manager: row.manager,
-          active: row.active,
-        })),
-      );
-    }
+    persistOrgLocations(body.org);
   }
   const current = loadDeviceTill();
-  const branch = loadBranches().find(
-    (row) => row.name.toLowerCase() === (body.branchName ?? "").toLowerCase(),
-  );
+  const branch =
+    loadBranches().find((row) => row.id === body.branchId) ??
+    loadBranches().find(
+      (row) => row.name.toLowerCase() === (body.branchName ?? "").toLowerCase(),
+    );
   const next: TillRecord = {
     ...current,
     name: (body.name ?? current.name).toUpperCase(),
     code: (body.code ?? code).toUpperCase(),
     sessionToken: body.sessionToken ?? "",
     paired: Boolean(body.sessionToken),
-    branchId: branch?.id ?? current.branchId,
+    storeId: body.storeId ?? current.storeId,
+    branchId: branch?.id ?? body.branchId ?? current.branchId,
     active: true,
     product: normalizeTillProduct(body.product),
     subscriptionExpiresAt: body.subscriptionExpiresAt ?? addOneYear().toISOString(),
@@ -336,30 +367,7 @@ export async function heartbeatDeviceTill(hardwareHex: string) {
     if (!response.ok) return { taken: false as const, expired: false as const };
     if (body.org) {
       applyHqOrg(body.org);
-      if (body.org.branches?.length) {
-        // Merge HQ branches over local edits instead of clobbering them:
-        // keep any locally-added branch and preserve fields HQ does not send.
-        const remote = body.org.branches.map((row) => ({
-          id: row.id,
-          name: row.name,
-          address: row.address,
-          city: row.city,
-          state: row.state,
-          phone: row.phone,
-          manager: row.manager,
-          active: row.active,
-        }));
-        const current = loadBranches();
-        const byId = new Map(current.map((row) => [row.id, row]));
-        const merged = [
-          ...remote.map((row) => {
-            const local = byId.get(row.id);
-            return local ? { ...local, ...row } : row;
-          }),
-          ...current.filter((row) => !remote.some((entry) => entry.id === row.id)),
-        ];
-        saveBranches(merged);
-      }
+      persistOrgLocations(body.org);
     }
     const nextExpires = body.subscriptionExpiresAt ?? till.subscriptionExpiresAt;
     const nextProduct = body.product ? normalizeTillProduct(body.product) : till.product;

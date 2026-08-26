@@ -4,6 +4,7 @@ import { useEffect, useMemo, type FormEvent, type ReactNode } from "react";
 import { Barcode, Boxes, Package, Tag, Wallet, X } from "lucide-react";
 import { marginPercent } from "@/lib/catalog";
 import { naira } from "@/lib/hq-ops";
+import { currencySymbol, useOrgLocale } from "@/lib/org-locale";
 import {
   inferUnitKind,
   formatPricePer,
@@ -113,6 +114,8 @@ export function ItemFormSheet({
   onImageChange,
   onSubmit,
 }: Props) {
+  const { currency } = useOrgLocale();
+  const mark = currencySymbol(currency);
   useEffect(() => {
     if (!open) return;
     function onKey(event: KeyboardEvent) {
@@ -412,7 +415,7 @@ export function ItemFormSheet({
             <Section icon={<Wallet size={18} />} title="Pricing">
               <div className="grid gap-4 sm:grid-cols-2">
                 <InputLabel
-                  label="Cost price (₦)"
+                  label={`Cost price (${mark})`}
                   hint={`What you pay ${formatPricePer(draft.unit, selectedUnit?.name)}.`}
                 >
                   <input
@@ -427,7 +430,7 @@ export function ItemFormSheet({
                   />
                 </InputLabel>
                 <InputLabel
-                  label="Selling price (₦)"
+                  label={`Selling price (${mark})`}
                   hint={`What customers pay ${formatPricePer(draft.unit, selectedUnit?.name)}.`}
                 >
                   <input

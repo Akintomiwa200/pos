@@ -12,6 +12,7 @@ export type AccountWelcomeMail = {
   password?: string;
   invitedBy?: string;
   authProvider?: "password" | "google" | "both";
+  producer?: boolean;
 };
 
 export type CompanyWelcomeMail = {
@@ -35,34 +36,56 @@ export class EmailService {
   private transporter: Transporter | null = null;
   private transporterReady = false;
 
+  private env(key: string) {
+    let value = process.env[key]?.trim() ?? "";
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    return value.trim();
+  }
+
   isConfigured() {
-    return Boolean(process.env.SMTP_HOST?.trim() && process.env.SMTP_FROM?.trim());
+    return Boolean(this.env("SMTP_HOST") && (this.env("SMTP_FROM") || this.env("SMTP_USER")));
   }
 
   hqAppUrl() {
-    return (process.env.HQ_APP_URL?.trim() || "http://localhost:3000").replace(/\/$/, "");
+    return (this.env("HQ_APP_URL") || "http://localhost:3000").replace(/\/$/, "");
   }
 
   loginUrl() {
     return `${this.hqAppUrl()}/login`;
   }
 
+  private mailFrom() {
+    const user = this.env("SMTP_USER");
+    const from = this.env("SMTP_FROM");
+    const host = this.env("SMTP_HOST").toLowerCase();
+    if (host.includes("gmail.com") && user) {
+      const branded = from.match(/^(.*)<.*>\s*$/);
+      const name = branded?.[1]?.trim().replace(/^"|"$/g, "") || "POS HQ";
+      return `${name} <${user}>`;
+    }
+    return from || (user ? `POS HQ <${user}>` : "");
+  }
+
   private async getTransporter() {
     if (this.transporterReady) return this.transporter;
     this.transporterReady = true;
 
-    const host = process.env.SMTP_HOST?.trim();
-    const from = process.env.SMTP_FROM?.trim();
+    const host = this.env("SMTP_HOST");
+    const from = this.mailFrom();
     if (!host || !from) {
       this.logger.warn("SMTP is not configured — emails will be logged only");
       return null;
     }
 
-    const port = Number(process.env.SMTP_PORT?.trim() || "587");
-    const secure =
-      process.env.SMTP_SECURE?.trim() === "true" || String(port) === "465";
-    const user = process.env.SMTP_USER?.trim();
-    const pass = process.env.SMTP_PASS?.trim();
+    const port = Number(this.env("SMTP_PORT") || "587");
+    const secure = this.env("SMTP_SECURE") === "true" || String(port) === "465";
+    const user = this.env("SMTP_USER");
+    const pass = this.env("SMTP_PASS");
 
     this.transporter = nodemailer.createTransport({
       host,
@@ -83,7 +106,7 @@ export class EmailService {
   }
 
   private async send(input: { to: string; subject: string; text: string; html: string }) {
-    const from = process.env.SMTP_FROM?.trim();
+    const from = this.mailFrom();
     const transporter = await this.getTransporter();
 
     if (!transporter || !from) {
@@ -129,13 +152,19 @@ export class EmailService {
   }
 
   async sendAccountWelcome(input: AccountWelcomeMail) {
-    const companyLine = input.companyName
-      ? `<p style="margin:0 0 12px;">Your HQ account for <strong>${input.companyName}</strong> is ready.</p>`
-      : `<p style="margin:0 0 12px;">Your HQ account is ready.</p>`;
+    const producer = Boolean(input.producer);
+    const superAdmin = producer && input.groupName === "Super Admin";
+    const companyLine = superAdmin
+      ? `<p style="margin:0 0 12px;">Your <strong>Super Admin</strong> account for the producer console is ready. Sign in, then open <strong>/admin</strong>.</p>`
+      : producer
+        ? `<p style="margin:0 0 12px;">Your producer account is ready. Sign in, then open <strong>/admin</strong>.</p>`
+      : input.companyName
+        ? `<p style="margin:0 0 12px;">Your HQ account for <strong>${input.companyName}</strong> is ready.</p>`
+        : `<p style="margin:0 0 12px;">Your HQ account is ready.</p>`;
 
     const invitedLine = input.invitedBy
-      ? `<p style="margin:0 0 12px;color:#52525b;">${input.invitedBy} created this account for you with the <strong>${input.groupName}</strong> group.</p>`
-      : `<p style="margin:0 0 12px;color:#52525b;">You were added to the <strong>${input.groupName}</strong> group.</p>`;
+      ? `<p style="margin:0 0 12px;color:#52525b;">${input.invitedBy} created this account for you with the <strong>${input.groupName}</strong> department.</p>`
+      : `<p style="margin:0 0 12px;color:#52525b;">You were added to the <strong>${input.groupName}</strong> ${producer ? "department" : "group"}.</p>`;
 
     const passwordBlock = input.password
       ? `<p style="margin:16px 0 0;padding:14px 16px;background:#fafafa;border:1px solid #e4e4e7;border-radius:10px;font-size:14px;line-height:1.6;">
@@ -159,19 +188,34 @@ export class EmailService {
         ? `\nUsername: ${input.username}\nSign in with Google using this email.\n`
         : `\nUsername: ${input.username}\nUse the password you set when the account was created.\n`;
 
-    const subject = input.invitedBy
-      ? `Your POS HQ account is ready`
-      : `Welcome to POS HQ`;
+    const subject = superAdmin
+      ? "Your Super Admin account is ready"
+      : producer
+        ? "Your producer account is ready"
+      : input.invitedBy
+        ? `Your POS HQ account is ready`
+        : `Welcome to POS HQ`;
 
     const html = this.layout(
-      "Your HQ account is ready",
-      `${companyLine}${invitedLine}${passwordBlock}${this.button(input.loginUrl, "Sign in to HQ")}`,
+      superAdmin
+        ? "Your Super Admin account is ready"
+        : producer
+          ? "Your producer account is ready"
+          : "Your HQ account is ready",
+      `${companyLine}${invitedLine}${passwordBlock}${this.button(input.loginUrl, producer ? "Sign in to Admin" : "Sign in to HQ")}`,
     );
 
     const text = `Hi ${input.name},
 
-Your POS HQ account is ready.
-Group: ${input.groupName}
+${
+  superAdmin
+    ? "Your Super Admin account for the producer console is ready."
+    : producer
+      ? "Your producer account is ready."
+      : "Your POS HQ account is ready."
+}
+${producer ? "Open /admin after you sign in." : ""}
+Department/group: ${input.groupName}
 ${input.invitedBy ? `Created by: ${input.invitedBy}\n` : ""}${textPassword}
 Sign in: ${input.loginUrl}
 `;

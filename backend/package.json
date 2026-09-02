@@ -11,7 +11,7 @@
     "lint": "eslint \"{src,test}/**/*.ts\""
   },
   "dependencies": {
-    "@nestjs/common": "^11.2.1",
+    "@nestjs/common": "^11.2.3",
     "@nestjs/core": "^11.2.1",
     "@nestjs/platform-express": "^11.2.1",
     "class-transformer": "^0.5.1",

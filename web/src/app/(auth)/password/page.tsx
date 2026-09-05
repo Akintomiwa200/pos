@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { homePathForSession } from "@/lib/access";
+import { toast } from "@/lib/toast";
 import { useAuth } from "../../../components/AuthProvider";
 import {
   AuthFooterLink,

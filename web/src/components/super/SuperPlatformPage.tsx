@@ -26,7 +26,7 @@ function navLabel(path: string) {
   for (const section of PRODUCER_NAV) {
     for (const item of section.items) {
       const nodes = item.href
-        ? [{ href: item.href, label: item.label }, ...(item.children ?? [])]
+        ? [{ id: item.id, href: item.href, label: item.label }, ...(item.children ?? [])]
         : (item.children ?? []);
       for (const node of nodes) {
         if (isNavGroup(node) || !("href" in node) || !node.href) continue;

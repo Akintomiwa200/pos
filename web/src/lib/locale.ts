@@ -261,7 +261,7 @@ const COUNTRY_LOCALE: Record<string, LocaleTriple> = {
 export function withCurrent<T extends { value: string }>(list: T[], current: string): T[] {
   const value = current?.trim();
   if (!value || list.some((row) => row.value === value)) return list;
-  return [{ value, label: value } as T, ...list];
+  return [{ value, label: value } as unknown as T, ...list];
 }
 
 export function withCurrentValue(list: string[], current: string) {

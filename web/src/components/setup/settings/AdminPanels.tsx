@@ -297,7 +297,7 @@ export function SalesPanel({
   );
 }
 
-export function PeoplePanel() {
+export function PeoplePanel({ granted }: { granted: Set<string> }) {
   return (
     <div className="space-y-5">
       <SettingsCard
@@ -305,45 +305,56 @@ export function PeoplePanel() {
         copy="Accounts and privilege groups control who can open Settings and Organization."
       >
         <div className="grid gap-3 p-5 sm:grid-cols-2 sm:px-6">
-          <Link
-            href="/setup/users/account"
-            className="flex items-center gap-3 rounded-[18px] bg-pos-surface-muted px-4 py-4 transition hover:bg-pos-primary/10"
-          >
-            <span className="grid size-10 place-items-center rounded-full bg-pos-surface text-pos-ink-muted">
-              <Users size={18} />
-            </span>
-            <span>
-              <span className="block font-semibold text-pos-ink">Accounts</span>
-              <span className="block text-[13px] text-pos-ink-muted">
-                Create and edit HQ logins
+          {granted.has("users-account") ? (
+            <Link
+              href="/setup/users/account"
+              className="flex items-center gap-3 rounded-[18px] bg-pos-surface-muted px-4 py-4 transition hover:bg-pos-primary/10"
+            >
+              <span className="grid size-10 place-items-center rounded-full bg-pos-surface text-pos-ink-muted">
+                <Users size={18} />
               </span>
-            </span>
-          </Link>
-          <Link
-            href="/setup/users/group"
-            className="flex items-center gap-3 rounded-[18px] bg-pos-surface-muted px-4 py-4 transition hover:bg-pos-primary/10"
-          >
-            <span className="grid size-10 place-items-center rounded-full bg-pos-surface text-pos-ink-muted">
-              <Shield size={18} />
-            </span>
-            <span>
-              <span className="block font-semibold text-pos-ink">Groups</span>
-              <span className="block text-[13px] text-pos-ink-muted">
-                Privileges and sidebar access
+              <span>
+                <span className="block font-semibold text-pos-ink">Accounts</span>
+                <span className="block text-[13px] text-pos-ink-muted">
+                  Create and edit HQ logins
+                </span>
               </span>
-            </span>
-          </Link>
+            </Link>
+          ) : null}
+          {granted.has("users-group") ? (
+            <Link
+              href="/setup/users/group"
+              className="flex items-center gap-3 rounded-[18px] bg-pos-surface-muted px-4 py-4 transition hover:bg-pos-primary/10"
+            >
+              <span className="grid size-10 place-items-center rounded-full bg-pos-surface text-pos-ink-muted">
+                <Shield size={18} />
+              </span>
+              <span>
+                <span className="block font-semibold text-pos-ink">Groups</span>
+                <span className="block text-[13px] text-pos-ink-muted">
+                  Privileges and sidebar access
+                </span>
+              </span>
+            </Link>
+          ) : null}
         </div>
       </SettingsCard>
       <SettingsCard title="Also related" copy="Staff on the till floor and password changes.">
         <div className="flex flex-wrap gap-3 px-5 py-5 sm:px-6">
-          <Link href="/setup/staff" className={secondaryButtonClass}>
-            Floor staff
-          </Link>
-          <Link href="/setup/others/settings?section=security" className={secondaryButtonClass}>
-            <KeyRound size={14} />
-            Security & password
-          </Link>
+          {granted.has("staff") ? (
+            <Link href="/setup/staff" className={secondaryButtonClass}>
+              Floor staff
+            </Link>
+          ) : null}
+          {granted.has("settings-security") ? (
+            <Link
+              href="/setup/others/settings?section=security"
+              className={secondaryButtonClass}
+            >
+              <KeyRound size={14} />
+              Security & password
+            </Link>
+          ) : null}
         </div>
       </SettingsCard>
     </div>
@@ -351,8 +362,10 @@ export function PeoplePanel() {
 }
 
 export function DataPanel({
+  granted,
   onExport,
 }: {
+  granted: Set<string>;
   onExport: (kind: "org" | "catalog" | "sales" | "all") => void;
 }) {
   return (
@@ -389,16 +402,22 @@ export function DataPanel({
       </SettingsCard>
       <SettingsCard title="Maintenance" copy="Inspect counts or reset demo catalog.">
         <div className="flex flex-wrap gap-3 px-5 py-5 sm:px-6">
-          <Link href="/setup/others/data" className={secondaryButtonClass}>
-            <Database size={14} />
-            Data overview
-          </Link>
-          <Link href="/setup/others/export" className={secondaryButtonClass}>
-            Export centre
-          </Link>
-          <Link href="/setup/items/import" className={secondaryButtonClass}>
-            Import products
-          </Link>
+          {granted.has("others-data") ? (
+            <Link href="/setup/others/data" className={secondaryButtonClass}>
+              <Database size={14} />
+              Data overview
+            </Link>
+          ) : null}
+          {granted.has("others-export") ? (
+            <Link href="/setup/others/export" className={secondaryButtonClass}>
+              Export centre
+            </Link>
+          ) : null}
+          {granted.has("others-import") ? (
+            <Link href="/setup/items/import" className={secondaryButtonClass}>
+              Import products
+            </Link>
+          ) : null}
         </div>
       </SettingsCard>
       <p className="flex items-center gap-2 text-sm text-pos-ink-muted">

@@ -15,7 +15,7 @@ import {
   Wifi,
   WifiOff,
 } from "lucide-react";
-import { nairaInputFromMinor, parseNairaInput } from "@/lib/catalog";
+import { nairaInputFromMinor, parseNairaInput, resolveSellPriceMinor } from "@/lib/catalog";
 import { listCatalog, uploadProductImage, type HqCatalogItem } from "@/lib/hq-api";
 import { importCatalogRows } from "@/lib/hq-setup";
 import { naira } from "@/lib/hq-ops";
@@ -45,6 +45,8 @@ const blank: ItemDraft = {
   brand: "",
   cost: "",
   price: "",
+  pricingMode: "direct",
+  marginInput: "",
   onHand: "",
   reorderLevel: "5",
   unit: "each",
@@ -70,6 +72,8 @@ function toDraft(item: HqCatalogItem): ItemDraft {
     brand: item.brand ?? "",
     cost: nairaInputFromMinor(item.costMinor ?? 0),
     price: nairaInputFromMinor(item.priceMinor),
+    pricingMode: "direct",
+    marginInput: "",
     onHand: String(item.onHand),
     reorderLevel: String(item.reorderLevel ?? 5),
     unit: item.unit || "each",
@@ -271,6 +275,7 @@ export function ItemsManager() {
       const itemId = draft.id ?? sku.toLowerCase();
       const unitRow = units.find((row) => unitCode(row) === draft.unit);
       const packSize = Math.max(1, Math.round(parseFloat(draft.packSize) || 1));
+      const costMinor = parseNairaInput(draft.cost);
 
       await importCatalogRows([
         {
@@ -282,8 +287,13 @@ export function ItemsManager() {
           barcode: draft.barcode.trim() || undefined,
           batchNumber: draft.batchNumber.trim() || "",
           brand: draft.brand.trim() || "",
-          costMinor: parseNairaInput(draft.cost),
-          priceMinor: parseNairaInput(draft.price),
+          costMinor,
+          priceMinor: resolveSellPriceMinor({
+            pricingMode: draft.pricingMode,
+            costMinor,
+            priceMinor: parseNairaInput(draft.price),
+            marginInput: draft.marginInput,
+          }),
           onHand: Math.max(0, Math.round(parseFloat(draft.onHand) || 0)),
           reorderLevel: Math.max(0, Math.round(parseFloat(draft.reorderLevel) || 0)),
           unit: draft.unit || "each",
@@ -471,7 +481,7 @@ export function ItemsManager() {
                   return (
                     <tr
                       key={item.id}
-                      className="transition hover:bg-pos-surface-muted/50"
+                      className="group transition hover:bg-pos-surface-muted/50"
                     >
                       <td className="px-4 py-3.5 sm:px-5">
                         <input
@@ -484,10 +494,9 @@ export function ItemsManager() {
                         />
                       </td>
                       <td className="px-3 py-3.5">
-                        <button
-                          type="button"
+                        <Link
+                          href={`/setup/items/items/${encodeURIComponent(item.id)}`}
                           className="flex min-w-0 items-center gap-3 text-left"
-                          onClick={() => openEdit(item)}
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
@@ -496,14 +505,14 @@ export function ItemsManager() {
                             className="h-10 w-10 shrink-0 rounded-lg object-cover shadow-pos-sm"
                           />
                           <span className="min-w-0">
-                            <span className="block truncate font-medium text-pos-ink">
+                            <span className="block truncate font-medium text-pos-ink transition group-hover:text-pos-primary">
                               {item.name}
                             </span>
                             <span className="mt-0.5 block truncate font-mono text-[12px] text-pos-ink-faint">
                               {item.sku}
                             </span>
                           </span>
-                        </button>
+                        </Link>
                       </td>
                       <td className="px-3 py-3.5 text-pos-ink-muted">
                         <p>{item.category}</p>

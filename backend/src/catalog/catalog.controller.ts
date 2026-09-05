@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   NotFoundException,
   Param,
@@ -31,6 +32,13 @@ export class CatalogController {
     const item = this.catalog.update(id, body ?? {});
     if (!item) throw new NotFoundException("Item not found");
     return item;
+  }
+
+  @Delete("items/:id")
+  remove(@Param("id") id: string) {
+    const item = this.catalog.remove(id);
+    if (!item) throw new NotFoundException("Item not found");
+    return { ok: true, id: item.id };
   }
 
   @Post("stock/bulk")

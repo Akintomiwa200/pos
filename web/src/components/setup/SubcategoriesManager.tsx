@@ -1,21 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Plus } from "lucide-react";
+import Link from "next/link";
+import { Boxes, Plus } from "lucide-react";
 import { toast } from "@/lib/toast";
-import {
-  deleteSubcategory,
-  getTaxonomyUsage,
-  listCategories,
-  listSubcategories,
-  productCount,
-  renameTaxonomy,
-  saveSubcategory,
-  subcategoryParentId,
-  subcategoryParentName,
-  type TaxonomyRecord,
-  type TaxonomyUsage,
-} from "@/lib/hq-taxonomy";
+import { categorySlug, deleteSubcategory, getTaxonomyUsage, listCategories, listSubcategories, productCount, renameTaxonomy, saveSubcategory, subcategoryParentId, subcategoryParentName, type TaxonomyRecord, type TaxonomyUsage } from "@/lib/hq-taxonomy";
+import { naira } from "@/lib/hq-ops";
+import { useLiveCatalog } from "@/lib/live-catalog";
 import { ManagerSkeleton } from "../Skeleton";
 import { SlideOver } from "../SlideOver";
 import { DataTable, Field, PrimaryButton, ToggleField, fieldClass } from "./SetupChrome";
@@ -30,6 +21,7 @@ type Draft = {
 const blank: Draft = { name: "", categoryId: "", active: true };
 
 export function SubcategoriesManager() {
+  const { items: catalog, live } = useLiveCatalog();
   const [categories, setCategories] = useState<TaxonomyRecord[]>([]);
   const [rows, setRows] = useState<TaxonomyRecord[]>([]);
   const [usage, setUsage] = useState<TaxonomyUsage | null>(null);
@@ -70,6 +62,19 @@ export function SubcategoriesManager() {
         a.name.localeCompare(b.name),
     );
   }, [rows, filterCategory]);
+
+  const valuesBySubcategory = useMemo(() => {
+    const values = new Map<string, { cost: number; retail: number }>();
+    for (const item of catalog) {
+      if (item.subcategory) {
+        const row = values.get(item.subcategory) ?? { cost: 0, retail: 0 };
+        row.cost += item.onHand * (item.costMinor ?? 0);
+        row.retail += item.onHand * item.priceMinor;
+        values.set(item.subcategory, row);
+      }
+    }
+    return values;
+  }, [catalog]);
 
   if (!ready) return <ManagerSkeleton variant="table" />;
 
@@ -123,6 +128,9 @@ export function SubcategoriesManager() {
 
   const activeCount = rows.filter((row) => row.active).length;
 
+  const totalCost = [...valuesBySubcategory.values()].reduce((sum, row) => sum + row.cost, 0);
+  const totalRetail = [...valuesBySubcategory.values()].reduce((sum, row) => sum + row.retail, 0);
+
   return (
     <div className="relative space-y-5 text-pos-ink">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -131,8 +139,8 @@ export function SubcategoriesManager() {
             Subcategories
           </h1>
           <p className="mt-3 text-[14px] text-pos-ink-muted">
-            Second-level grouping under a category · {rows.length} total · {activeCount}{" "}
-            active
+            Second-level grouping under a category · {activeCount} active · cost value{" "}
+            {naira(totalCost, 0)} · {live ? "live" : "offline"}
           </p>
         </div>
         <PrimaryButton onClick={openNew}>
@@ -141,19 +149,31 @@ export function SubcategoriesManager() {
         </PrimaryButton>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-[20px] bg-pos-surface p-4 shadow-pos-sm">
           <p className="text-[13px] text-pos-ink-faint">Subcategories</p>
           <p className="mt-2 text-[24px] font-semibold tabular-nums">{rows.length}</p>
         </div>
         <div className="rounded-[20px] bg-pos-surface p-4 shadow-pos-sm">
-          <p className="text-[13px] text-pos-ink-faint">Parent categories</p>
-          <p className="mt-2 text-[24px] font-semibold tabular-nums">{categories.length}</p>
+          <p className="text-[13px] text-pos-ink-faint">Active</p>
+          <p className="mt-2 text-[24px] font-semibold tabular-nums">{activeCount}</p>
+        </div>
+        <div className="rounded-[20px] bg-pos-surface p-4 shadow-pos-sm">
+          <p className="text-[13px] text-pos-ink-faint">Cost value</p>
+          <p className="mt-2 truncate text-[22px] font-semibold tabular-nums">
+            {naira(totalCost, 0)}
+          </p>
+        </div>
+        <div className="rounded-[20px] bg-pos-surface p-4 shadow-pos-sm">
+          <p className="text-[13px] text-pos-ink-faint">Selling value</p>
+          <p className="mt-2 truncate text-[22px] font-semibold tabular-nums">
+            {naira(totalRetail, 0)}
+          </p>
         </div>
       </div>
 
       <DataTable
-        columns={["Subcategory", "Parent category", "Products", "Status"]}
+        columns={["Subcategory", "Parent category", "Products", "Cost value", "Selling value", "Status", ""]}
         toolbar={
           <select
             className="w-full max-w-sm rounded-full bg-pos-surface-muted px-4 py-2.5 text-sm text-pos-ink outline-none focus:bg-pos-surface focus:ring-1 focus:ring-pos-primary/25"
@@ -172,12 +192,14 @@ export function SubcategoriesManager() {
       >
         {filtered.length === 0 ? (
           <tr>
-            <td className="px-4 py-12 text-center text-pos-ink-faint" colSpan={4}>
+            <td className="px-4 py-12 text-center text-pos-ink-faint" colSpan={7}>
               No subcategories yet.
             </td>
           </tr>
         ) : (
-          filtered.map((row) => (
+          filtered.map((row) => {
+            const href = `/setup/items/subgroups/${categorySlug(row.name)}`;
+            return (
             <tr
               key={row.id}
               className="cursor-pointer transition hover:bg-pos-surface-muted/70"
@@ -190,6 +212,12 @@ export function SubcategoriesManager() {
               <td className="px-4 py-3.5 tabular-nums text-pos-ink">
                 {productCount(usage, "subcategories", row.name)}
               </td>
+              <td className="px-4 py-3.5 font-medium tabular-nums text-pos-ink">
+                {naira(valuesBySubcategory.get(row.name)?.cost ?? 0, 0)}
+              </td>
+              <td className="px-4 py-3.5 font-medium tabular-nums text-pos-ink">
+                {naira(valuesBySubcategory.get(row.name)?.retail ?? 0, 0)}
+              </td>
               <td className="px-4 py-3.5">
                 <span
                   className={`inline-flex rounded-full px-2.5 py-1 text-[12px] font-semibold ${
@@ -201,8 +229,19 @@ export function SubcategoriesManager() {
                   {row.active ? "Active" : "Inactive"}
                 </span>
               </td>
+              <td className="px-4 py-3.5 text-right">
+                <Link
+                  href={href}
+                  onClick={(event) => event.stopPropagation()}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-pos-surface px-3.5 py-2 text-[13px] font-medium text-pos-ink shadow-pos-sm transition hover:bg-pos-surface-muted"
+                >
+                  <Boxes size={14} />
+                  View products
+                </Link>
+              </td>
             </tr>
-          ))
+            );
+          })
         )}
       </DataTable>
 
@@ -271,6 +310,15 @@ export function SubcategoriesManager() {
           checked={draft.active}
           onChange={(active) => setDraft({ ...draft, active })}
         />
+        {draft.id ? (
+          <Link
+            href={`/setup/items/subgroups/${categorySlug(draft.name) || categorySlug(originalName)}`}
+            className="flex w-full items-center justify-center gap-2 rounded-full bg-pos-surface px-4 py-2.5 text-sm font-medium text-pos-ink shadow-pos-sm transition hover:bg-pos-surface-muted"
+          >
+            <Boxes size={15} />
+            View & manage products
+          </Link>
+        ) : null}
       </SlideOver>
     </div>
   );

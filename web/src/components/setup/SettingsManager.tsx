@@ -36,6 +36,11 @@ import {
 import { useAuth } from "@/components/AuthProvider";
 import { ManagerSkeleton } from "@/components/Skeleton";
 import {
+  allowedSettingsSections,
+  grantedPrivileges,
+  type SettingsSectionId,
+} from "@/lib/settings-access";
+import {
   CURRENCIES,
   LANGUAGES,
   listTimezones,
@@ -68,23 +73,8 @@ import {
   Switch,
 } from "./settings/settings-ui";
 
-type SectionId =
-  | "general"
-  | "appearance"
-  | "receipts"
-  | "invoices"
-  | "register"
-  | "sales"
-  | "inventory"
-  | "notifications"
-  | "people"
-  | "data"
-  | "advanced"
-  | "security"
-  | "organization";
-
 const SECTIONS: {
-  id: SectionId;
+  id: SettingsSectionId;
   label: string;
   icon: typeof Globe;
 }[] = [
@@ -109,40 +99,46 @@ const ORG_LINKS = [
     label: "Company",
     hint: "Legal name, contact, currency",
     icon: Building2,
+    req: "others-company",
   },
   {
     href: "/setup/others/branch",
     label: "Branches",
     hint: "Physical locations",
     icon: MapPin,
+    req: "others-branch",
   },
   {
     href: "/setup/others/store",
     label: "Stores",
     hint: "Retail floors and warehouses",
     icon: Store,
+    req: "others-store",
   },
   {
     href: "/setup/others/storefront",
     label: "Storefronts",
     hint: "Online shops",
     icon: Globe,
+    req: "others-storefront",
   },
   {
     href: "/setup/others/payment-gateway",
     label: "Payment gateways",
     hint: "Paystack, bank, cash rails",
     icon: CreditCard,
+    req: "others-payment-gateway",
   },
   {
     href: "/setup/others/tax",
     label: "Tax",
     hint: "VAT and service charge",
     icon: Percent,
+    req: "others-tax",
   },
 ] as const;
 
-function isSection(value: string | null): value is SectionId {
+function isSection(value: string | null): value is SettingsSectionId {
   return SECTIONS.some((section) => section.id === value);
 }
 
@@ -163,11 +159,15 @@ export function SettingsManager() {
   } = useLiveOrgSettings();
 
   const sectionParam = searchParams.get("section");
-  const active: SectionId = isSection(sectionParam) ? sectionParam : "general";
+  const granted = grantedPrivileges(session);
+  const allowed = allowedSettingsSections(session);
+  const requested = isSection(sectionParam) ? sectionParam : null;
+  const active: SettingsSectionId =
+    requested && allowed.includes(requested) ? requested : (allowed[0] ?? "general");
   const [pwdBusy, setPwdBusy] = useState(false);
   const [errors, setErrors] = useState<SettingsFieldErrors>({});
 
-  function go(section: SectionId) {
+  function go(section: SettingsSectionId) {
     const params = new URLSearchParams(searchParams.toString());
     params.set("section", section);
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
@@ -291,6 +291,18 @@ export function SettingsManager() {
     );
   }
 
+  if (!allowed.length) {
+    return (
+      <div>
+        <SetupHeader
+          kicker="Setup · Settings"
+          title="Settings"
+          copy="No settings sections are assigned to your group. Ask an administrator who can edit groups to grant the pages you need."
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="w-full min-w-0">
       <SetupHeader
@@ -302,7 +314,7 @@ export function SettingsManager() {
       <div className="grid gap-6 xl:grid-cols-[250px_minmax(0,1fr)]">
         <aside className="h-fit rounded-[22px] bg-pos-surface p-2.5 shadow-pos-sm xl:sticky xl:top-4">
           <nav className="flex flex-col gap-0.5" aria-label="Settings sections">
-            {SECTIONS.map(({ id, label, icon: Icon }) => {
+            {SECTIONS.filter(({ id }) => allowed.includes(id)).map(({ id, label, icon: Icon }) => {
               const on = active === id;
               return (
                 <button
@@ -402,46 +414,54 @@ export function SettingsManager() {
                 copy="Jump to the controls owners use most."
               >
                 <div className="grid gap-3 p-5 sm:grid-cols-2 lg:grid-cols-4 sm:px-6">
-                  <button
-                    type="button"
-                    onClick={() => go("sales")}
-                    className="rounded-[18px] bg-pos-surface-muted px-4 py-4 text-left transition hover:bg-pos-primary/10"
-                  >
-                    <p className="font-semibold text-pos-ink">Sales rules</p>
-                    <p className="mt-1 text-[13px] text-pos-ink-muted">
-                      Discounts, refunds, manager PIN
-                    </p>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => go("notifications")}
-                    className="rounded-[18px] bg-pos-surface-muted px-4 py-4 text-left transition hover:bg-pos-primary/10"
-                  >
-                    <p className="font-semibold text-pos-ink">Notifications</p>
-                    <p className="mt-1 text-[13px] text-pos-ink-muted">
-                      Stock, sales, shifts, digests
-                    </p>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => go("people")}
-                    className="rounded-[18px] bg-pos-surface-muted px-4 py-4 text-left transition hover:bg-pos-primary/10"
-                  >
-                    <p className="font-semibold text-pos-ink">People</p>
-                    <p className="mt-1 text-[13px] text-pos-ink-muted">
-                      Accounts, groups, floor staff
-                    </p>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => go("data")}
-                    className="rounded-[18px] bg-pos-surface-muted px-4 py-4 text-left transition hover:bg-pos-primary/10"
-                  >
-                    <p className="font-semibold text-pos-ink">Data</p>
-                    <p className="mt-1 text-[13px] text-pos-ink-muted">
-                      Export, import, catalog reset
-                    </p>
-                  </button>
+                  {allowed.includes("sales") ? (
+                    <button
+                      type="button"
+                      onClick={() => go("sales")}
+                      className="rounded-[18px] bg-pos-surface-muted px-4 py-4 text-left transition hover:bg-pos-primary/10"
+                    >
+                      <p className="font-semibold text-pos-ink">Sales rules</p>
+                      <p className="mt-1 text-[13px] text-pos-ink-muted">
+                        Discounts, refunds, manager PIN
+                      </p>
+                    </button>
+                  ) : null}
+                  {allowed.includes("notifications") ? (
+                    <button
+                      type="button"
+                      onClick={() => go("notifications")}
+                      className="rounded-[18px] bg-pos-surface-muted px-4 py-4 text-left transition hover:bg-pos-primary/10"
+                    >
+                      <p className="font-semibold text-pos-ink">Notifications</p>
+                      <p className="mt-1 text-[13px] text-pos-ink-muted">
+                        Stock, sales, shifts, digests
+                      </p>
+                    </button>
+                  ) : null}
+                  {allowed.includes("people") ? (
+                    <button
+                      type="button"
+                      onClick={() => go("people")}
+                      className="rounded-[18px] bg-pos-surface-muted px-4 py-4 text-left transition hover:bg-pos-primary/10"
+                    >
+                      <p className="font-semibold text-pos-ink">People</p>
+                      <p className="mt-1 text-[13px] text-pos-ink-muted">
+                        Accounts, groups, floor staff
+                      </p>
+                    </button>
+                  ) : null}
+                  {allowed.includes("data") ? (
+                    <button
+                      type="button"
+                      onClick={() => go("data")}
+                      className="rounded-[18px] bg-pos-surface-muted px-4 py-4 text-left transition hover:bg-pos-primary/10"
+                    >
+                      <p className="font-semibold text-pos-ink">Data</p>
+                      <p className="mt-1 text-[13px] text-pos-ink-muted">
+                        Export, import, catalog reset
+                      </p>
+                    </button>
+                  ) : null}
                 </div>
               </SettingsCard>
               <div className="flex justify-end">
@@ -586,9 +606,11 @@ export function SettingsManager() {
             />
           ) : null}
 
-          {active === "people" ? <PeoplePanel /> : null}
+          {active === "people" ? <PeoplePanel granted={granted} /> : null}
 
-          {active === "data" ? <DataPanel onExport={(kind) => void onExport(kind)} /> : null}
+          {active === "data" ? (
+            <DataPanel granted={granted} onExport={(kind) => void onExport(kind)} />
+          ) : null}
 
           {active === "advanced" ? (
             <>
@@ -642,26 +664,34 @@ export function SettingsManager() {
                 copy="Tax rates and payment rails live in Organization."
               >
                 <div className="flex flex-wrap gap-3 px-5 py-5 sm:px-6">
-                  <Link href="/setup/others/tax" className={secondaryButtonClass}>
-                    Tax rates
-                  </Link>
-                  <Link href="/setup/others/payment-gateway" className={secondaryButtonClass}>
-                    Gateways
-                  </Link>
-                  <button
-                    type="button"
-                    className={secondaryButtonClass}
-                    onClick={() => go("receipts")}
-                  >
-                    Receipt studio
-                  </button>
-                  <button
-                    type="button"
-                    className={secondaryButtonClass}
-                    onClick={() => go("invoices")}
-                  >
-                    Invoice studio
-                  </button>
+                  {granted.has("others-tax") ? (
+                    <Link href="/setup/others/tax" className={secondaryButtonClass}>
+                      Tax rates
+                    </Link>
+                  ) : null}
+                  {granted.has("others-payment-gateway") ? (
+                    <Link href="/setup/others/payment-gateway" className={secondaryButtonClass}>
+                      Gateways
+                    </Link>
+                  ) : null}
+                  {allowed.includes("receipts") ? (
+                    <button
+                      type="button"
+                      className={secondaryButtonClass}
+                      onClick={() => go("receipts")}
+                    >
+                      Receipt studio
+                    </button>
+                  ) : null}
+                  {allowed.includes("invoices") ? (
+                    <button
+                      type="button"
+                      className={secondaryButtonClass}
+                      onClick={() => go("invoices")}
+                    >
+                      Invoice studio
+                    </button>
+                  ) : null}
                 </div>
               </SettingsCard>
             </>
@@ -781,7 +811,7 @@ export function SettingsManager() {
               copy="Company structure lives on these pages. Open any one to edit."
             >
               <div className="grid gap-2 p-3 sm:grid-cols-2 lg:grid-cols-3">
-                {ORG_LINKS.map(({ href, label, hint, icon: Icon }) => (
+                {ORG_LINKS.filter(({ req }) => granted.has(req)).map(({ href, label, hint, icon: Icon }) => (
                   <Link
                     key={href}
                     href={href}

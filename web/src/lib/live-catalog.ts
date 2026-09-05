@@ -5,7 +5,8 @@ import type { HqCatalogItem } from "./hq-api";
 
 type CatalogPayload =
   | { type: "snapshot"; items: HqCatalogItem[] }
-  | { type: "updated"; item: HqCatalogItem };
+  | { type: "updated"; item: HqCatalogItem }
+  | { type: "removed"; id: string };
 
 function applyPayload(
   current: HqCatalogItem[],
@@ -21,12 +22,19 @@ function applyPayload(
     next[index] = payload.item;
     return next;
   }
+  if (payload.type === "removed" && payload.id) {
+    return current.filter((item) => item.id !== payload.id);
+  }
   return current;
 }
 
 export function useLiveCatalog() {
   const [items, setItems] = useState<HqCatalogItem[]>([]);
   const [live, setLive] = useState(false);
+
+  function removeItem(id: string) {
+    setItems((current) => current.filter((item) => item.id !== id));
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -55,7 +63,7 @@ export function useLiveCatalog() {
     };
   }, []);
 
-  return { items, setItems, live };
+  return { items, setItems, live, removeItem };
 }
 
 export function syncStockLevelsFromCatalog<

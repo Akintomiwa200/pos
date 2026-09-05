@@ -32,6 +32,8 @@ export type ItemDraft = {
   brand: string;
   cost: string;
   price: string;
+  pricingMode: "direct" | "margin";
+  marginInput: string;
   onHand: string;
   reorderLevel: string;
   unit: string;
@@ -129,11 +131,33 @@ export function ItemFormSheet({
     };
   }, [open, onClose]);
 
+  const cost = useMemo(
+    () => Math.round((parseFloat(draft.cost) || 0) * 100),
+    [draft.cost],
+  );
+
+  const sell = useMemo(
+    () => Math.round((parseFloat(draft.price) || 0) * 100),
+    [draft.price],
+  );
+
   const margin = useMemo(() => {
-    const cost = Math.round((parseFloat(draft.cost) || 0) * 100);
-    const sell = Math.round((parseFloat(draft.price) || 0) * 100);
+    if (draft.pricingMode === "margin") {
+      const input = parseFloat(draft.marginInput);
+      if (Number.isFinite(input)) return Math.max(-9999, Math.min(100, input));
+    }
     return marginPercent(cost, sell);
-  }, [draft.cost, draft.price]);
+  }, [draft.pricingMode, draft.marginInput, cost, sell]);
+
+  const effectiveSell = useMemo(() => {
+    if (draft.pricingMode === "margin") {
+      const pct = Number.isFinite(parseFloat(draft.marginInput))
+        ? Math.max(-9999, Math.min(100, parseFloat(draft.marginInput)))
+        : 0;
+      return pct >= 100 ? 0 : Math.round(cost / (1 - pct / 100));
+    }
+    return sell;
+  }, [draft.pricingMode, draft.marginInput, cost, sell]);
 
   const activeCategories = useMemo(
     () => categories.filter((row) => row.active),
@@ -413,7 +437,34 @@ export function ItemFormSheet({
             </Section>
 
             <Section icon={<Wallet size={18} />} title="Pricing">
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => onChange({ pricingMode: "direct" })}
+                  className={`flex-1 rounded-full px-4 py-2 text-sm font-medium transition ${
+                    draft.pricingMode === "direct"
+                      ? "bg-pos-primary text-white shadow-pos-primary"
+                      : "bg-pos-surface-muted text-pos-ink-muted hover:text-pos-ink"
+                  }`}
+                >
+                  Set selling price directly
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => onChange({ pricingMode: "margin" })}
+                  className={`flex-1 rounded-full px-4 py-2 text-sm font-medium transition ${
+                    draft.pricingMode === "margin"
+                      ? "bg-pos-primary text-white shadow-pos-primary"
+                      : "bg-pos-surface-muted text-pos-ink-muted hover:text-pos-ink"
+                  }`}
+                >
+                  Set by margin
+                </button>
+              </div>
+
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
                 <InputLabel
                   label={`Cost price (${mark})`}
                   hint={`What you pay ${formatPricePer(draft.unit, selectedUnit?.name)}.`}
@@ -429,40 +480,65 @@ export function ItemFormSheet({
                     onChange={(event) => onChange({ cost: event.target.value })}
                   />
                 </InputLabel>
-                <InputLabel
-                  label={`Selling price (${mark})`}
-                  hint={`What customers pay ${formatPricePer(draft.unit, selectedUnit?.name)}.`}
-                >
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    required
-                    className={fieldClass}
-                    placeholder="0.00"
-                    value={draft.price}
-                    disabled={busy}
-                    onChange={(event) => onChange({ price: event.target.value })}
-                  />
-                </InputLabel>
+
+                {draft.pricingMode === "direct" ? (
+                  <InputLabel
+                    label={`Selling price (${mark})`}
+                    hint={`What customers pay ${formatPricePer(draft.unit, selectedUnit?.name)}.`}
+                  >
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      required
+                      className={fieldClass}
+                      placeholder="0.00"
+                      value={draft.price}
+                      disabled={busy}
+                      onChange={(event) => onChange({ price: event.target.value })}
+                    />
+                  </InputLabel>
+                ) : (
+                  <InputLabel
+                    label="Margin (%)"
+                    hint="Selling price is derived from cost."
+                  >
+                    <input
+                      type="number"
+                      step="0.1"
+                      min={-999}
+                      max={99.9}
+                      className={fieldClass}
+                      placeholder="e.g. 30"
+                      value={draft.marginInput}
+                      disabled={busy}
+                      onChange={(event) => onChange({ marginInput: event.target.value })}
+                    />
+                  </InputLabel>
+                )}
               </div>
+
               <div className="mt-4 rounded-xl border border-pos-border bg-pos-surface-muted px-4 py-3 text-sm">
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-pos-ink-muted">Gross margin</span>
                   <span className="font-semibold text-pos-ink">{margin}%</span>
                 </div>
                 <div className="mt-1 flex items-center justify-between gap-3 text-xs text-pos-ink-faint">
-                  <span>Markup per unit</span>
                   <span>
-                    {naira(
-                      Math.max(
-                        0,
-                        Math.round((parseFloat(draft.price) || 0) * 100) -
-                          Math.round((parseFloat(draft.cost) || 0) * 100),
-                      ),
-                    )}
+                    {draft.pricingMode === "margin" ? "Computed selling price" : "Markup per unit"}
                   </span>
+                  <span>{naira(effectiveSell)}</span>
                 </div>
+                {draft.pricingMode === "margin" ? (
+                  <p className="mt-2 text-[11px] leading-snug text-pos-ink-faint">
+                    Selling price is computed as Cost ÷ (1 − margin). Change the cost or margin to
+                    recalculate.
+                  </p>
+                ) : (
+                  <p className="mt-2 text-[11px] leading-snug text-pos-ink-faint">
+                    Selling price is entered independently of cost.
+                  </p>
+                )}
               </div>
             </Section>
 

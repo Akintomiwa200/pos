@@ -276,6 +276,13 @@ export async function listCatalog(): Promise<HqCatalogItem[]> {
   }
 }
 
+export async function deleteCatalogItem(id: string) {
+  return api<{ ok: true; id: string }>(
+    `/api/catalog/items/${encodeURIComponent(id)}`,
+    { method: "DELETE" },
+  );
+}
+
 export async function uploadProductImage(itemId: string, file: File): Promise<HqCatalogItem> {
   const form = new FormData();
   form.append("file", file);
@@ -380,6 +387,7 @@ export type HqTill = {
   hardwareHex: string | null;
   pairedAt: string | null;
   lastSeenAt: string | null;
+  unpairedAt: string | null;
   subscriptionExpiresAt: string | null;
   online?: boolean;
   expired?: boolean;
@@ -407,6 +415,22 @@ export async function regenerateTillCode(id: string): Promise<HqTill> {
 
 export async function renewTill(id: string): Promise<HqTill> {
   return api<HqTill>(`/api/console/tills/${id}/renew`, { method: "POST" });
+}
+
+export const LICENCE_YEAR_MINOR = 2_500_000;
+
+export async function unpairTill(id: string): Promise<HqTill> {
+  return api<HqTill>(`/api/console/tills/${id}/unpair`, { method: "POST" });
+}
+
+export async function payTillLicense(
+  id: string,
+  payment: { reference: string; provider: string; amountMinor: number },
+): Promise<HqTill> {
+  return api<HqTill>(`/api/console/tills/${id}/renew/pay`, {
+    method: "POST",
+    body: JSON.stringify(payment),
+  });
 }
 
 export async function deleteTill(id: string) {

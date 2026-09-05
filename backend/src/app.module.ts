@@ -7,6 +7,7 @@ import { AuthModule } from './auth/auth.module';
 import { TenantsModule } from './tenants/tenants.module';
 import { DirectoryModule } from './directory/directory.module';
 import { CatalogModule } from './catalog/catalog.module';
+import { ComboModule } from './combos/combo.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { OrdersModule } from './orders/orders.module';
 import { ExpensesModule } from './expenses/expenses.module';
@@ -32,6 +33,7 @@ import { CrmModule } from './crm/crm.module';
     TenantsModule,
     DirectoryModule,
     CatalogModule,
+    ComboModule,
     InventoryModule,
     OrdersModule,
     ExpensesModule,

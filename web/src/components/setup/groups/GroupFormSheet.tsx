@@ -23,22 +23,17 @@ function PrivilegeNodeRow({
   node,
   granted,
   onToggle,
-  depth = 0,
 }: {
   node: AccessNode;
   granted: Set<string>;
   onToggle: (node: AccessNode) => void;
-  depth?: number;
 }) {
   const checked = isChecked(granted, node);
   const mixed = isIndeterminate(granted, node);
 
   return (
     <div>
-      <label
-        className="flex cursor-pointer items-center gap-2 rounded-lg py-1.5 pr-2 text-sm hover:bg-pos-surface-muted"
-        style={{ paddingLeft: 8 + depth * 14 }}
-      >
+      <label className="flex cursor-pointer items-center gap-2 rounded-lg py-1.5 pr-2 text-sm hover:bg-pos-surface-muted">
         <input
           type="checkbox"
           className="accent-pos-primary"
@@ -52,15 +47,18 @@ function PrivilegeNodeRow({
           {node.label}
         </span>
       </label>
-      {node.children?.map((child) => (
-        <PrivilegeNodeRow
-          key={child.id}
-          node={child}
-          granted={granted}
-          onToggle={onToggle}
-          depth={depth + 1}
-        />
-      ))}
+      {node.children?.length ? (
+        <div className="ml-5 mt-0.5 space-y-0.5 border-l border-pos-border/60 pl-3">
+          {node.children.map((child) => (
+            <PrivilegeNodeRow
+              key={child.id}
+              node={child}
+              granted={granted}
+              onToggle={onToggle}
+            />
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -170,13 +168,13 @@ export function GroupFormSheet({
                 Same categories as the console sidebar. Sensitive areas stay off unless you tick
                 them.
               </p>
-              <div className="space-y-3">
+              <div className="space-y-1">
                 {tree.map((section) => (
                   <div
                     key={section.heading}
                     className="rounded-2xl border border-pos-border bg-pos-surface p-3"
                   >
-                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-pos-ink-faint">
+                    <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-pos-ink-faint">
                       {section.heading}
                     </p>
                     {section.items.map((node) => (

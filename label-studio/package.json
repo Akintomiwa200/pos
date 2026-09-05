@@ -1,0 +1,31 @@
+{
+  "name": "label-studio",
+  "private": true,
+  "packageManager": "pnpm@11.5.1",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 1430",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build --bundles nsis"
+  },
+  "dependencies": {
+    "jsbarcode": "^3.12.3",
+    "lucide-react": "^1.33.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "sonner": "^2.0.8"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.11.4",
+    "@types/jsbarcode": "^3.11.4",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^6.0.5",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.1"
+  }
+}

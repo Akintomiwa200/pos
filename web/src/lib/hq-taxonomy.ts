@@ -94,3 +94,11 @@ export function productCount(
   if (!usage) return 0;
   return usage[field].find((row) => row.name.toLowerCase() === name.toLowerCase())?.products ?? 0;
 }
+
+export function categorySlug(name: string) {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}

@@ -5,8 +5,8 @@ import { CategoriesManager } from "@/components/setup/CategoriesManager";
 import { SubcategoriesManager } from "@/components/setup/SubcategoriesManager";
 import { UnitsManager } from "@/components/setup/UnitsManager";
 import { PacksManager } from "@/components/setup/PacksManager";
+import { BarcodeLabelsManager } from "@/components/setup/BarcodeLabelsManager";
 import {
-  BarcodeLookupManager,
   BrandsManager,
   ExpiringManager,
   LowStockManager,
@@ -25,7 +25,7 @@ const TITLES: Record<string, string> = {
   prices: "Price List",
   "low-stock": "Low Stock",
   expiring: "Expiring Products",
-  barcode: "Barcode Lookup",
+  barcode: "Print Labels",
   import: "Import Products",
   export: "Export Products",
 };
@@ -47,7 +47,7 @@ export default async function SetupItemsPage({
   if (key === "prices") return <PriceListManager />;
   if (key === "low-stock") return <LowStockManager />;
   if (key === "expiring") return <ExpiringManager />;
-  if (key === "barcode") return <BarcodeLookupManager />;
+  if (key === "barcode") return <BarcodeLabelsManager />;
   if (key === "import") return <ProductImportManager />;
   if (key === "export") return <ProductExportManager />;
 

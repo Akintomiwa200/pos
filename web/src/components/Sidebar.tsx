@@ -7,6 +7,7 @@ import { ChevronDown, LayoutDashboard, LogOut, SlidersHorizontal, X } from "luci
 import { AccountSwitcher } from "./AccountSwitcher";
 import { BrandLogo } from "./site/BrandLogo";
 import { useAuth } from "./AuthProvider";
+import { getCompany, type HqCompany } from "../lib/hq-setup";
 import type { ConsoleSession } from "../lib/access";
 import {
   isNavGroup,
@@ -110,7 +111,7 @@ function NestedList({
 }) {
   return (
     <div
-      className="mt-1 mb-2 flex flex-col gap-0.5"
+      className="mt-1 mb-1 flex flex-col gap-0.5"
       style={{ paddingLeft: subtreeIndent(depth) }}
     >
       {nodes.map((node) => {
@@ -121,7 +122,7 @@ function NestedList({
             <div key={node.id}>
               <button
                 type="button"
-                className={`flex w-full items-center gap-2 rounded-lg py-2 pr-1 text-left text-[13px] transition ${
+                className={`flex w-full items-center gap-2 rounded-lg py-1.5 pr-1 text-left text-[13px] transition ${
                   active
                     ? "font-medium text-pos-primary"
                     : "text-pos-ink-muted hover:text-pos-primary"
@@ -156,7 +157,7 @@ function NestedList({
           <Link
             key={node.id}
             href={node.href}
-            className={`block rounded-lg px-2 py-2 text-[13px] transition ${
+            className={`block rounded-lg px-2 py-1.5 text-[13px] transition ${
               active
                 ? "bg-pos-primary font-medium text-white shadow-[0_4px_12px_rgba(109,74,255,0.28)]"
                 : "text-pos-ink-muted hover:bg-pos-primary-soft hover:text-pos-primary"
@@ -233,6 +234,15 @@ function NavRow({
   );
 }
 
+function companyInitials(name: string) {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return "C";
+  return words
+    .slice(0, 2)
+    .map((word) => (word[0] ?? "").toUpperCase())
+    .join("");
+}
+
 export function Sidebar({
   session,
   nav,
@@ -250,6 +260,7 @@ export function Sidebar({
   const router = useRouter();
   const { logout } = useAuth();
   const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({});
+  const [company, setCompany] = useState<HqCompany | null>(null);
   const dashboardActive = pathname === "/dashboard" || pathname.startsWith("/dashboard/");
   const canSeeDashboard = nav.some(
     (section) =>
@@ -262,6 +273,18 @@ export function Sidebar({
       section.items.some((item) => item.id === "others-settings"),
   );
   const navHrefs = allNavHrefs(nav);
+
+  useEffect(() => {
+    let mounted = true;
+    getCompany()
+      .then((row) => {
+        if (mounted) setCompany(row);
+      })
+      .catch(() => undefined);
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     setOpenMenus((current) => ({ ...current, ...openIdsForPath(pathname, nav) }));
@@ -338,7 +361,25 @@ export function Sidebar({
       >
         <div className="flex items-center gap-2 px-5 py-5">
           <div className="min-w-0 flex-1">
-            <BrandLogo href={homeHref} size="sm" />
+            {company ? (
+              <Link href={homeHref} className="flex min-w-0 items-center gap-2.5">
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-pos-primary text-white shadow-pos-primary">
+                  <span className="text-[12px] font-semibold tracking-wide">
+                    {companyInitials(company.name)}
+                  </span>
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate text-[14px] font-medium leading-tight tracking-tight text-pos-ink">
+                    {company.name}
+                  </span>
+                  <span className="block truncate text-[11px] text-pos-ink-faint">
+                    {company.state || "Company"}
+                  </span>
+                </span>
+              </Link>
+            ) : (
+              <BrandLogo href={homeHref} size="sm" />
+            )}
             {session.scope === "producer" ? (
               <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-pos-primary">
                 Super Admin

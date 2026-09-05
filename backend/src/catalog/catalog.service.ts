@@ -14,7 +14,8 @@ import { CloudinaryService } from "./cloudinary.service";
 export type { CatalogItem };
 export type CatalogEvent =
   | { type: "snapshot"; items: CatalogItem[] }
-  | { type: "updated"; item: CatalogItem };
+  | { type: "updated"; item: CatalogItem }
+  | { type: "removed"; id: string };
 
 const now = () => new Date().toISOString();
 
@@ -173,6 +174,15 @@ export class CatalogService implements OnModuleInit {
     void this.persist();
     this.events.next({ type: "updated", item: next });
     return next;
+  }
+
+  remove(id: string) {
+    const index = this.items.findIndex((item) => item.id === id);
+    if (index === -1) return null;
+    const [removed] = this.items.splice(index, 1);
+    void this.persist();
+    this.events.next({ type: "removed", id: removed.id });
+    return removed;
   }
 
   applyStockDeltas(deltas: Array<{ itemId?: string; delta?: number }>) {

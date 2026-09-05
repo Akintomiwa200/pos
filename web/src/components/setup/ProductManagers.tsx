@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Plus, ScanBarcode, Search } from "lucide-react";
+import { Plus } from "lucide-react";
 import { toast } from "@/lib/toast";
-import { api, listCatalog, type HqCatalogItem } from "@/lib/hq-api";
+import { listCatalog, type HqCatalogItem } from "@/lib/hq-api";
 import { importCatalogRows, exportSetup } from "@/lib/hq-setup";
 import { naira } from "@/lib/hq-ops";
 import { marginPercent, parseNairaInput } from "@/lib/catalog";
@@ -506,93 +506,6 @@ export function ExpiringManager() {
           })
         )}
       </DataTable>
-    </div>
-  );
-}
-
-export function BarcodeLookupManager() {
-  const [query, setQuery] = useState("");
-  const [item, setItem] = useState<HqCatalogItem | null | undefined>(undefined);
-  const [busy, setBusy] = useState(false);
-
-  async function lookup(value: string) {
-    const q = value.trim();
-    if (!q) {
-      setItem(undefined);
-      return;
-    }
-    setBusy(true);
-    try {
-      const data = await api<{ item: HqCatalogItem | null }>(
-        `/api/catalog/lookup?q=${encodeURIComponent(q)}`,
-      );
-      setItem(data.item);
-    } catch (err) {
-      toast.error(err, "Lookup failed.");
-      setItem(null);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div>
-      <SetupHeader
-        kicker={KICKER}
-        title="Barcode Lookup"
-        copy="Scan or type a barcode, SKU, or batch number to confirm price and stock before the till rings it up."
-      />
-      <section className="mx-auto max-w-xl rounded-[24px] bg-pos-surface p-6 shadow-pos-md">
-        <Field label="Scan or type code">
-          <div className="flex gap-2">
-            <input
-              autoFocus
-              className={fieldClass}
-              placeholder="Barcode / SKU / batch…"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  void lookup(query);
-                }
-              }}
-            />
-            <PrimaryButton disabled={busy} onClick={() => void lookup(query)}>
-              <Search size={16} />
-              Find
-            </PrimaryButton>
-          </div>
-        </Field>
-        {item === undefined ? (
-          <div className="mt-8 flex flex-col items-center gap-3 py-10 text-center text-pos-ink-faint">
-            <ScanBarcode size={40} strokeWidth={1.25} />
-            <p className="text-sm">Ready to scan</p>
-          </div>
-        ) : item === null ? (
-          <p className="mt-8 rounded-2xl bg-pos-surface-muted px-4 py-6 text-center text-sm text-pos-ink-muted">
-            No active product matches that code.
-          </p>
-        ) : (
-          <div className="mt-6 space-y-3 rounded-2xl bg-pos-surface-muted p-5">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-pos-ink-faint">
-              {item.category}
-              {item.brand ? ` · ${item.brand}` : ""}
-            </p>
-            <h2 className="text-2xl font-semibold tracking-tight text-pos-ink">{item.name}</h2>
-            <p className="font-mono text-sm text-pos-ink-muted">
-              {item.barcode} · {item.sku}
-            </p>
-            <div className="grid grid-cols-2 gap-3 pt-2">
-              <SetupStat label="Price" value={naira(item.priceMinor)} tone="accent" />
-              <SetupStat label="On hand" value={String(item.onHand)} />
-            </div>
-            <Link href="/setup/items/items" className={`${secondaryButtonClass} mt-2 w-full`}>
-              Open product list
-            </Link>
-          </div>
-        )}
-      </section>
     </div>
   );
 }

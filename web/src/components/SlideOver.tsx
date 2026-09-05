@@ -10,6 +10,7 @@ export function SlideOver({
   onClose,
   children,
   footer,
+  size = "md",
 }: {
   open: boolean;
   title: string;
@@ -17,6 +18,7 @@ export function SlideOver({
   onClose: () => void;
   children: ReactNode;
   footer?: ReactNode;
+  size?: "md" | "lg";
 }) {
   useEffect(() => {
     if (!open) return;
@@ -41,7 +43,11 @@ export function SlideOver({
         aria-label="Close"
         onClick={onClose}
       />
-      <aside className="absolute inset-y-0 right-0 flex h-full w-full max-w-lg flex-col bg-pos-surface text-pos-ink shadow-pos-md">
+      <aside
+        className={`absolute inset-y-0 right-0 flex h-full w-full flex-col bg-pos-surface text-pos-ink shadow-pos-md ${
+          size === "lg" ? "max-w-2xl" : "max-w-lg"
+        }`}
+      >
         <header className="flex shrink-0 items-start justify-between gap-3 border-b border-pos-border px-5 py-4">
           <div className="min-w-0">
             <h2 className="truncate text-lg font-semibold tracking-tight text-pos-ink">{title}</h2>

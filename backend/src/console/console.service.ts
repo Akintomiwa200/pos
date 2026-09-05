@@ -96,6 +96,7 @@ type TillRow = {
   session_token: string | null;
   paired_at: Date | null;
   last_seen_at: Date | null;
+  unpaired_at: Date | null;
   subscription_expires_at: Date | null;
 };
 
@@ -198,6 +199,7 @@ export class ConsoleService implements OnModuleInit {
       sessionToken: row.session_token,
       pairedAt: isoOrNull(row.paired_at),
       lastSeenAt: isoOrNull(row.last_seen_at),
+      unpairedAt: isoOrNull(row.unpaired_at),
       subscriptionExpiresAt: isoOrNull(row.subscription_expires_at),
     };
   }
@@ -1289,7 +1291,7 @@ export class ConsoleService implements OnModuleInit {
   // ---------- tills ----------
 
   private static TILL_COLUMNS = `id, name, code, branch_name, store_id, branch_id, product, active, hardware_hex, session_token,
-              paired_at, last_seen_at, subscription_expires_at`;
+              paired_at, last_seen_at, unpaired_at, subscription_expires_at`;
 
   private async listRawTills(): Promise<HqTill[]> {
     const result = await this.db.query(
@@ -1385,6 +1387,7 @@ export class ConsoleService implements OnModuleInit {
       session_token: string | null;
       paired_at: string | null;
       last_seen_at: string | null;
+      unpaired_at: string | null;
       subscription_expires_at: string | null;
     }>,
   ) {
@@ -1518,6 +1521,7 @@ export class ConsoleService implements OnModuleInit {
       session_token: generateSessionToken(),
       paired_at: pairedAt,
       last_seen_at: new Date().toISOString(),
+      unpaired_at: null,
       subscription_expires_at: subscriptionExpiresAt ?? null,
     });
     await this.pushNotice({
@@ -1542,12 +1546,13 @@ export class ConsoleService implements OnModuleInit {
     const token = sessionToken.trim();
     const nowIso = new Date().toISOString();
 
-    if (!till.sessionToken && hex && (!till.hardwareHex || till.hardwareHex === hex)) {
+    if (!till.sessionToken && hex && !till.unpairedAt && (!till.hardwareHex || till.hardwareHex === hex)) {
       if (till.subscriptionExpiresAt && isSubscriptionExpired(till.subscriptionExpiresAt)) {
         await this.updateTillFields(till.id, {
           session_token: generateSessionToken(),
           hardware_hex: hex,
           last_seen_at: nowIso,
+          unpaired_at: null,
         });
         throw new ForbiddenException(
           "Till subscription has ended. Enter the till code to renew for another year.",
@@ -1557,6 +1562,7 @@ export class ConsoleService implements OnModuleInit {
         session_token: generateSessionToken(),
         hardware_hex: hex,
         last_seen_at: nowIso,
+        unpaired_at: null,
         subscription_expires_at:
           till.subscriptionExpiresAt ?? addOneYear().toISOString(),
       });
@@ -1607,5 +1613,99 @@ export class ConsoleService implements OnModuleInit {
     });
     this.publishPos();
     return (await this.getRawTill(id))!;
+  }
+
+  async unpairTill(id: string) {
+    const till = await this.getRawTill(id);
+    if (!till) throw new NotFoundException("Till not found");
+    if (!till.hardwareHex && !till.sessionToken && !till.pairedAt) {
+      throw new BadRequestException("This till is not paired to any device");
+    }
+    await this.updateTillFields(id, {
+      hardware_hex: null,
+      session_token: null,
+      paired_at: null,
+      last_seen_at: null,
+      unpaired_at: new Date().toISOString(),
+    });
+    await this.pushNotice({
+      key: `till.unpaired:${till.id}:${Date.now()}`,
+      type: "till.unpaired",
+      title: `${till.name} removed from its device`,
+      body: "The till code still works. Enter it on the replacement device to re-activate here.",
+      href: "/setup/others/till",
+    });
+    this.publishPos();
+    return (await this.getRawTill(id))!;
+  }
+
+  async renewTillWithPayment(
+    id: string,
+    input: { reference?: string; provider?: string; amountMinor?: number; currency?: string },
+  ) {
+    const till = await this.getRawTill(id);
+    if (!till) throw new NotFoundException("Till not found");
+    const reference = input.reference?.trim();
+    if (!reference) {
+      throw new BadRequestException("A payment reference is required to renew");
+    }
+    const provider = input.provider?.trim() || "paystack";
+    const amountMinor =
+      typeof input.amountMinor === "number" && input.amountMinor > 0
+        ? Math.round(input.amountMinor)
+        : 0;
+    const from =
+      till.subscriptionExpiresAt && !isSubscriptionExpired(till.subscriptionExpiresAt)
+        ? new Date(till.subscriptionExpiresAt)
+        : new Date();
+    const subscriptionExpiresAt = addOneYear(from).toISOString();
+    await this.updateTillFields(id, { subscription_expires_at: subscriptionExpiresAt });
+    await this.recordTillPayment({
+      id: `pay-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      tillId: till.id,
+      tillName: till.name,
+      reference,
+      provider,
+      amountMinor,
+      currency: (input.currency?.trim().toUpperCase() || "NGN").slice(0, 3) || "NGN",
+      expiresAt: subscriptionExpiresAt,
+    });
+    await this.pushNotice({
+      key: `till.paid:${till.id}:${reference}`,
+      type: "till.renewed",
+      title: `${till.name} renewed`,
+      body: `Payment ${provider} confirmed. Subscription now runs until ${new Date(subscriptionExpiresAt).toLocaleDateString("en-NG")}.`,
+      href: "/setup/others/till",
+    });
+    this.publishPos();
+    return (await this.getRawTill(id))!;
+  }
+
+  private async recordTillPayment(input: {
+    id: string;
+    tillId: string;
+    tillName: string;
+    reference: string;
+    provider: string;
+    amountMinor: number;
+    currency: string;
+    expiresAt: string;
+  }) {
+    await this.db.query(
+      `insert into hq_till_payments
+         (id, till_id, till_name, reference, provider, amount_minor, currency, status, expires_at)
+       values ($1, $2, $3, $4, $5, $6, $7, 'paid', $8)
+       on conflict (till_id, reference) do nothing`,
+      [
+        input.id,
+        input.tillId,
+        input.tillName,
+        input.reference,
+        input.provider,
+        input.amountMinor,
+        input.currency,
+        input.expiresAt,
+      ],
+    );
   }
 }

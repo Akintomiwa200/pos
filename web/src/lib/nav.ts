@@ -20,6 +20,7 @@ import {
   LifeBuoy,
   Megaphone,
   MessageSquare,
+  MonitorSmartphone,
   Package,
   RotateCcw,
   Scale,
@@ -28,6 +29,7 @@ import {
   ShieldCheck,
   ShoppingBasket,
   ShoppingCart,
+  Store,
   TrendingUp,
   Truck,
   User,
@@ -100,12 +102,13 @@ const PRODUCTS_NAV: NavNode[] = [
   { id: "items-groups", label: "Categories", href: "/setup/items/groups" },
   { id: "items-subgroups", label: "Subcategories", href: "/setup/items/subgroups" },
   { id: "items-units", label: "Units of Measure", href: "/setup/items/units" },
-  { id: "items-packs", label: "Pack & Cartons", href: "/setup/items/packs" },
+  { id: "items-packages", label: "Pack & Cartons", href: "/setup/items/packs" },
+  { id: "items-combos", label: "Combos", href: "/setup/items/combos" },
   { id: "manufacturer", label: "Brands", href: "/setup/items/brands" },
   { id: "items-prices", label: "Price List", href: "/setup/items/prices" },
   { id: "items-low-stock", label: "Low Stock", href: "/setup/items/low-stock" },
   { id: "items-expiring", label: "Expiring", href: "/setup/items/expiring" },
-  { id: "scan-barcode", label: "Barcode Lookup", href: "/setup/items/barcode" },
+  { id: "scan-barcode", label: "Print Labels", href: "/setup/items/barcode" },
   { id: "others-import", label: "Import Products", href: "/setup/items/import" },
   { id: "items-export", label: "Export Products", href: "/setup/items/export" },
 ];
@@ -622,6 +625,14 @@ export const NAV: NavSection[] = [
     ],
   },
   {
+    heading: "Point of Sales",
+    department: "Setup",
+    items: [
+      { id: "others-till", label: "Till", icon: MonitorSmartphone, href: "/setup/others/till" },
+      { id: "others-store", label: "Store", icon: Store, href: "/setup/others/store" },
+    ],
+  },
+  {
     heading: "Analytics",
     department: "Report",
     items: [
@@ -646,15 +657,6 @@ export const NAV: NavSection[] = [
             label: "Employee Sales",
             href: "/reports/sales/gross-profit/by-group",
           },
-        ],
-      },
-      {
-        id: "pos-hub",
-        label: "Point of Sales",
-        icon: ShoppingBasket,
-        children: [
-          { id: "others-till", label: "Till", href: "/setup/others/till" },
-          { id: "others-store", label: "Store", href: "/setup/others/store" },
         ],
       },
       {
@@ -808,7 +810,73 @@ export const NAV: NavSection[] = [
         id: "others-settings",
         label: "Settings",
         icon: Settings,
-        href: "/setup/others/settings",
+        children: [
+          {
+            id: "settings-general",
+            label: "General",
+            href: "/setup/others/settings?section=general",
+          },
+          {
+            id: "settings-appearance",
+            label: "Appearance",
+            href: "/setup/others/settings?section=appearance",
+          },
+          {
+            id: "settings-receipts",
+            label: "Receipts",
+            href: "/setup/others/settings?section=receipts",
+          },
+          {
+            id: "settings-invoices",
+            label: "Invoices",
+            href: "/setup/others/settings?section=invoices",
+          },
+          {
+            id: "settings-register",
+            label: "Register",
+            href: "/setup/others/settings?section=register",
+          },
+          {
+            id: "settings-sales",
+            label: "Sales rules",
+            href: "/setup/others/settings?section=sales",
+          },
+          {
+            id: "settings-inventory",
+            label: "Inventory",
+            href: "/setup/others/settings?section=inventory",
+          },
+          {
+            id: "settings-notifications",
+            label: "Notifications",
+            href: "/setup/others/settings?section=notifications",
+          },
+          {
+            id: "settings-people",
+            label: "People",
+            href: "/setup/others/settings?section=people",
+          },
+          {
+            id: "settings-data",
+            label: "Data",
+            href: "/setup/others/settings?section=data",
+          },
+          {
+            id: "settings-advanced",
+            label: "Advanced",
+            href: "/setup/others/settings?section=advanced",
+          },
+          {
+            id: "settings-security",
+            label: "Security",
+            href: "/setup/others/settings?section=security",
+          },
+          {
+            id: "settings-organization",
+            label: "Organization",
+            href: "/setup/others/settings?section=organization",
+          },
+        ],
       },
       { id: "help", label: "Help", icon: HelpCircle, href: "/help" },
     ],

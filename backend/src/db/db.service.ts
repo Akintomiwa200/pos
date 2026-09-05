@@ -128,6 +128,7 @@ export class DbService implements OnModuleInit {
       session_token text,
       paired_at timestamptz,
       last_seen_at timestamptz,
+      unpaired_at timestamptz,
       subscription_expires_at timestamptz,
       created_at timestamptz not null default now()
     )`);
@@ -144,6 +145,23 @@ export class DbService implements OnModuleInit {
     } catch {
       /* already present or engine without IF NOT EXISTS */
     }
+    try {
+      await this.query(`alter table hq_tills add column if not exists unpaired_at timestamptz`);
+    } catch {
+      /* already present or engine without IF NOT EXISTS */
+    }
+    await this.query(`create table if not exists hq_till_payments (
+      id text primary key,
+      till_id text not null,
+      till_name text not null,
+      reference text not null unique,
+      provider text not null,
+      amount_minor integer not null,
+      currency text not null default 'NGN',
+      status text not null default 'paid',
+      expires_at timestamptz not null,
+      paid_at timestamptz not null default now()
+    )`);
     await this.query(`create table if not exists hq_org_kv (
       key text primary key,
       data jsonb not null
@@ -268,7 +286,7 @@ export class DbService implements OnModuleInit {
     if (!emails.length) return;
     const demoted = await this.query(
       `update hq_accounts set group_id = 'g-admin'
-       where group_id = 'g-super-admin' and lower(email) <> all($1::text[])`,
+       where group_id = 'g-super-admin' and not (lower(email) = any($1::text[]))`,
       [emails],
     );
     if (demoted.rowCount) {

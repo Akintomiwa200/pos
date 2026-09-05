@@ -49,6 +49,7 @@ export type HqTill = {
   sessionToken: string | null;
   pairedAt: string | null;
   lastSeenAt: string | null;
+  unpairedAt: string | null;
   subscriptionExpiresAt: string | null;
 };
 

@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { Boxes, Plus } from "lucide-react";
 import { toast } from "@/lib/toast";
 import {
+  categorySlug,
   deleteCategory,
   getTaxonomyUsage,
   listCategories,
@@ -15,7 +16,7 @@ import {
   type TaxonomyUsage,
 } from "@/lib/hq-taxonomy";
 import { naira } from "@/lib/hq-ops";
-import { listCatalog } from "@/lib/hq-api";
+import { useLiveCatalog } from "@/lib/live-catalog";
 import { ManagerSkeleton } from "../Skeleton";
 import { SlideOver } from "../SlideOver";
 import { DataTable, Field, PrimaryButton, ToggleField, fieldClass } from "./SetupChrome";
@@ -25,28 +26,33 @@ type Draft = { id?: string; name: string; note: string; active: boolean };
 const blank: Draft = { name: "", note: "", active: true };
 
 export function CategoriesManager() {
+  const { items: catalog, live } = useLiveCatalog();
   const [rows, setRows] = useState<TaxonomyRecord[]>([]);
   const [usage, setUsage] = useState<TaxonomyUsage | null>(null);
-  const [stockByCategory, setStockByCategory] = useState<Map<string, number>>(new Map());
   const [draft, setDraft] = useState<Draft>(blank);
   const [originalName, setOriginalName] = useState("");
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
 
+  const valuesByCategory = useMemo(() => {
+    const values = new Map<string, { cost: number; retail: number }>();
+    for (const item of catalog) {
+      const row = values.get(item.category) ?? { cost: 0, retail: 0 };
+      row.cost += item.onHand * (item.costMinor ?? 0);
+      row.retail += item.onHand * item.priceMinor;
+      values.set(item.category, row);
+    }
+    return values;
+  }, [catalog]);
+
   async function load() {
-    const [categories, taxonomy, catalog] = await Promise.all([
+    const [categories, taxonomy] = await Promise.all([
       listCategories(),
       getTaxonomyUsage(),
-      listCatalog(),
     ]);
-    const stock = new Map<string, number>();
-    for (const item of catalog) {
-      stock.set(item.category, (stock.get(item.category) ?? 0) + item.onHand * item.priceMinor);
-    }
     setRows(categories);
     setUsage(taxonomy);
-    setStockByCategory(stock);
     setReady(true);
   }
 
@@ -107,7 +113,8 @@ export function CategoriesManager() {
     }
   }
 
-  const totalValue = [...stockByCategory.values()].reduce((sum, value) => sum + value, 0);
+  const totalCost = [...valuesByCategory.values()].reduce((sum, row) => sum + row.cost, 0);
+  const totalRetail = [...valuesByCategory.values()].reduce((sum, row) => sum + row.retail, 0);
   const activeCount = rows.filter((row) => row.active).length;
 
   return (
@@ -118,8 +125,8 @@ export function CategoriesManager() {
             Categories
           </h1>
           <p className="mt-3 text-[14px] text-pos-ink-muted">
-            Top-level product groups · {activeCount} active · stock value{" "}
-            {naira(totalValue, 0)}
+            Top-level product groups · {activeCount} active · cost value{" "}
+            {naira(totalCost, 0)} · {live ? "live" : "offline"}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -136,7 +143,7 @@ export function CategoriesManager() {
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-[20px] bg-pos-surface p-4 shadow-pos-sm">
           <p className="text-[13px] text-pos-ink-faint">Categories</p>
           <p className="mt-2 text-[24px] font-semibold tabular-nums">{rows.length}</p>
@@ -146,17 +153,23 @@ export function CategoriesManager() {
           <p className="mt-2 text-[24px] font-semibold tabular-nums">{activeCount}</p>
         </div>
         <div className="rounded-[20px] bg-pos-surface p-4 shadow-pos-sm">
-          <p className="text-[13px] text-pos-ink-faint">Stock value</p>
+          <p className="text-[13px] text-pos-ink-faint">Cost value</p>
           <p className="mt-2 truncate text-[22px] font-semibold tabular-nums">
-            {naira(totalValue, 0)}
+            {naira(totalCost, 0)}
+          </p>
+        </div>
+        <div className="rounded-[20px] bg-pos-surface p-4 shadow-pos-sm">
+          <p className="text-[13px] text-pos-ink-faint">Selling value</p>
+          <p className="mt-2 truncate text-[22px] font-semibold tabular-nums">
+            {naira(totalRetail, 0)}
           </p>
         </div>
       </div>
 
-      <DataTable columns={["Category", "Description", "Products", "Stock value", "Status"]}>
+      <DataTable columns={["Category", "Description", "Products", "Cost value", "Selling value", "Status", ""]}>
         {sorted.length === 0 ? (
           <tr>
-            <td className="px-4 py-12 text-center text-pos-ink-faint" colSpan={5}>
+            <td className="px-4 py-12 text-center text-pos-ink-faint" colSpan={7}>
               No categories yet.{" "}
               <Link href="/setup/items/items" className="font-medium text-pos-primary">
                 Add a product
@@ -167,7 +180,8 @@ export function CategoriesManager() {
         ) : (
           sorted.map((row) => {
             const count = productCount(usage, "categories", row.name);
-            const value = stockByCategory.get(row.name) ?? 0;
+            const value = valuesByCategory.get(row.name) ?? { cost: 0, retail: 0 };
+            const href = `/setup/items/groups/${categorySlug(row.name)}`;
             return (
               <tr
                 key={row.id}
@@ -179,7 +193,14 @@ export function CategoriesManager() {
                     <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-pos-surface-muted text-[13px] font-semibold">
                       {row.name.slice(0, 1).toUpperCase()}
                     </span>
-                    <span className="font-semibold text-pos-ink">{row.name}</span>
+                    <span className="min-w-0">
+                      <span className="block truncate font-semibold text-pos-ink">{row.name}</span>
+                      {!row.active ? (
+                        <span className="mt-0.5 block text-[11px] text-pos-ink-faint">
+                          Inactive — hidden on tills
+                        </span>
+                      ) : null}
+                    </span>
                   </div>
                 </td>
                 <td className="px-4 py-3.5 text-pos-ink-muted">
@@ -189,7 +210,10 @@ export function CategoriesManager() {
                   {count}
                 </td>
                 <td className="px-4 py-3.5 font-medium tabular-nums text-pos-ink">
-                  {naira(value, 0)}
+                  {naira(value.cost, 0)}
+                </td>
+                <td className="px-4 py-3.5 font-medium tabular-nums text-pos-ink">
+                  {naira(value.retail, 0)}
                 </td>
                 <td className="px-4 py-3.5">
                   <span
@@ -202,6 +226,16 @@ export function CategoriesManager() {
                     {row.active ? "Active" : "Inactive"}
                   </span>
                 </td>
+                <td className="px-4 py-3.5 text-right">
+                  <Link
+                    href={href}
+                    onClick={(event) => event.stopPropagation()}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-pos-surface px-3.5 py-2 text-[13px] font-medium text-pos-ink shadow-pos-sm transition hover:bg-pos-surface-muted"
+                  >
+                    <Boxes size={14} />
+                    View products
+                  </Link>
+                </td>
               </tr>
             );
           })
@@ -212,6 +246,7 @@ export function CategoriesManager() {
         open={open}
         title={draft.id ? "Edit category" : "New category"}
         subtitle="Renaming updates all products in this category."
+        size="lg"
         onClose={() => setOpen(false)}
         footer={
           <div className="flex gap-2">
@@ -245,30 +280,41 @@ export function CategoriesManager() {
           </div>
         }
       >
-        <Field label="Name">
-          <input
-            className={fieldClass}
-            value={draft.name}
-            disabled={busy}
-            placeholder="e.g. Beverages"
-            onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+        <div className="space-y-6">
+          <Field label="Name">
+            <input
+              className={fieldClass}
+              value={draft.name}
+              disabled={busy}
+              placeholder="e.g. Beverages"
+              onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+            />
+          </Field>
+          <Field label="Description">
+            <textarea
+              rows={2}
+              className={fieldClass}
+              value={draft.note}
+              disabled={busy}
+              placeholder="Optional note for staff"
+              onChange={(event) => setDraft({ ...draft, note: event.target.value })}
+            />
+          </Field>
+          <ToggleField
+            label="Active"
+            checked={draft.active}
+            onChange={(active) => setDraft({ ...draft, active })}
           />
-        </Field>
-        <Field label="Description">
-          <textarea
-            rows={2}
-            className={fieldClass}
-            value={draft.note}
-            disabled={busy}
-            placeholder="Optional note for staff"
-            onChange={(event) => setDraft({ ...draft, note: event.target.value })}
-          />
-        </Field>
-        <ToggleField
-          label="Active"
-          checked={draft.active}
-          onChange={(active) => setDraft({ ...draft, active })}
-        />
+          {draft.id ? (
+            <Link
+              href={`/setup/items/groups/${categorySlug(draft.name) || categorySlug(originalName)}`}
+              className="flex w-full items-center justify-center gap-2 rounded-full bg-pos-surface px-4 py-2.5 text-sm font-medium text-pos-ink shadow-pos-sm transition hover:bg-pos-surface-muted"
+            >
+              <Boxes size={15} />
+              View & manage products
+            </Link>
+          ) : null}
+        </div>
       </SlideOver>
     </div>
   );

@@ -226,8 +226,9 @@ function isAlwaysAllowed(pathname: string) {
 }
 
 export function pathMatchesHref(pathname: string, href: string) {
-  if (href === "/admin") return pathname === "/admin";
-  return pathname === href || pathname.startsWith(`${href}/`);
+  const clean = href.split("?")[0];
+  if (clean === "/admin") return pathname === "/admin";
+  return pathname === clean || pathname.startsWith(`${clean}/`);
 }
 
 export function canAccessPath(

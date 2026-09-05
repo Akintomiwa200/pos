@@ -267,9 +267,23 @@ export class ConsoleController {
     return this.consoleService.regenerateTillCode(id);
   }
 
+  @Post("tills/:id/unpair")
+  unpairTill(@Param("id") id: string) {
+    return this.consoleService.unpairTill(id);
+  }
+
   @Post("tills/:id/renew")
   renewTill(@Param("id") id: string) {
     return this.consoleService.renewTill(id);
+  }
+
+  @Post("tills/:id/renew/pay")
+  renewTillWithPayment(
+    @Param("id") id: string,
+    @Body()
+    body: { reference?: string; provider?: string; amountMinor?: number; currency?: string },
+  ) {
+    return this.consoleService.renewTillWithPayment(id, body);
   }
 
   @Delete("tills/:id")

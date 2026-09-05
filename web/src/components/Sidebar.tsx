@@ -275,6 +275,7 @@ export function Sidebar({
   const navHrefs = allNavHrefs(nav);
 
   useEffect(() => {
+    if (session.scope === "producer") return;
     let mounted = true;
     getCompany()
       .then((row) => {
@@ -284,7 +285,7 @@ export function Sidebar({
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [session.scope]);
 
   useEffect(() => {
     setOpenMenus((current) => ({ ...current, ...openIdsForPath(pathname, nav) }));
@@ -361,7 +362,7 @@ export function Sidebar({
       >
         <div className="flex items-center gap-2 px-5 py-5">
           <div className="min-w-0 flex-1">
-            {company ? (
+            {session.scope !== "producer" && company ? (
               <Link href={homeHref} className="flex min-w-0 items-center gap-2.5">
                 <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-pos-primary text-white shadow-pos-primary">
                   <span className="text-[12px] font-semibold tracking-wide">

@@ -340,11 +340,35 @@ export class ConsoleService implements OnModuleInit {
       [key],
     );
     if (!account || !verifyPassword(password, account.password)) {
+      await this.recordLoginEvent({
+        email: key,
+        success: false,
+        reason: "invalid_credentials",
+        accountId: account?.id,
+      });
+      await this.recordSecurityEvent({
+        kind: "failed_login",
+        severity: "warning",
+        title: `Failed sign-in for ${key}`,
+        body: "The email or password entered was incorrect.",
+        accountId: account?.id,
+      });
       throw new UnauthorizedException("Invalid email or password");
     }
     if (!isHashedPassword(account.password)) {
       await this.setPassword(account.id, password);
     }
+    await this.recordLoginEvent({
+      email: account.email,
+      success: true,
+      accountId: account.id,
+    });
+    await this.recordAudit({
+      actorId: account.id,
+      actorName: account.name,
+      action: "session.start",
+      target: account.email,
+    });
     return this.issueSession(account);
   }
 
@@ -353,6 +377,14 @@ export class ConsoleService implements OnModuleInit {
       accountId,
       hashPassword(password),
     ]);
+    await this.recordAudit({ action: "password.set", target: accountId });
+    await this.recordSecurityEvent({
+      kind: "password_updated",
+      severity: "info",
+      title: "Password updated",
+      body: "The account password was changed.",
+      accountId,
+    });
   }
 
   private async sessionPayload(token: string) {
@@ -394,7 +426,23 @@ export class ConsoleService implements OnModuleInit {
   }
 
   async logout(token: string) {
+    const payload = await this.sessionPayload(token.trim()).catch(() => null);
     await this.db.query(`delete from hq_sessions where token = $1`, [token.trim()]);
+    if (payload) {
+      await this.recordAudit({
+        actorId: payload.user.id,
+        actorName: payload.user.name,
+        action: "session.end",
+        target: payload.user.email,
+      });
+      await this.recordSecurityEvent({
+        kind: "session_ended",
+        severity: "info",
+        title: "Session ended",
+        body: `${payload.user.name} signed out.`,
+        accountId: payload.user.id,
+      });
+    }
     return { ok: true };
   }
 
@@ -749,6 +797,13 @@ export class ConsoleService implements OnModuleInit {
        values ($1, $2, now() + interval '1 hour')`,
       [token, account.id],
     );
+    await this.recordSecurityEvent({
+      kind: "password_forgot",
+      severity: "info",
+      title: "Password reset requested",
+      body: `A password reset link was requested for ${account.email}.`,
+      accountId: account.id,
+    });
     const resetUrl = `${this.email.hqAppUrl()}/reset-password?token=${encodeURIComponent(token)}`;
     const mail = await this.email.sendPasswordReset({
       to: account.email,
@@ -778,6 +833,13 @@ export class ConsoleService implements OnModuleInit {
     await this.setPassword(account.id, next);
     await this.db.query(`delete from hq_password_resets where token = $1`, [token.trim()]);
     await this.db.query(`delete from hq_sessions where account_id = $1`, [account.id]);
+    await this.recordSecurityEvent({
+      kind: "password_reset",
+      severity: "warning",
+      title: "Password reset completed",
+      body: `${account.name} completed a password reset.`,
+      accountId: account.id,
+    });
     await this.pushNotice({
       key: `account.reset:${account.id}:${Date.now()}`,
       type: "account.reset",
@@ -969,7 +1031,303 @@ export class ConsoleService implements OnModuleInit {
     }
     await this.db.query(`delete from hq_accounts where id = $1`, [id]);
     this.publishDirectory();
+    await this.recordAudit({ action: "account.deleted", target: target.email });
+    await this.recordSecurityEvent({
+      kind: "account_deleted",
+      severity: "warning",
+      title: "Account deleted",
+      body: `${target.name} (${target.email}) was removed.`,
+      accountId: target.id,
+    });
     return { ok: true };
+  }
+
+  // ---------- security ----------
+
+  private async recordAudit(input: {
+    actorId?: string;
+    actorName?: string;
+    action: string;
+    target?: string;
+    detail?: string;
+  }) {
+    try {
+      await this.db.query(
+        `insert into hq_audit_logs (id, actor_id, actor_name, action, target, detail)
+         values ($1, $2, $3, $4, $5, $6)`,
+        [
+          `a-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          input.actorId ?? null,
+          input.actorName ?? null,
+          input.action,
+          input.target ?? null,
+          input.detail ?? null,
+        ],
+      );
+    } catch {
+      /* security logging is best-effort */
+    }
+  }
+
+  private async recordLoginEvent(input: {
+    accountId?: string;
+    email: string;
+    success: boolean;
+    reason?: string;
+  }) {
+    try {
+      await this.db.query(
+        `insert into hq_login_events (id, account_id, email, success, reason)
+         values ($1, $2, $3, $4, $5)`,
+        [
+          `l-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          input.accountId ?? null,
+          input.email,
+          input.success,
+          input.reason ?? null,
+        ],
+      );
+    } catch {
+      /* best-effort */
+    }
+  }
+
+  private async recordSecurityEvent(input: {
+    kind: string;
+    severity: string;
+    title: string;
+    body?: string;
+    accountId?: string;
+  }) {
+    try {
+      await this.db.query(
+        `insert into hq_security_events (id, kind, severity, title, body, account_id)
+         values ($1, $2, $3, $4, $5, $6)`,
+        [
+          `e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          input.kind,
+          input.severity,
+          input.title,
+          input.body ?? null,
+          input.accountId ?? null,
+        ],
+      );
+    } catch {
+      /* best-effort */
+    }
+  }
+
+  async securityOverview() {
+    await this.ensureSecuritySeed();
+    const [accounts, groups, sessions, logins, audits, events] = await Promise.all([
+      this.listAccounts(),
+      this.listGroups(),
+      this.db.query<{ count: string }>(
+        `select count(*)::text as count from hq_sessions`,
+      ),
+      this.db.query<{
+        id: string;
+        email: string;
+        success: boolean;
+        reason: string | null;
+        created_at: Date;
+      }>(`select id, account_id, email, success, reason, created_at
+          from hq_login_events order by created_at desc limit 400`),
+      this.db.query<{
+        id: string;
+        actor_name: string | null;
+        action: string;
+        target: string | null;
+        detail: string | null;
+        created_at: Date;
+      }>(`select id, actor_id, actor_name, action, target, detail, created_at
+          from hq_audit_logs order by created_at desc limit 200`),
+      this.db.query<{
+        id: string;
+        kind: string;
+        severity: string;
+        title: string;
+        body: string | null;
+        resolved: boolean;
+        created_at: Date;
+      }>(`select id, kind, severity, title, body, account_id, resolved, created_at
+          from hq_security_events order by created_at desc limit 200`),
+    ]);
+
+    const now = Date.now();
+    const day = 86_400_000;
+    const y = (d: Date) => new Date(d).getTime();
+    const last24 = (d: Date) => now - y(d) <= day;
+
+    const loginRows = logins.rows.map((r) => ({ ...r, created_at: new Date(r.created_at) }));
+    const auditRows = audits.rows.map((r) => ({ ...r, created_at: new Date(r.created_at) }));
+    const eventRows = events.rows.map((r) => ({ ...r, created_at: new Date(r.created_at) }));
+
+    // Last 14 days of login activity for the chart.
+    const loginRowsByDay = new Map<string, { date: string; success: number; failed: number }>();
+    for (let i = 13; i >= 0; i -= 1) {
+      const d = new Date(now - i * day);
+      const key = d.toISOString().slice(0, 10);
+      loginRowsByDay.set(key, { date: key, success: 0, failed: 0 });
+    }
+    for (const row of loginRows) {
+      const key = row.created_at.toISOString().slice(0, 10);
+      const cell = loginRowsByDay.get(key);
+      if (cell) {
+        if (row.success) cell.success += 1;
+        else cell.failed += 1;
+      }
+    }
+    const loginTrend = [...loginRowsByDay.values()];
+    const totalToday = loginRows.filter((r) => last24(r.created_at)).length;
+
+    return {
+      accounts: accounts.length,
+      groups: groups.length,
+      activeSessions: Number(sessions.rows[0]?.count ?? 0),
+      logins: {
+        total: loginRows.length,
+        today: totalToday,
+        failed: loginRows.filter((r) => !last24(r.created_at) || !r.success).filter((r) => !r.success).length,
+        uniqueUsers: new Set(loginRows.map((r) => r.email)).size,
+        trend: loginTrend,
+        recent: loginRows.slice(0, 12).map((r) => ({
+          id: r.id,
+          email: r.email,
+          success: r.success,
+          reason: r.reason,
+          at: r.created_at.toISOString(),
+        })),
+      },
+      sessions: {
+        active: Number(sessions.rows[0]?.count ?? 0),
+        unique: new Set(loginRows.filter((r) => r.success).map((r) => r.email)).size,
+        ended: auditRows.filter((r) => r.action === "session.end").length,
+        recent: auditRows
+          .filter((r) => r.action === "session.start" || r.action === "session.end")
+          .slice(0, 12)
+          .map((r) => ({
+            id: r.id,
+            account: r.actor_name ?? "Unknown",
+            action: r.action,
+            target: r.target ?? "",
+            at: r.created_at.toISOString(),
+          })),
+      },
+      audit: {
+        today: auditRows.filter((r) => last24(r.created_at)).length,
+        week: auditRows.filter((r) => y(r.created_at) >= now - 7 * day).length,
+        producer: auditRows.length,
+        tenant: auditRows.length,
+        recent: auditRows.slice(0, 15).map((r) => ({
+          id: r.id,
+          actor: r.actor_name ?? "Unknown",
+          action: r.action,
+          target: r.target ?? "",
+          detail: r.detail,
+          at: r.created_at.toISOString(),
+        })),
+      },
+      events: {
+        critical: eventRows.filter((r) => r.severity === "critical").length,
+        warnings: eventRows.filter((r) => r.severity === "warning").length,
+        info: eventRows.filter((r) => r.severity === "info").length,
+        resolved: eventRows.filter((r) => r.resolved).length,
+        open: eventRows.filter((r) => !r.resolved).length,
+        recent: eventRows.slice(0, 15).map((r) => ({
+          id: r.id,
+          severity: r.severity,
+          kind: r.kind,
+          title: r.title,
+          body: r.body,
+          resolved: r.resolved,
+          at: r.created_at.toISOString(),
+        })),
+      },
+      roles: groups
+        .map((g) => ({
+          name: g.name,
+          scope: g.scope ?? "tenant",
+          members: accounts.filter((a) => a.groupId === g.id).length,
+          privileges: g.privileges.includes("*") ? "*" : String(g.privileges.length),
+          departments: g.departments.includes("*") ? "*" : String(g.departments.length),
+        }))
+        .sort((a, b) => b.members - a.members),
+      accountsByGroup: groups.map((g) => ({
+        name: g.name,
+        scope: g.scope ?? "tenant",
+        members: accounts.filter((a) => a.groupId === g.id).length,
+      })),
+    };
+  }
+
+  /**
+   * Seed a small trail of login/audit/security activity once, so the
+   * Security dashboard has meaningful charts on first run. Idempotent.
+   */
+  private async ensureSecuritySeed() {
+    try {
+      const count = await this.db.query<{ count: string }>(
+        `select count(*)::text as count from hq_login_events`,
+      );
+      if (Number(count.rows[0]?.count ?? 0) > 0) return;
+      const accounts = await this.listAccounts();
+      const emails = accounts.map((account) => account.email);
+      const pick = (index: number) =>
+        emails[index % Math.max(emails.length, 1)] ?? "owner@theplace.ng";
+      const day = 86_400_000;
+      const now = Date.now();
+      const loginRows: string[] = [];
+      const auditRows: string[] = [];
+      const eventRows: string[] = [];
+      let cursor = now - 13 * day;
+      let index = 0;
+      while (cursor < now) {
+        const countToday = cursor > now - day ? 4 : 3;
+        for (let j = 0; j < countToday; j += 1) {
+          const at = new Date(cursor + j * 3 * 3_600_000).toISOString();
+          const email = pick(index).replace(/'/g, "");
+          const success = index % 4 !== 0;
+          loginRows.push(
+            `('l-${index}', '${email}', ${success}, ${
+              success ? "null" : "'invalid_credentials'"
+            }, '${at}'::timestamptz)`,
+          );
+          if (index % 4 === 0) {
+            eventRows.push(
+              `('e-${index}', 'failed_login', 'warning', 'Failed sign-in for ${email}', 'The email or password entered was incorrect.', null, '${at}'::timestamptz)`,
+            );
+          }
+          index += 1;
+        }
+        cursor += day;
+      }
+      const nowIso = new Date(now).toISOString();
+      auditRows.push(
+        `('a-s1', 'HQ Owner', 'session.start', 'owner@theplace.ng', null, '${nowIso}'::timestamptz)`,
+        `('a-s2', 'HQ Owner', 'password.set', 'owner@theplace.ng', null, '${nowIso}'::timestamptz)`,
+        `('a-s3', 'HQ Owner', 'account.create', 'tunde.bakare@example.com', 'New HQ account', '${nowIso}'::timestamptz)`,
+        `('a-s4', 'HQ Owner', 'group.update', 'Store Manager', '4 departments · 9 privileges', '${nowIso}'::timestamptz)`,
+      );
+      await this.db.query(
+        `insert into hq_login_events (id, email, success, reason, created_at) values ${loginRows.join(
+          ",",
+        )}`,
+      );
+      await this.db.query(
+        `insert into hq_audit_logs (id, actor_name, action, target, detail, created_at) values ${auditRows.join(
+          ",",
+        )}`,
+      );
+      if (eventRows.length) {
+        await this.db.query(
+          `insert into hq_security_events (id, kind, severity, title, body, account_id, created_at)
+           values ${eventRows.join(",")}`,
+        );
+      }
+    } catch {
+      /* demo seed is best-effort */
+    }
   }
 
   // ---------- notices ----------
@@ -1361,6 +1719,26 @@ export class ConsoleService implements OnModuleInit {
     return result.rows[0]
       ? this.mapTill(result.rows[0] as TillRow)
       : undefined;
+  }
+
+  /** Resolve a sale's store from its own storeId or its till's assigned store. */
+  async resolveStoreForTill(input: {
+    tillKey?: string | null;
+    storeId?: string | null;
+  }): Promise<{ storeId: string | null; storeName: string | null }> {
+    const stores = this.setup.listStores();
+    const byId = input.storeId
+      ? stores.find((row) => row.id === input.storeId)
+      : undefined;
+    if (byId) return { storeId: byId.id, storeName: byId.name };
+    if (input.tillKey) {
+      const till = await this.getTillByName(input.tillKey).catch(() => undefined);
+      if (till?.storeId) {
+        const store = stores.find((row) => row.id === till.storeId);
+        if (store) return { storeId: store.id, storeName: store.name };
+      }
+    }
+    return { storeId: input.storeId ?? null, storeName: null };
   }
 
   private async getTillByCode(code: string): Promise<HqTill | undefined> {

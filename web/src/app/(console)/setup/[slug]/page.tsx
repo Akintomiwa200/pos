@@ -14,5 +14,5 @@ export default async function SetupPage({
   if (!config) {
     return <DepartmentPage kicker="Setup" title={slug.replace(/-/g, " ")} />;
   }
-  return <DirectoryManager config={config} />;
+  return <DirectoryManager configKey={slug} />;
 }

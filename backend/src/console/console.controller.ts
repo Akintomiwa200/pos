@@ -218,6 +218,11 @@ export class ConsoleController {
     return this.consoleService.deleteAccount(id);
   }
 
+  @Get("security/overview")
+  securityOverview() {
+    return this.consoleService.securityOverview();
+  }
+
   @Get("tills")
   tills() {
     return this.consoleService.listTills();

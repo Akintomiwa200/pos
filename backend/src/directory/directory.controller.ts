@@ -6,13 +6,20 @@ import {
   NotFoundException,
   Param,
   Post,
+  Sse,
 } from "@nestjs/common";
-import { DirectoryService } from "./directory.service";
+import { map } from "rxjs";
+import { DirectoryService, type DirectoryRowsEvent } from "./directory.service";
 import { isDirectoryName, type DirectoryName, type DirectoryRecord } from "./directory.types";
 
 @Controller("directory")
 export class DirectoryController {
   constructor(private readonly directory: DirectoryService) {}
+
+  @Sse("stream")
+  stream() {
+    return this.directory.stream().pipe(map((data) => ({ data })));
+  }
 
   @Get(":name")
   list(@Param("name") name: string) {

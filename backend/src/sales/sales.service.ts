@@ -11,6 +11,11 @@ export type StoredSale = {
   cashierName: string;
   totalMinor: number;
   loyaltyNumber?: string | null;
+  tillKey?: string | null;
+  customerName?: string | null;
+  customerPhone?: string | null;
+  storeId?: string | null;
+  storeName?: string | null;
   lines: Array<{
     id: string;
     itemId: string;
@@ -60,8 +65,11 @@ export class SalesService implements OnModuleInit {
   }
 
   async record(sale: StoredSale) {
+    const { storeId, storeName } = await this.consoleService.resolveStoreForTill(sale);
     const next = {
       ...sale,
+      storeId: storeId ?? sale.storeId ?? null,
+      storeName: storeName ?? sale.storeName ?? null,
       paidAt: sale.paidAt || new Date().toISOString(),
     };
     this.sales = [next, ...this.sales.filter((row) => row.ticketId !== next.ticketId)];

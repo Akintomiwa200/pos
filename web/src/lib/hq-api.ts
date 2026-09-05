@@ -54,6 +54,78 @@ function authHeaders(token: string): HeadersInit {
   return { Authorization: `Bearer ${token}` };
 }
 
+export type SecurityLoginEvent = {
+  id: string;
+  email: string;
+  success: boolean;
+  reason: string | null;
+  at: string;
+};
+
+export type SecurityTrendPoint = { date: string; success: number; failed: number };
+
+export type SecurityOverview = {
+  accounts: number;
+  groups: number;
+  activeSessions: number;
+  logins: {
+    total: number;
+    today: number;
+    failed: number;
+    uniqueUsers: number;
+    trend: SecurityTrendPoint[];
+    recent: SecurityLoginEvent[];
+  };
+  sessions: {
+    active: number;
+    unique: number;
+    ended: number;
+    recent: Array<{ id: string; account: string; action: string; target: string; at: string }>;
+  };
+  audit: {
+    today: number;
+    week: number;
+    producer: number;
+    tenant: number;
+    recent: Array<{
+      id: string;
+      actor: string;
+      action: string;
+      target: string;
+      detail: string | null;
+      at: string;
+    }>;
+  };
+  events: {
+    critical: number;
+    warnings: number;
+    info: number;
+    resolved: number;
+    open: number;
+    recent: Array<{
+      id: string;
+      severity: string;
+      kind: string;
+      title: string;
+      body: string | null;
+      resolved: boolean;
+      at: string;
+    }>;
+  };
+  roles: Array<{
+    name: string;
+    scope: string;
+    members: number;
+    privileges: string;
+    departments: string;
+  }>;
+  accountsByGroup: Array<{ name: string; scope: string; members: number }>;
+};
+
+export async function getSecurityOverview(): Promise<SecurityOverview> {
+  return api<SecurityOverview>("/api/console/security/overview");
+}
+
 function asSession(data: { token: string; user: Omit<ConsoleSession, "token"> }): ConsoleSession {
   const session: ConsoleSession = { token: data.token, ...data.user };
   writeSession(session);
@@ -229,6 +301,12 @@ export type HqSale = {
   tender: string;
   cashierName: string;
   totalMinor: number;
+  loyaltyNumber?: string | null;
+  tillKey?: string | null;
+  customerName?: string | null;
+  customerPhone?: string | null;
+  storeId?: string | null;
+  storeName?: string | null;
   lines?: Array<{
     id?: string;
     itemId?: string;

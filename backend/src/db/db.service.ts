@@ -166,6 +166,35 @@ export class DbService implements OnModuleInit {
       key text primary key,
       data jsonb not null
     )`);
+    await this.query(`create table if not exists hq_login_events (
+      id text primary key,
+      account_id text,
+      email text not null,
+      success boolean not null default false,
+      reason text,
+      ip text,
+      created_at timestamptz not null default now()
+    )`);
+    await this.query(`create table if not exists hq_audit_logs (
+      id text primary key,
+      actor_id text,
+      actor_name text,
+      action text not null,
+      target text,
+      detail text,
+      ip text,
+      created_at timestamptz not null default now()
+    )`);
+    await this.query(`create table if not exists hq_security_events (
+      id text primary key,
+      kind text not null,
+      severity text not null default 'info',
+      title text not null,
+      body text,
+      account_id text,
+      resolved boolean not null default false,
+      created_at timestamptz not null default now()
+    )`);
   }
 
   private async seed() {

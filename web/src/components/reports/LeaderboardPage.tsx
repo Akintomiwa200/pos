@@ -195,48 +195,68 @@ function filterSalesByPeriod(sales: HqSale[], period: LeaderPeriod) {
   return sales.filter((sale) => new Date(sale.paidAt).getTime() >= cutoff);
 }
 
-function buildFromSales(
+type LeaderBucket = {
+  key: string;
+  name: string;
+  email?: string;
+  sellMinor: number;
+  orders: number;
+  units: number;
+};
+
+function aggregateByDimension(
   sales: HqSale[],
-  entities: Array<{ id: string; name: string; email?: string }>,
-): LeaderEntry[] {
-  const map = new Map<
-    string,
-    { entity: (typeof entities)[number]; sellMinor: number; orders: number; units: number }
-  >();
-
-  for (const entity of entities) {
-    map.set(entity.id, { entity, sellMinor: 0, orders: 0, units: 0 });
-  }
-
+  pick: (sale: HqSale) => { key: string; name: string } | null,
+): LeaderBucket[] {
+  const map = new Map<string, LeaderBucket>();
   for (const sale of sales) {
-    const bucket =
-      entities[hashCode(sale.ticketId) % Math.max(entities.length, 1)] ?? entities[0];
-    if (!bucket) continue;
-    const row = map.get(bucket.id);
-    if (!row) continue;
-    row.sellMinor += sale.totalMinor;
-    row.orders += 1;
-    row.units += (sale.lines ?? []).reduce((sum, line) => sum + line.quantity, 0);
+    const picked = pick(sale);
+    if (!picked) continue;
+    let bucket = map.get(picked.key);
+    if (!bucket) {
+      bucket = { key: picked.key, name: picked.name, sellMinor: 0, orders: 0, units: 0 };
+      map.set(picked.key, bucket);
+    }
+    bucket.sellMinor += sale.totalMinor;
+    bucket.orders += 1;
+    bucket.units += (sale.lines ?? []).reduce((sum, line) => sum + line.quantity, 0);
   }
+  return [...map.values()].sort(
+    (a, b) => b.sellMinor - a.sellMinor || b.orders - a.orders || a.name.localeCompare(b.name),
+  );
+}
 
-  return [...map.values()]
-    .map(({ entity, sellMinor, orders, units }) => {
-      const seed = hashCode(entity.id);
-      return {
-        id: entity.id,
-        name: entity.name,
-        handle: handleFor(entity.name, entity.id),
-        email: entity.email,
-        avatar: avatarUrl(entity.name, entity.id),
-        sellMinor,
-        rating: Math.round(sellMinor / 100 + orders * 12_000 + units * 850),
-        gifts: 8_000 + (seed % 12_000),
-        gems: 7_000 + ((seed >> 3) % 11_000),
-        streak: 6_000 + ((seed >> 5) % 10_000),
-        repeats: 5_000 + ((seed >> 7) % 9_000),
-      };
-    })
-    .sort((a, b) => b.sellMinor - a.sellMinor || b.rating - a.rating);
+function enrichFromDirectory(
+  buckets: LeaderBucket[],
+  directory: DirectoryRecord[],
+  keyOf: (row: DirectoryRecord) => string,
+) {
+  const byName = new Map(directory.map((row) => [row.name.toLowerCase(), row]));
+  const byKey = new Map(directory.map((row) => [keyOf(row).toLowerCase(), row]));
+  for (const bucket of buckets) {
+    const row = byKey.get(bucket.key) ?? byName.get(bucket.name.toLowerCase());
+    if (row?.email) bucket.email = row.email;
+    if (row?.name && row.name !== bucket.name) bucket.name = row.name;
+  }
+}
+
+function toEntry(bucket: LeaderBucket): LeaderEntry {
+  const seed = hashCode(bucket.key);
+  return {
+    id: bucket.key,
+    name: bucket.name,
+    handle: handleFor(bucket.name, bucket.key),
+    email: bucket.email,
+    avatar: avatarUrl(bucket.name, bucket.key),
+    sellMinor: bucket.sellMinor,
+    rating: Math.round(
+      bucket.sellMinor / 100 + bucket.orders * 12_000 + bucket.units * 850,
+    ),
+    gifts: 8_000 + (seed % 12_000),
+    gems: 7_000 + ((seed >> 3) % 11_000),
+    streak: 6_000 + ((seed >> 5) % 10_000),
+    repeats: 5_000 + ((seed >> 7) % 9_000),
+  };
 }
 
 function resolveEntries(
@@ -248,38 +268,51 @@ function resolveEntries(
   stores: HqStore[],
 ): LeaderEntry[] {
   const filtered = filterSalesByPeriod(sales, period);
-  let rows: LeaderEntry[] = [];
 
-  if (tab === "customer") {
-    const entities = customers.map((row) => ({
-      id: row.id,
-      name: row.name,
-      email: row.email,
-    }));
-    if (entities.length) rows = buildFromSales(filtered, entities);
-  } else if (tab === "worker") {
-    const cashiers = new Map<string, { id: string; name: string }>();
-    for (const sale of filtered) {
-      const name = sale.cashierName?.trim() || "Staff";
-      if (!cashiers.has(name)) cashiers.set(name, { id: name, name });
+  if (filtered.length > 0) {
+    let buckets: LeaderBucket[] = [];
+
+    if (tab === "customer") {
+      buckets = aggregateByDimension(filtered, (sale) => {
+        const name = sale.customerName?.trim();
+        const loyalty = sale.loyaltyNumber?.trim();
+        if (name) return { key: name.toLowerCase(), name };
+        if (loyalty) return { key: loyalty.toLowerCase(), name: loyalty };
+        return { key: "walk-in", name: "Walk-in" };
+      });
+      enrichFromDirectory(
+        buckets,
+        customers,
+        (row) => row.extra?.loyaltyNumber?.toString?.() ?? row.phone ?? "",
+      );
+    } else if (tab === "worker") {
+      buckets = aggregateByDimension(filtered, (sale) => {
+        const name = sale.cashierName?.trim();
+        return name
+          ? { key: name.toLowerCase(), name }
+          : { key: "staff", name: "Staff" };
+      });
+      enrichFromDirectory(buckets, staff, (row) => row.name);
+    } else {
+      buckets = aggregateByDimension(filtered, (sale) => {
+        const name = sale.storeName?.trim() || sale.tillKey?.trim();
+        return name
+          ? { key: name.toLowerCase(), name }
+          : { key: "other", name: "Other" };
+      });
+      const byName = new Map(stores.map((row) => [row.name.toLowerCase(), row]));
+      for (const bucket of buckets) {
+        const store = byName.get(bucket.name.toLowerCase());
+        if (store) {
+          bucket.name = store.name;
+          bucket.email = `${store.name.toLowerCase().replace(/\s+/g, ".")}@shop.local`;
+        }
+      }
     }
-    const fromStaff = staff.map((row) => ({ id: row.id, name: row.name, email: row.email }));
-    const entities =
-      fromStaff.length > 0
-        ? fromStaff
-        : [...cashiers.values()].map((row) => ({ ...row, email: undefined }));
-    if (entities.length) rows = buildFromSales(filtered, entities);
-  } else {
-    const entities = stores.map((row) => ({
-      id: row.id,
-      name: row.name,
-      email: `${row.name.toLowerCase().replace(/\s+/g, ".")}@shop.local`,
-    }));
-    if (entities.length) rows = buildFromSales(filtered, entities);
-  }
 
-  if (rows.some((row) => row.sellMinor > 0)) {
-    return rows.filter((row) => row.sellMinor > 0);
+    if (buckets.some((bucket) => bucket.sellMinor > 0)) {
+      return buckets.filter((bucket) => bucket.sellMinor > 0).map(toEntry);
+    }
   }
 
   return DEMO_LEADERBOARD;

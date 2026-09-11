@@ -1,11 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { CATEGORIES } from "../../lib/demo";
 import type { CatalogItem } from "../../lib/types";
-import { computeTotals, formatMoney } from "../../lib/types";
+import { formatMoney } from "../../lib/types";
 import {
-  loyaltyPointsEarned,
-  normalizeBarcode,
   type StockMode,
   type StoreSettings,
 } from "../../lib/store-settings";
@@ -33,8 +30,6 @@ import {
 
 export function BarcodeSettings() {
   const [settings, patch] = useSettings();
-  const sample = "0008901234560001";
-  const normalized = normalizeBarcode(sample, settings);
 
   return (
     <>
@@ -43,10 +38,8 @@ export function BarcodeSettings() {
         Change a control and the next scan on this till uses it.
       </p>
       <LiveNote>
-        A scan of <strong>{sample}</strong> is read as <strong>{normalized || "(empty)"}</strong>
-        {normalized.length < settings.barcodeMinLength
-          ? ` — too short (need ${settings.barcodeMinLength} characters).`
-          : "."}{" "}
+        Scans shorter than {settings.barcodeMinLength} characters are rejected as
+        empty.{" "}
         {settings.barcodeBeep ? "A beep plays on a match." : "No beep."}{" "}
         {settings.barcodeAllowManual
           ? "Typing in search can add the item."
@@ -124,8 +117,6 @@ export function BarcodeSettings() {
 
 export function TaxSettings() {
   const [settings, patch] = useSettings();
-  const sampleSubtotal = 1_000_000;
-  const sample = computeTotals(sampleSubtotal, settings);
 
   return (
     <>
@@ -134,9 +125,7 @@ export function TaxSettings() {
         receipt update as soon as you change a rate or toggle.
       </p>
       <LiveNote>
-        On a {formatMoney(sampleSubtotal)} ticket: service {formatMoney(sample.serviceMinor)}, VAT{" "}
-        {formatMoney(sample.vatMinor)}, total <strong>{formatMoney(sample.totalMinor)}</strong>
-        {settings.pricesIncludeVat ? " (prices already include VAT)." : "."}{" "}
+        VAT at {settings.vatPercent}% is applied on every sale{settings.pricesIncludeVat ? " — prices already include VAT." : "."}{" "}
         {settings.firs
           ? "FIRS e-invoice fields (TIN, legal name) go on the slip."
           : "FIRS e-invoicing is off."}
@@ -300,8 +289,6 @@ export function StockSettings({ items }: { items: CatalogItem[] }) {
 
 export function LoyaltySettings() {
   const [settings, patch] = useSettings();
-  const sample = 350_000;
-  const points = loyaltyPointsEarned(sample, settings);
 
   return (
     <>
@@ -319,7 +306,6 @@ export function LoyaltySettings() {
                   : "card or phone"
             }, min ${settings.loyaltyMinDigits} digits).`
           : "Loyalty prompt is off — payment goes straight through."}{" "}
-        A {formatMoney(sample)} ticket earns <strong>{points} point{points === 1 ? "" : "s"}</strong>{" "}
         (1 point per ₦{settings.loyaltyEarnNaira}). Redeem value {formatMoney(settings.loyaltyRedeemMinor)}{" "}
         per point.
       </LiveNote>
@@ -400,42 +386,29 @@ export function LoyaltySettings() {
 
 export function ReceiptSettings() {
   const [settings, patch] = useSettings();
-  const preview = useMemo(() => {
-    const sale: SaleReceipt = {
-      ticketId: `${settings.invoicePrefix}-${String(settings.nextInvoiceNumber).padStart(4, "0")}`,
-      paidAt: new Date().toISOString(),
-      tender: "cash",
-      cashierName: "Tosin Adeyemi",
-      tillKey: "TILL-01",
-      customerName: "Chioma Adeyemi",
-      customerPhone: "0803 123 4567",
-      loyaltyNumber: settings.loyaltyEnabled ? "LY-88421" : null,
-      loyaltyBalanceBefore: settings.loyaltyEnabled ? 1240 : null,
-      loyaltyPointsRedeemed: settings.loyaltyEnabled ? 100 : null,
-      loyaltyRedeemMinor: settings.loyaltyEnabled ? 1000_00 : null,
-      loyaltyPointsEarned: settings.loyaltyEnabled
-        ? loyaltyPointsEarned(350000, settings)
-        : null,
-      giftCardCode: "GC48219901",
-      giftCardChargedMinor: 2000_00,
-      giftCardBalanceAfterMinor: 8000_00,
-      amountTenderedMinor: 20000_00,
-      changeMinor: 500_00,
-      discountMinor: 500_00,
-      lines: [
-        {
-          id: "p1",
-          itemId: "raspberry-tart",
-          name: "Raspberry Tart",
-          quantity: 1,
-          unitPriceMinor: 350000,
-          image: "",
-        },
-      ],
-      totalMinor: computeTotals(350000, settings).totalMinor,
-    };
-    return formatReceiptText(sale, settings);
-  }, [settings]);
+  const sale: SaleReceipt = {
+    ticketId: "",
+    paidAt: new Date().toISOString(),
+    tender: "cash",
+    cashierName: "",
+    tillKey: "",
+    customerName: "",
+    customerPhone: "",
+    loyaltyNumber: null,
+    loyaltyBalanceBefore: null,
+    loyaltyPointsRedeemed: null,
+    loyaltyRedeemMinor: null,
+    loyaltyPointsEarned: null,
+    giftCardCode: "",
+    giftCardChargedMinor: null,
+    giftCardBalanceAfterMinor: null,
+    amountTenderedMinor: 0,
+    changeMinor: 0,
+    discountMinor: 0,
+    lines: [],
+    totalMinor: 0,
+  };
+  const preview = useMemo(() => formatReceiptText(sale, settings), [settings, sale]);
 
   return (
     <>
@@ -556,7 +529,7 @@ export function PaymentsSettings() {
         Transfer. Wallet copy is shown under Wallet.
       </p>
       <LiveNote>
-        Payment screen will show: <strong>{shown.join(", ") || "Cash (fallback)"}</strong>. Transfer
+        Payment screen will show: <strong>{shown.join(", ") || "no methods"}</strong>. Transfer
         pays to {settings.payBankName} {settings.payAccountNumber} ({settings.payAccountName}).
         Cards go through {settings.gatewayDefault}.
       </LiveNote>
@@ -700,7 +673,7 @@ export function ItemsAdmin({
 
 export function CategoriesAdmin({ items }: { items: CatalogItem[] }) {
   const [settings, patch] = useSettings();
-  const names = Array.from(new Set([...CATEGORIES, ...items.map((item) => item.category)]));
+  const names = Array.from(new Set(items.map((item) => item.category)));
 
   function setVisible(name: string, visible: boolean) {
     const hidden = new Set(settings.hiddenCategories);

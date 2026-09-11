@@ -1,5 +1,6 @@
 ﻿import { DepartmentPage } from "@/components/DepartmentPage";
-import { EntityReports, type EntityKind } from "@/components/reports/EntityReports";
+import { EntityTrailFeed } from "@/components/reports/entity/EntityTrailFeed";
+import type { EntityKind } from "@/components/reports/entity/shared";
 
 const KINDS: Record<string, EntityKind> = {
   customer: "customer",
@@ -24,5 +25,5 @@ export default async function ReportPage({
       />
     );
   }
-  return <EntityReports report="trail" entity={entity} />;
+  return <EntityTrailFeed entity={entity} />;
 }

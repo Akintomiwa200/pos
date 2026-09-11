@@ -713,9 +713,7 @@ function PlatformMonthChart({
 }) {
   const colors = useThemeColors();
   useOrgLocale();
-  const faces = people.length
-    ? people
-    : [{ name: "Ada O" }, { name: "Ben K" }, { name: "Cam L" }];
+  const faces = people.length ? people : [];
   const data = months.map((row, index) => ({
     month: row.month,
     a: focus === "tickets" ? row.ta : focus === "mix" ? row.ma : row.a,
@@ -988,14 +986,15 @@ function SalesTeamCard({
             const thirdExtra = leftover[0] ?? { name: "Wallet", total: 0 };
             const otherTotal = leftover.slice(1).reduce((sum, item) => sum + item.total, 0);
             const otherShare = (otherTotal / tenderTotalAll) * 100;
-            const padDonut = tenders.length === 0;
-            const donut = [
-              { name: primary.name, value: padDonut ? 45 : Math.max(primary.total, 0), fill: colors.primary },
-              { name: second.name, value: padDonut ? 28 : Math.max(second.total, 0), fill: colors.ink },
-              { name: third.name, value: padDonut ? 14 : Math.max(third.total, 0), fill: colors.chartSlice2 },
-              { name: thirdExtra.name, value: padDonut ? 5 : Math.max(thirdExtra.total, 0), fill: colors.chartSlice3 },
-              { name: "Other", value: padDonut ? 8 : Math.max(otherTotal, 0), fill: colors.chartSlice4 },
-            ].filter((slice) => slice.value > 0);
+            const donut = tenders.length === 0
+            ? []
+            : [
+                { name: primary.name, value: Math.max(primary.total, 0), fill: colors.primary },
+                { name: second.name, value: Math.max(second.total, 0), fill: colors.ink },
+                { name: third.name, value: Math.max(third.total, 0), fill: colors.chartSlice2 },
+                { name: thirdExtra.name, value: Math.max(thirdExtra.total, 0), fill: colors.chartSlice3 },
+                { name: "Other", value: Math.max(otherTotal, 0), fill: colors.chartSlice4 },
+              ].filter((slice) => slice.value > 0);
             const myWeeks = weeks.map((week) => {
               const rows = mine.filter((sale) => inRange(sale, week.start, week.end));
               return {

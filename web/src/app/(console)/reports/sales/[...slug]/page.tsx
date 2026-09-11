@@ -2,21 +2,17 @@ import { DepartmentPage } from "@/components/DepartmentPage";
 import { GrossProfitReport, type GrossProfitVariant } from "@/components/reports/GrossProfitReport";
 import { ItemSalesPage } from "@/components/reports/ItemSalesPage";
 import { LeaderboardPage } from "@/components/reports/LeaderboardPage";
-import { SalesReports, type SalesReportVariant } from "@/components/reports/SalesReports";
+import { InvoiceBalancePage } from "@/components/reports/sales/InvoiceBalancePage";
+import { InvoiceHistoryPage } from "@/components/reports/sales/InvoiceHistoryPage";
+import { InvoiceListPage } from "@/components/reports/sales/InvoiceListPage";
+import { InvoiceSummaryPage } from "@/components/reports/sales/InvoiceSummaryPage";
+import { SalesAnalyticsPage } from "@/components/reports/sales/SalesAnalyticsPage";
+import { ShiftReportPage } from "@/components/reports/sales/ShiftReportPage";
 import {
   DocManager,
   SALES_QUOTE_CONFIG,
   SALES_RETURN_CONFIG,
 } from "@/components/transactions/DocManager";
-
-const VARIANTS: Record<string, SalesReportVariant> = {
-  analytics: "analytics",
-  "invoice/list": "invoice-list",
-  "invoice/summary": "invoice-summary",
-  "invoice/balance": "invoice-balance",
-  "invoice/history": "invoice-history",
-  "invoice/shift": "invoice-shift",
-};
 
 const GP_VARIANTS: Record<string, GrossProfitVariant> = {
   "gross-profit/by-group": "by-group",
@@ -32,8 +28,12 @@ export default async function SalesReportPage({
   const { slug = [] } = await params;
   const key = slug.join("/");
 
-  const variant = VARIANTS[key];
-  if (variant) return <SalesReports variant={variant} />;
+  if (key === "analytics") return <SalesAnalyticsPage />;
+  if (key === "invoice/list") return <InvoiceListPage />;
+  if (key === "invoice/summary") return <InvoiceSummaryPage />;
+  if (key === "invoice/balance") return <InvoiceBalancePage />;
+  if (key === "invoice/history") return <InvoiceHistoryPage />;
+  if (key === "invoice/shift") return <ShiftReportPage />;
 
   const gp = GP_VARIANTS[key];
   if (gp === "by-item") return <ItemSalesPage />;

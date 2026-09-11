@@ -400,7 +400,7 @@ export function DataPanel({
           ))}
         </div>
       </SettingsCard>
-      <SettingsCard title="Maintenance" copy="Inspect counts or reset demo catalog.">
+      <SettingsCard title="Maintenance" copy="Inspect counts, exports and catalogue imports.">
         <div className="flex flex-wrap gap-3 px-5 py-5 sm:px-6">
           {granted.has("others-data") ? (
             <Link href="/setup/others/data" className={secondaryButtonClass}>
@@ -422,7 +422,7 @@ export function DataPanel({
       </SettingsCard>
       <p className="flex items-center gap-2 text-sm text-pos-ink-muted">
         <ShoppingCart size={14} />
-        Catalog reset is available under Data overview — it does not wipe sales or tills.
+        Exports never wipe sales or tills.
       </p>
     </div>
   );

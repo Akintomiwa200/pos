@@ -3,9 +3,7 @@ export const MAX_PRODUCT_IMAGE_BYTES = 1024 * 1024;
 export const PRODUCT_IMAGE_ACCEPT = "image/jpeg,image/png,image/webp,image/gif";
 
 export function productImageSrc(id: string, image?: string | null) {
-  const url = image?.trim();
-  if (url) return url;
-  return `https://picsum.photos/seed/${encodeURIComponent(id)}/600/450`;
+  return image?.trim() || "";
 }
 
 export function validateProductImageFile(file: File): string | null {

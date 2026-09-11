@@ -3,7 +3,6 @@ import { ChevronRight, Filter, Plus, Search, X } from "lucide-react";
 import type { CatalogItem } from "../../lib/types";
 import { formatMoney } from "../../lib/types";
 import { formatPricePer, formatStock } from "../../lib/units";
-import { CATEGORIES } from "../../lib/demo";
 import { findCatalogByCode } from "../../lib/catalog";
 import { normalizeBarcode } from "../../lib/store-settings";
 import { useStoreSettings } from "../../lib/use-store-settings";
@@ -88,7 +87,7 @@ export function ItemsScreen({
 
   const chips = useMemo(() => {
     const names = Array.from(
-      new Set([...CATEGORIES, ...items.map((item) => item.category).filter(Boolean)]),
+      new Set(items.map((item) => item.category).filter(Boolean)),
     ).filter((name) => !settings.hiddenCategories.includes(name));
     const counted = names.filter((name) => {
       if (!settings.hideEmptyCategories) return true;
@@ -475,15 +474,21 @@ export function ItemsScreen({
                 className="card-hit"
                 onClick={() => onAdd(item)}
               >
-                <img
-                  src={item.image}
-                  alt=""
-                  onError={(event) => {
-                    const target = event.currentTarget;
-                    target.onerror = null;
-                    target.src = `https://picsum.photos/seed/${encodeURIComponent(item.id)}/600/450`;
-                  }}
-                />
+                {item.image ? (
+                  <img
+                    src={item.image}
+                    alt=""
+                    onError={(event) => {
+                      const target = event.currentTarget;
+                      target.onerror = null;
+                      target.src = "";
+                    }}
+                  />
+                ) : (
+                  <div className="card-img-fallback">
+                    {item.name.slice(0, 2).toUpperCase()}
+                  </div>
+                )}
               </button>
               <div className="card-foot">
                 <div className="card-body">

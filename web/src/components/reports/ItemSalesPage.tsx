@@ -316,12 +316,12 @@ export function ItemSalesPage() {
   const summary = useMemo(() => {
     if (!sales?.length || !aggregate) {
       return {
-        total: naira(764_00),
-        recent: naira(364_00),
-        pending: naira(382_00),
-        totalGrowth: 47,
-        recentGrowth: 36,
-        pendingGrowth: 40,
+        total: naira(0),
+        recent: naira(0),
+        pending: naira(0),
+        totalGrowth: 0,
+        recentGrowth: 0,
+        pendingGrowth: 0,
       };
     }
     const now = Date.now();

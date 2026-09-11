@@ -1,6 +1,5 @@
 import { Injectable, UnauthorizedException } from "@nestjs/common";
 import {
-  STAFF_USERS,
   canUnlock,
   isSellOnly,
   publicStaff,
@@ -10,7 +9,7 @@ import {
 
 @Injectable()
 export class StaffService {
-  private readonly users = STAFF_USERS;
+  private readonly users: StaffUser[] = [];
   private shifts: ShiftRecord[] = [];
   private dayClosedAt: string | null = null;
 

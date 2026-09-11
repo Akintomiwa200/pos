@@ -264,6 +264,7 @@ function BranchSettings() {
     const next: BranchRecord = {
       id: selectedId ?? `br-${Date.now()}`,
       name: name.trim(),
+      storeId: "",
       address: address.trim(),
       city: city.trim() || "Lagos",
       state: state.trim() || "Lagos",

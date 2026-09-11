@@ -250,12 +250,6 @@ export async function getSetupData() {
   }>("/api/console/setup/data");
 }
 
-export async function purgeCatalogSeed() {
-  return api<{ ok: true; total: number }>("/api/console/setup/data/purge-catalog", {
-    method: "POST",
-  });
-}
-
 export async function importCatalogRows(
   rows: Array<{
     id?: string;

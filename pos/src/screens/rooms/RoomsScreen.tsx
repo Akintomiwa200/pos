@@ -133,7 +133,7 @@ export function RoomsScreen({
               value={guestName}
               onChange={(event) => setGuestName(event.target.value)}
               className="room-guest-input"
-              placeholder="Adeola Mensah"
+              placeholder="Guest name"
               autoFocus
             />
             <div className="floor-covers">

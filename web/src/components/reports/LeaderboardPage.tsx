@@ -46,125 +46,7 @@ const PERIODS: { id: LeaderPeriod; label: string }[] = [
   { id: "all", label: "All Time" },
 ];
 
-const DEMO_LEADERBOARD: LeaderEntry[] = [
-  {
-    id: "lb-1",
-    name: "Robert Calive",
-    handle: "@Robert1234",
-    email: "robert.calive@example.com",
-    avatar: "https://i.pravatar.cc/150?u=robert-calive",
-    sellMinor: 987_148_00,
-    rating: 998_674,
-    gifts: 18_000,
-    gems: 17_000,
-    streak: 16_000,
-    repeats: 15_000,
-  },
-  {
-    id: "lb-2",
-    name: "Robert Calive",
-    handle: "@Robert1234",
-    email: "robert.calive@example.com",
-    avatar: "https://i.pravatar.cc/150?u=robert-calive-2",
-    sellMinor: 752_296_00,
-    rating: 932_674,
-    gifts: 14_000,
-    gems: 13_000,
-    streak: 12_000,
-    repeats: 11_000,
-  },
-  {
-    id: "lb-3",
-    name: "Robert Calive",
-    handle: "@Robert1234",
-    email: "robert.calive@example.com",
-    avatar: "https://i.pravatar.cc/150?u=robert-calive-3",
-    sellMinor: 567_148_00,
-    rating: 732_832,
-    gifts: 12_000,
-    gems: 11_000,
-    streak: 10_000,
-    repeats: 9_000,
-  },
-  {
-    id: "lb-4",
-    name: "Devon Lane",
-    handle: "@Devon3456",
-    email: "devon.lane@example.com",
-    avatar: "https://i.pravatar.cc/150?u=devon-lane",
-    sellMinor: 498_587_00,
-    rating: 679_985,
-    gifts: 9_500,
-    gems: 8_800,
-    streak: 8_200,
-    repeats: 7_600,
-  },
-  {
-    id: "lb-5",
-    name: "Albert Flores",
-    handle: "@Albert7890",
-    email: "albert.flores@example.com",
-    avatar: "https://i.pravatar.cc/150?u=albert-flores",
-    sellMinor: 456_210_00,
-    rating: 645_120,
-    gifts: 8_900,
-    gems: 8_100,
-    streak: 7_400,
-    repeats: 6_900,
-  },
-  {
-    id: "lb-6",
-    name: "Jane Cooper",
-    handle: "@Jane2468",
-    email: "jane.cooper@example.com",
-    avatar: "https://i.pravatar.cc/150?u=jane-cooper",
-    sellMinor: 412_880_00,
-    rating: 601_443,
-    gifts: 8_200,
-    gems: 7_500,
-    streak: 6_800,
-    repeats: 6_200,
-  },
-  {
-    id: "lb-7",
-    name: "Leslie Alexander",
-    handle: "@Leslie1357",
-    email: "leslie.alexander@example.com",
-    avatar: "https://i.pravatar.cc/150?u=leslie-alexander",
-    sellMinor: 388_450_00,
-    rating: 578_901,
-    gifts: 7_800,
-    gems: 7_100,
-    streak: 6_400,
-    repeats: 5_900,
-  },
-  {
-    id: "lb-8",
-    name: "Darrell Steward",
-    handle: "@Darrell8642",
-    email: "darrell.steward@example.com",
-    avatar: "https://i.pravatar.cc/150?u=darrell-steward",
-    sellMinor: 365_120_00,
-    rating: 552_330,
-    gifts: 7_400,
-    gems: 6_700,
-    streak: 6_000,
-    repeats: 5_500,
-  },
-  {
-    id: "lb-9",
-    name: "Darrell Steward",
-    handle: "@Darrell9753",
-    email: "darrell.steward@example.com",
-    avatar: "https://i.pravatar.cc/150?u=darrell-steward-2",
-    sellMinor: 341_900_00,
-    rating: 528_110,
-    gifts: 7_000,
-    gems: 6_300,
-    streak: 5_700,
-    repeats: 5_200,
-  },
-];
+const EMPTY_LEADERBOARD: LeaderEntry[] = [];
 
 function hashCode(value: string) {
   let hash = 0;
@@ -241,7 +123,6 @@ function enrichFromDirectory(
 }
 
 function toEntry(bucket: LeaderBucket): LeaderEntry {
-  const seed = hashCode(bucket.key);
   return {
     id: bucket.key,
     name: bucket.name,
@@ -252,10 +133,10 @@ function toEntry(bucket: LeaderBucket): LeaderEntry {
     rating: Math.round(
       bucket.sellMinor / 100 + bucket.orders * 12_000 + bucket.units * 850,
     ),
-    gifts: 8_000 + (seed % 12_000),
-    gems: 7_000 + ((seed >> 3) % 11_000),
-    streak: 6_000 + ((seed >> 5) % 10_000),
-    repeats: 5_000 + ((seed >> 7) % 9_000),
+    gifts: 0,
+    gems: 0,
+    streak: 0,
+    repeats: 0,
   };
 }
 
@@ -315,7 +196,7 @@ function resolveEntries(
     }
   }
 
-  return DEMO_LEADERBOARD;
+  return EMPTY_LEADERBOARD;
 }
 
 function PodiumAvatar({

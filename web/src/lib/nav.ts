@@ -216,15 +216,27 @@ const ACCOUNTING_STATEMENTS_NAV: NavNode[] = [
 ];
 
 const ORDERS_NAV: NavNode[] = [
-  { id: "purchase-order-list", label: "All Orders", href: "/orders/list" },
+  { id: "purchase-order-summary", label: "Order Summary", href: "/orders/summary" },
   { id: "purchase-order-new", label: "New Order", href: "/orders/new" },
-  { id: "purchase-order-drafts", label: "Drafts", href: "/orders/drafts" },
-  { id: "purchase-order-pending", label: "Pending Approval", href: "/orders/pending" },
-  { id: "purchase-order-approved", label: "Approved & Sent", href: "/orders/approved" },
-  { id: "purchase-order-receiving", label: "Receiving", href: "/orders/receiving" },
-  { id: "purchase-order-received", label: "Received", href: "/orders/received" },
-  { id: "purchase-order-cancelled", label: "Cancelled", href: "/orders/cancelled" },
-  { id: "purchase-order-summary", label: "Summary", href: "/orders/summary" },
+  {
+    id: "purchase-order-lifecycle",
+    label: "All Orders",
+    children: [
+      { id: "purchase-order-list", label: "All Orders", href: "/orders/list" },
+      { id: "purchase-order-drafts", label: "Drafts", href: "/orders/drafts" },
+      { id: "purchase-order-pending", label: "Pending Approval", href: "/orders/pending" },
+      { id: "purchase-order-approved", label: "Approved & Sent", href: "/orders/approved" },
+    ],
+  },
+  {
+    id: "purchase-order-fulfilment",
+    label: "Fulfilment",
+    children: [
+      { id: "purchase-order-receiving", label: "Receiving", href: "/orders/receiving" },
+      { id: "purchase-order-received", label: "Received", href: "/orders/received" },
+      { id: "purchase-order-cancelled", label: "Cancelled", href: "/orders/cancelled" },
+    ],
+  },
 ];
 
 const CUSTOMER_NAV: NavNode[] = [

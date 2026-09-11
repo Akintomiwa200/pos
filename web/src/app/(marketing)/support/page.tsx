@@ -4,7 +4,7 @@ import { PageHero } from "../../../components/site/PageHero";
 const topics = [
   {
     title: "First install",
-    copy: "Issue TILL-DEMO-01 or another till in HQ, then type the code on the till before anyone can sign in.",
+    copy: "Issue a till code in HQ, then type the code on the till before anyone can sign in.",
     href: "/product",
   },
   {

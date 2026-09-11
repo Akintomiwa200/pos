@@ -820,6 +820,19 @@ button {
   background: #ede9fe;
 }
 
+.card-img-fallback {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  min-height: 260px;
+  background: #ede9fe;
+  color: #7c3aed;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
 .card-foot {
   display: flex;
   align-items: flex-end;

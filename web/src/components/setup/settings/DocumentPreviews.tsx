@@ -7,35 +7,6 @@ import { listCatalog, listSales, type HqCatalogItem, type HqSale } from "@/lib/h
 import { listDirectory, type DirectoryRecord } from "@/lib/hq-directory";
 import { ReceiptBarcode } from "./ReceiptBarcode";
 
-const FALLBACK_RECEIPT_LINES = [
-  { name: "Jollof rice (large)", sku: "FD-101", qty: 2, price: 3500 },
-  { name: "Chapman", sku: "DR-044", qty: 1, price: 2500 },
-  { name: "Grilled chicken", sku: "FD-220", qty: 1, price: 6500 },
-];
-
-/** Demo amounts used only for the Settings layout preview (toggles stay meaningful). */
-const DEMO_AMOUNTS = {
-  ticketId: "10482001933",
-  till: "TILL-01 · VI",
-  tender: "Cash",
-  tendered: 20000,
-  discount: 500,
-  loyaltyNumber: "LY-88421",
-  loyaltyBalanceBefore: 1240,
-  loyaltyPointsRedeemed: 100,
-  loyaltyRedeemValue: 1000,
-  loyaltyPointsEarned: 12,
-  giftCardCode: "GC-····4821",
-  giftCardCharged: 2000,
-  giftCardBalanceAfter: 8000,
-};
-
-const FALLBACK_INVOICE_LINES = [
-  { name: "Business consultation", sku: "", qty: 1, price: 150000 },
-  { name: "Website development", sku: "", qty: 1, price: 280000 },
-  { name: "Logo design", sku: "", qty: 1, price: 65000 },
-];
-
 type PreviewLine = { name: string; sku?: string; qty: number; price: number };
 
 function tenderLabel(tender?: string | null) {
@@ -143,18 +114,14 @@ export function usePreviewData() {
     }));
   const catalogLines = fromCatalog(catalog);
   const saleLines = latest ? fromSale(latest) : [];
-  const receiptLines = saleLines.length
-    ? saleLines
-    : catalogLines.length
-      ? catalogLines
-      : FALLBACK_RECEIPT_LINES;
-  const invoiceLines = catalogLines.length ? catalogLines : FALLBACK_INVOICE_LINES;
+  const receiptLines = saleLines.length ? saleLines : catalogLines;
+  const invoiceLines = catalogLines;
 
   const amounts = parseReceiptAmounts(latest?.receiptText ?? null);
   const saleTotalMinor = amounts.totalMinor ?? latest?.totalMinor ?? 0;
   const tenderedMinor = latest
     ? amounts.tenderedMinor ?? Math.ceil(saleTotalMinor / 1000) * 1000
-    : DEMO_AMOUNTS.tendered;
+    : 0;
   const changeMinor = latest ? Math.max(0, tenderedMinor - saleTotalMinor) : 0;
   const tender = tenderLabel(latest?.tender);
 
@@ -168,9 +135,9 @@ export function usePreviewData() {
     sale: {
       hasSale: Boolean(latest),
       isCash: tender.toLowerCase() === "cash",
-      ticketId: latest?.ticketId || DEMO_AMOUNTS.ticketId,
+      ticketId: latest?.ticketId || "",
       cashier: latest?.cashierName || sessionName,
-      till: latest?.tillKey || DEMO_AMOUNTS.till,
+      till: latest?.tillKey || "",
       tender,
       tendered: tenderedMinor,
       change: changeMinor,
@@ -227,7 +194,7 @@ export function ReceiptLivePreview({
   const subtotal =
     sale.hasSale && sale.subtotalMinor != null ? sale.subtotalMinor : computedSubtotal;
   const showDiscount = draft.receiptShowDiscount !== false;
-  const discount = sale.hasSale ? (sale.discountMinor ?? 0) : showDiscount ? DEMO_AMOUNTS.discount : 0;
+  const discount = sale.hasSale ? (sale.discountMinor ?? 0) : 0;
   const afterDiscount = Math.max(0, subtotal - discount);
   const tax =
     sale.hasSale
@@ -237,14 +204,16 @@ export function ReceiptLivePreview({
         : 0;
   const serviceCharge = sale.hasSale ? (sale.serviceMinor ?? 0) : 0;
   const loyaltyRedeem =
-    draft.receiptShowLoyalty && draft.receiptShowLoyaltyRedeemed !== false
+    draft.receiptShowLoyalty &&
+    draft.receiptShowLoyaltyRedeemed !== false &&
+    sale.hasSale
       ? sale.loyaltyNumber
-        ? DEMO_AMOUNTS.loyaltyRedeemValue
+        ? sale.tendered
         : 0
       : 0;
   const giftCharge = draft.receiptShowGiftCard
-    ? sale.hasGiftCard
-      ? DEMO_AMOUNTS.giftCardCharged
+    ? sale.hasGiftCard && sale.hasSale
+      ? sale.tendered
       : 0
     : 0;
   const total =
@@ -484,19 +453,17 @@ export function ReceiptLivePreview({
               <p className="font-semibold opacity-90">Gift card</p>
               <div className="flex justify-between opacity-80">
                 <span>Card</span>
-                <span>{DEMO_AMOUNTS.giftCardCode}</span>
+                <span>{sale.ticketId}</span>
               </div>
               <div className="flex justify-between opacity-80">
                 <span>Charged</span>
-                <span className="tabular-nums">
-                  {money(DEMO_AMOUNTS.giftCardCharged, draft.currency)}
-                </span>
+                <span className="tabular-nums">{money(giftCharge, draft.currency)}</span>
               </div>
               {draft.receiptShowGiftCardBalance !== false ? (
                 <div className="flex justify-between font-medium">
                   <span>Balance left</span>
                   <span className="tabular-nums">
-                    {money(DEMO_AMOUNTS.giftCardBalanceAfter, draft.currency)}
+                    {money(Math.max(0, sale.tendered - giftCharge), draft.currency)}
                   </span>
                 </div>
               ) : null}
@@ -600,7 +567,7 @@ export function InvoiceLivePreview({
                   {company?.name || "Your company"}
                 </p>
                 <p className="mt-1 text-[11px] text-white/75">
-                  {company?.address || "Address"}
+                  {company?.address || "—"}
                 </p>
                 <p className="text-[11px] text-white/75">
                   {[company?.email, company?.phone].filter(Boolean).join(" · ")}
@@ -650,7 +617,7 @@ export function InvoiceLivePreview({
 
           <div className="px-4 py-4 sm:px-5">
             <p className="text-[11px] text-pos-ink-faint">Bill to</p>
-            <p className="text-sm font-semibold text-pos-ink">{firstCustomer?.name || "Sample Customer"}</p>
+            <p className="text-sm font-semibold text-pos-ink">{firstCustomer?.name || "—"}</p>
             <table className="mt-4 w-full text-left text-[12px]">
               <thead>
                 <tr className="border-b border-pos-border text-[10px] uppercase tracking-wide text-pos-ink-faint">

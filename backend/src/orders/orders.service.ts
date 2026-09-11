@@ -8,7 +8,6 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   ORDER_STATUSES,
-  SEED_PURCHASE_ORDERS,
   docTotal,
   isDocKind,
   nextNumber,
@@ -34,7 +33,6 @@ export class OrdersService implements OnModuleInit {
     } catch {
       /* empty */
     }
-    this.docs = structuredClone(SEED_PURCHASE_ORDERS);
     await this.persist();
   }
 

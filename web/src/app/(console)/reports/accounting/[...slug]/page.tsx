@@ -1,17 +1,10 @@
 import { DepartmentPage } from "@/components/DepartmentPage";
-import {
-  AccountingReports,
-  type AccountingVariant,
-} from "@/components/reports/AccountingReports";
-
-const VARIANTS: Record<string, AccountingVariant> = {
-  "chart-of-accounts": "chart-of-accounts",
-  journal: "journal",
-  "trial-balance": "trial-balance",
-  "profit-loss": "profit-loss",
-  "balance-sheet": "balance-sheet",
-  "cash-book": "cash-book",
-};
+import { BalanceSheetPage } from "@/components/reports/accounting/BalanceSheetPage";
+import { CashBookPage } from "@/components/reports/accounting/CashBookPage";
+import { ChartOfAccountsPage } from "@/components/reports/accounting/ChartOfAccountsPage";
+import { JournalPage } from "@/components/reports/accounting/JournalPage";
+import { ProfitLossPage } from "@/components/reports/accounting/ProfitLossPage";
+import { TrialBalancePage } from "@/components/reports/accounting/TrialBalancePage";
 
 export default async function AccountingReportPage({
   params,
@@ -20,14 +13,18 @@ export default async function AccountingReportPage({
 }) {
   const { slug = [] } = await params;
   const key = slug.join("/");
-  const variant = VARIANTS[key];
-  if (!variant) {
-    return (
-      <DepartmentPage
-        kicker="Account"
-        title={slug.length ? slug.join(" / ") : "Accounting"}
-      />
-    );
-  }
-  return <AccountingReports variant={variant} />;
+
+  if (key === "chart-of-accounts") return <ChartOfAccountsPage />;
+  if (key === "journal") return <JournalPage />;
+  if (key === "trial-balance") return <TrialBalancePage />;
+  if (key === "profit-loss") return <ProfitLossPage />;
+  if (key === "balance-sheet") return <BalanceSheetPage />;
+  if (key === "cash-book") return <CashBookPage />;
+
+  return (
+    <DepartmentPage
+      kicker="Account"
+      title={slug.length ? slug.join(" / ") : "Accounting"}
+    />
+  );
 }

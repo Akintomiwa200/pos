@@ -2,12 +2,6 @@ import { BadRequestException, Injectable, NotFoundException, OnModuleInit } from
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
-  SEED_CREDIT_RULES,
-  SEED_CREDITS,
-  SEED_GIFT_BATCHES,
-  SEED_GIFT_CARDS,
-  SEED_LOYALTY_CARDS,
-  SEED_LOYALTY_MEMBERS,
   SEED_LOYALTY_PROGRAM,
   type CustomerCredit,
   type CustomerCreditRule,
@@ -44,12 +38,12 @@ export class CustomersService implements OnModuleInit {
   async onModuleInit() {
     await mkdir(this.dir, { recursive: true });
     this.loyaltyProgram = await this.readJson(this.loyaltyFile, SEED_LOYALTY_PROGRAM);
-    this.credits = await this.readJson(this.creditsFile, SEED_CREDITS);
-    this.creditRules = await this.readJson(this.creditRulesFile, SEED_CREDIT_RULES);
-    this.loyaltyMembers = await this.readJson(this.membersFile, SEED_LOYALTY_MEMBERS);
-    this.loyaltyCards = await this.readJson(this.cardsFile, SEED_LOYALTY_CARDS);
-    this.giftCards = await this.readJson(this.giftCardsFile, SEED_GIFT_CARDS);
-    this.giftBatches = await this.readJson(this.giftBatchesFile, SEED_GIFT_BATCHES);
+    this.credits = await this.readJson(this.creditsFile, []);
+    this.creditRules = await this.readJson(this.creditRulesFile, []);
+    this.loyaltyMembers = await this.readJson(this.membersFile, []);
+    this.loyaltyCards = await this.readJson(this.cardsFile, []);
+    this.giftCards = await this.readJson(this.giftCardsFile, []);
+    this.giftBatches = await this.readJson(this.giftBatchesFile, []);
     this.customerGroups = await this.readJson(this.groupsFile, SEED_CUSTOMER_GROUPS);
     await this.persist();
   }

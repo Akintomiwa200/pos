@@ -1,7 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { CreditCard } from "lucide-react";
 import { formatMoney } from "../../lib/types";
-import { loyaltyPointsEarned } from "../../lib/store-settings";
 import { useStoreSettings } from "../../lib/use-store-settings";
 
 type Props = {
@@ -13,7 +12,6 @@ export function LoyaltyModal({ onApply, onSkip }: Props) {
   const settings = useStoreSettings();
   const [value, setValue] = useState("");
   const [error, setError] = useState("");
-  const samplePoints = loyaltyPointsEarned(350_000, settings);
 
   const prompt =
     settings.loyaltyPrompt === "card"
@@ -50,10 +48,7 @@ export function LoyaltyModal({ onApply, onSkip }: Props) {
             : settings.loyaltyPrompt === "card"
               ? "Enter the loyalty card number before payment is completed."
               : "If this customer has a loyalty card or registered phone number, enter it before the payment is completed."}{" "}
-          Spend ₦{settings.loyaltyEarnNaira} to earn 1 point
-          {samplePoints > 0
-            ? ` — a ${formatMoney(350000)} ticket earns ${samplePoints} points.`
-            : "."}
+          Spend ₦{settings.loyaltyEarnNaira} to earn 1 point.
         </p>
         <label className="loyalty-field">
           {prompt}

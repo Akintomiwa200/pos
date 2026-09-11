@@ -1,34 +1,18 @@
-import {
-  Injectable,
-  Logger,
-  OnModuleDestroy,
-  OnModuleInit,
-} from "@nestjs/common";
-import { readFile, writeFile, mkdir } from "node:fs/promises";
-import { join } from "node:path";
+import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { Pool, type QueryResult, type QueryResultRow } from "pg";
-import { newDb } from "pg-mem";
-import { SEED_ACCOUNTS, SEED_GROUPS, SEED_PRODUCER_GROUPS } from "../console/console.types";
-import { hashPassword } from "../console/password.util";
-
-type TableDump = { columns: string[]; rows: unknown[][] };
+import { SEED_GROUPS, SEED_PRODUCER_GROUPS } from "../console/console.types";
 
 @Injectable()
-export class DbService implements OnModuleInit, OnModuleDestroy {
+export class DbService implements OnModuleInit {
   private readonly logger = new Logger(DbService.name);
   private pool!: Pool;
-  private memoryMode = true;
-  private memDb?: ReturnType<typeof newDb>;
-  private persistTimer?: ReturnType<typeof setTimeout>;
-  private persistDirty = false;
-  private readonly memBackupDir = join(process.cwd(), "data");
-  private readonly memBackupFile = join(this.memBackupDir, "hq-memdb.json");
 
   constructor() {
     const connectionString = process.env.DATABASE_URL?.trim();
     if (!connectionString) {
-      this.useMemoryPool();
-      return;
+      throw new Error(
+        "DATABASE_URL is missing. Set the Supabase Postgres connection string in backend/.env to start the backend.",
+      );
     }
     const isLocal =
       /@(localhost|127\.0\.0\.1|\[::1\]|::1)[:/]/.test(connectionString) ||
@@ -39,126 +23,27 @@ export class DbService implements OnModuleInit, OnModuleDestroy {
       ssl: isLocal ? undefined : { rejectUnauthorized: false },
       application_name: "pos-backend",
     });
-    this.memoryMode = false;
   }
 
   async onModuleInit() {
-    await mkdir(this.memBackupDir, { recursive: true }).catch(() => undefined);
     try {
       await this.pool.query("select 1");
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
-      this.logger.error(
-        `Supabase Postgres unreachable (${detail}). Falling back to in-memory DB so Google and HQ still work. Use the Session pooler URL (IPv4) from Project Settings → Database.`,
+      throw new Error(
+        `Supabase Postgres unreachable (${detail}). Use the Session pooler URL (IPv4) from Project Settings → Database in backend/.env.`,
       );
-      await this.pool.end().catch(() => undefined);
-      this.useMemoryPool();
     }
-    this.logger.log(
-      this.memoryMode
-        ? "In-memory Postgres (pg-mem) — set DATABASE_URL in backend/.env for Supabase"
-        : "Supabase Postgres connected",
-    );
+    this.logger.log("Supabase Postgres connected");
     await this.ensureSchema();
-    if (this.memoryMode && (await this.restoreMemoryBackup())) {
-      this.logger.log("Restored in-memory Postgres from data/hq-memdb.json");
-    }
     await this.seed();
-    if (this.memoryMode) await this.flushMemoryBackup();
-  }
-
-  async onModuleDestroy() {
-    if (this.persistTimer) {
-      clearTimeout(this.persistTimer);
-      this.persistTimer = undefined;
-    }
-    await this.flushMemoryBackup();
-  }
-
-  private useMemoryPool() {
-    const mem = newDb({ autoCreateForeignKeyIndices: true });
-    this.memDb = mem;
-    const { Pool: MemPool } = mem.adapters.createPg();
-    this.pool = new MemPool() as unknown as Pool;
-    this.memoryMode = true;
-  }
-
-  get isMemoryMode() {
-    return this.memoryMode;
   }
 
   async query<R extends QueryResultRow = QueryResultRow>(
     sql: string,
     params?: unknown[],
   ): Promise<QueryResult<R>> {
-    const result = await this.pool.query(sql, params as never[]);
-    if (this.memoryMode && this.memDb && !this.isReadOnlyQuery(sql)) {
-      this.schedulePersist();
-    }
-    return result;
-  }
-
-  private isReadOnlyQuery(sql: string) {
-    const head = sql.trim().toLowerCase();
-    return head.startsWith("select") || head.startsWith("show");
-  }
-
-  private schedulePersist() {
-    this.persistDirty = true;
-    if (this.persistTimer) return;
-    this.persistTimer = setTimeout(() => {
-      this.persistTimer = undefined;
-      void this.flushMemoryBackup();
-    }, 800);
-  }
-
-  private async flushMemoryBackup() {
-    if (!this.persistDirty || !this.memDb) return;
-    this.persistDirty = false;
-    try {
-      await mkdir(this.memBackupDir, { recursive: true });
-      const dump: Record<string, TableDump> = {};
-      for (const table of this.memDb.public.listTables()) {
-        const result = await this.pool.query(`SELECT * FROM "${table.name}"`);
-        if (result.rows.length === 0) continue;
-        const columns = result.fields.map((f) => f.name);
-        const rows = result.rows.map((row) =>
-          columns.map((col) => (row as Record<string, unknown>)[col]),
-        );
-        dump[table.name] = { columns, rows };
-      }
-      await writeFile(this.memBackupFile, JSON.stringify(dump), "utf8");
-    } catch (err) {
-      this.persistDirty = true;
-      this.logger.warn(
-        `Could not persist in-memory DB to disk: ${
-          err instanceof Error ? err.message : String(err)
-        }`,
-      );
-    }
-  }
-
-  private async restoreMemoryBackup(): Promise<boolean> {
-    try {
-      const raw = await readFile(this.memBackupFile, "utf8");
-      const dump = JSON.parse(raw) as Record<string, TableDump>;
-      for (const [tableName, { columns, rows }] of Object.entries(dump)) {
-        if (!rows.length) continue;
-        const colList = columns.map((c) => `"${c}"`).join(", ");
-        const placeholders = columns.map((_, i) => `$${i + 1}`).join(", ");
-        for (const row of rows) {
-          await this.pool
-            .query(
-              `INSERT INTO "${tableName}" (${colList}) VALUES (${placeholders}) ON CONFLICT DO NOTHING`,
-              row,
-            )
-            .catch(() => undefined);
-        }
-      }
-      return true;
-    } catch {
-      return false;
-    }
+    return this.pool.query(sql, params as never[]);
   }
 
   private async ensureSchema() {
@@ -342,71 +227,6 @@ export class DbService implements OnModuleInit, OnModuleDestroy {
     }
     this.logger.log("Ensured default HQ groups");
     await this.restrictProducerOwners();
-
-    if (this.memoryMode) {
-      for (const account of SEED_ACCOUNTS) {
-        await this.query(
-          `insert into hq_accounts (id, name, email, username, password_hash, group_id, active, auth_provider)
-           values ($1, $2, $3, $4, $5, $6, true, 'password')
-           on conflict (id) do nothing`,
-          [
-            account.id,
-            account.name,
-            account.email,
-            account.username,
-            hashPassword(account.password),
-            account.groupId,
-          ],
-        );
-      }
-      this.logger.log("Seeded in-memory demo HQ accounts");
-    } else {
-      const demoIds = SEED_ACCOUNTS.map((row) => row.id);
-      await this.query(
-        `delete from hq_sessions
-         where account_id in (
-           select id from hq_accounts
-           where id = any($1::text[]) and email like '%@example.com'
-         )`,
-        [demoIds],
-      );
-      const removed = await this.query(
-        `delete from hq_accounts
-         where id = any($1::text[]) and email like '%@example.com'`,
-        [demoIds],
-      );
-      if (removed.rowCount) {
-        this.logger.log(`Removed ${removed.rowCount} demo HQ accounts`);
-      }
-    }
-
-    if (this.memoryMode) {
-      const tills = await this.query<{ count: string }>(
-        `select count(*)::text as count from hq_tills`,
-      );
-      if (tills.rows[0]?.count === "0") {
-        for (const till of SEED_TILL_ROWS) {
-          await this.query(
-            `insert into hq_tills (id, name, code, branch_name, product, active)
-             values ($1, $2, $3, $4, $5, true)
-             on conflict do nothing`,
-            [till.id, till.name, till.code, till.branchName, till.product],
-          );
-        }
-        this.logger.log("Seeded in-memory demo HQ tills");
-      }
-    } else {
-      const demoIds = SEED_TILL_ROWS.map((row) => row.id);
-      const removed = await this.query(
-        `delete from hq_tills
-         where id = any($1::text[])
-           and code in ('1111-2222-3333-4444', 'A7F3-19C0-B4E2-8D61')`,
-        [demoIds],
-      );
-      if (removed.rowCount) {
-        this.logger.log(`Removed ${removed.rowCount} demo HQ tills`);
-      }
-    }
   }
 
   private producerOwnerEmails(): string[] {
@@ -433,20 +253,3 @@ export class DbService implements OnModuleInit, OnModuleDestroy {
     }
   }
 }
-
-const SEED_TILL_ROWS = [
-  {
-    id: "till-demo-01",
-    name: "TILL-DEMO-01",
-    code: "1111-2222-3333-4444",
-    branchName: "Victoria Island",
-    product: "supermarket",
-  },
-  {
-    id: "till-vi-01",
-    name: "TILL-VI-01",
-    code: "A7F3-19C0-B4E2-8D61",
-    branchName: "Victoria Island",
-    product: "supermarket",
-  },
-];

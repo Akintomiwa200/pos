@@ -9,44 +9,6 @@ import { SetupHeader, SetupStat } from "@/components/setup/SetupChrome";
 import { ManagerSkeleton } from "@/components/Skeleton";
 import { useLivePos } from "@/lib/live-pos";
 
-interface Plan {
-  id: string;
-  name: string;
-  price: number;
-  interval: string;
-  features: string[];
-}
-
-interface Invoice {
-  id: string;
-  amount: number;
-  status: string;
-  date: string;
-  company: string;
-}
-
-interface Payment {
-  id: string;
-  amount: number;
-  method: string;
-  status: string;
-  date: string;
-}
-
-interface Discount {
-  id: string;
-  code: string;
-  percent: number;
-  uses: number;
-  active: boolean;
-}
-
-const PLANS: Plan[] = [
-  { id: "starter", name: "Starter", price: 15000, interval: "month", features: ["1 till", "Basic reporting", "Email support"] },
-  { id: "growth", name: "Growth", price: 45000, interval: "month", features: ["5 tills", "Advanced analytics", "Priority support", "Multi-branch"] },
-  { id: "enterprise", name: "Enterprise", price: 120000, interval: "month", features: ["Unlimited tills", "Custom integrations", "Dedicated support", "API access"] },
-];
-
 function LiveBadge({ live }: { live: boolean }) {
   return (
     <span
@@ -60,10 +22,6 @@ function LiveBadge({ live }: { live: boolean }) {
   );
 }
 
-function naira(n: number) {
-  return `₦${n.toLocaleString()}`;
-}
-
 function PlansPage() {
   return (
     <div>
@@ -72,26 +30,8 @@ function PlansPage() {
         title="Plans"
         copy="Subscription plans available to tenant companies."
       />
-      <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {PLANS.map((plan) => (
-          <div
-            key={plan.id}
-            className="min-h-[180px] rounded-[18px] border border-pos-border bg-pos-surface p-5"
-          >
-            <div className="mb-3 text-[13px] font-semibold text-pos-ink">{plan.name}</div>
-            <div className="mb-1 text-[22px] font-semibold tabular-nums text-pos-ink">
-              {naira(plan.price)}
-              <span className="text-[13px] font-normal text-pos-ink-muted">/{plan.interval}</span>
-            </div>
-            <ul className="mt-3 space-y-1.5">
-              {plan.features.map((f) => (
-                <li key={f} className="text-[13px] text-pos-ink-muted">
-                  · {f}
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
+      <div className="rounded-[18px] border border-pos-border bg-pos-surface p-5 text-sm text-pos-ink-muted">
+        <p>Subscription plans appear here once they are set up.</p>
       </div>
     </div>
   );

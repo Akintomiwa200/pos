@@ -1,4 +1,4 @@
-import type { ConsoleAccount, ConsoleGroup } from "./access";
+import type { ConsoleGroup } from "./access";
 
 /** Built-in roles that ship with HQ and cannot be deleted. */
 export const DEFAULT_TENANT_GROUP_IDS = [
@@ -237,71 +237,5 @@ export const SEED_GROUPS: ConsoleGroup[] = [
     name: "Support Agent",
     departments: ["Setup"],
     privileges: ["chat", "support", "customer", "help"],
-  },
-];
-
-export const SEED_ACCOUNTS: ConsoleAccount[] = [
-  {
-    id: "a-emma",
-    name: "Emma Wang",
-    email: "emma.wang@example.com",
-    username: "emma",
-    password: "demo",
-    groupId: "g-admin",
-    active: true,
-  },
-  {
-    id: "a-funke",
-    name: "Funke Adeyemi",
-    email: "funke.adeyemi@example.com",
-    username: "funke",
-    password: "demo",
-    groupId: "g-store-manager",
-    active: true,
-  },
-  {
-    id: "a-chika",
-    name: "Chika Okonkwo",
-    email: "chika.okonkwo@example.com",
-    username: "chika",
-    password: "demo",
-    groupId: "g-accountant",
-    active: true,
-  },
-  {
-    id: "a-tosin",
-    name: "Tosin Adeyemi",
-    email: "tosin.adeyemi@example.com",
-    username: "tosin",
-    password: "demo",
-    groupId: "g-sales",
-    active: true,
-  },
-  {
-    id: "a-amaka",
-    name: "Amaka Eze",
-    email: "amaka.eze@example.com",
-    username: "amaka",
-    password: "demo",
-    groupId: "g-cashier",
-    active: true,
-  },
-  {
-    id: "a-ibrahim",
-    name: "Ibrahim Bello",
-    email: "ibrahim.bello@example.com",
-    username: "ibrahim",
-    password: "demo",
-    groupId: "g-inventory",
-    active: true,
-  },
-  {
-    id: "a-david",
-    name: "David Okoro",
-    email: "david.okoro@example.com",
-    username: "david",
-    password: "demo",
-    groupId: "g-support",
-    active: true,
   },
 ];

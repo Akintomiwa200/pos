@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ITEMS } from "./demo";
 import {
   SETTINGS_EVENT,
   loadStoreSettings,
@@ -17,9 +16,7 @@ function readStockMode(): StockMode {
 }
 
 export function useCatalog() {
-  const [items, setItems] = useState<CatalogItem[]>(() =>
-    readStockMode() === "online" ? [] : ITEMS,
-  );
+  const [items, setItems] = useState<CatalogItem[]>([]);
   const [live, setLive] = useState(false);
   const [mode, setMode] = useState<StockMode>(readStockMode);
 
@@ -40,14 +37,12 @@ export function useCatalog() {
     let cancelled = false;
 
     if (mode === "offline") {
-      setItems(ITEMS);
+      setItems([]);
       setLive(false);
       return () => {
         cancelled = true;
       };
     }
-
-    if (mode === "both") setItems(ITEMS);
 
     fetch(apiUrl("/api/catalog/items"))
       .then((response) => {

@@ -1,5 +1,9 @@
 ﻿import { DepartmentPage } from "@/components/DepartmentPage";
-import { EntityReports, type EntityKind } from "@/components/reports/EntityReports";
+import { CustomerLedgerPage } from "@/components/reports/ledger/CustomerLedgerPage";
+import { SalesRepLedgerPage } from "@/components/reports/ledger/SalesRepLedgerPage";
+import { StaffLedgerPage } from "@/components/reports/ledger/StaffLedgerPage";
+import { VendorLedgerPage } from "@/components/reports/ledger/VendorLedgerPage";
+import type { EntityKind } from "@/components/reports/entity/shared";
 
 const KINDS: Record<string, EntityKind> = {
   customer: "customer",
@@ -8,7 +12,7 @@ const KINDS: Record<string, EntityKind> = {
   staff: "staff",
 };
 
-export default async function ReportPage({
+export default async function LedgerReportPage({
   params,
 }: {
   params: Promise<{ slug?: string[] }>;
@@ -24,5 +28,8 @@ export default async function ReportPage({
       />
     );
   }
-  return <EntityReports report="ledger" entity={entity} />;
+  if (entity === "customer") return <CustomerLedgerPage />;
+  if (entity === "vendor") return <VendorLedgerPage />;
+  if (entity === "sales-representative") return <SalesRepLedgerPage />;
+  return <StaffLedgerPage />;
 }

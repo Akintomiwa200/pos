@@ -84,7 +84,7 @@ export default function App() {
     <div className="pc">
       <header className="pc-top">
         <div>
-          <p className="pc-kicker">The Place — Victoria Island</p>
+          <p className="pc-kicker">Price Check</p>
           <h1>Price Check</h1>
         </div>
         <div className="pc-top-actions">

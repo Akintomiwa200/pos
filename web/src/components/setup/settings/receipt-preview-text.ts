@@ -1,30 +1,5 @@
 import type { HqCompany, HqOrgSettings } from "@/lib/hq-setup";
 
-const LINES = [
-  { name: "Jollof rice (large)", sku: "FD-101", qty: 2, price: 3500 },
-  { name: "Chapman", sku: "DR-044", qty: 1, price: 2500 },
-  { name: "Grilled chicken", sku: "FD-220", qty: 1, price: 6500 },
-];
-
-const DEMO = {
-  ticketId: "10482001933",
-  cashier: "Adaeze Okafor",
-  till: "TILL-01 · VI",
-  customerName: "Chioma Adeyemi",
-  customerPhone: "0803 123 4567",
-  tender: "Cash",
-  tendered: 20000,
-  discount: 500,
-  loyaltyNumber: "LY-88421",
-  loyaltyBalanceBefore: 1240,
-  loyaltyPointsRedeemed: 100,
-  loyaltyRedeemValue: 1000,
-  loyaltyPointsEarned: 12,
-  giftCardCode: "GC-····4821",
-  giftCardCharged: 2000,
-  giftCardBalanceAfter: 8000,
-};
-
 function money(n: number, currency: string) {
   try {
     return new Intl.NumberFormat("en-NG", {
@@ -37,7 +12,7 @@ function money(n: number, currency: string) {
   }
 }
 
-/** Plain-text ticket matching till print layout (sample sale for Settings). */
+/** Plain-text ticket matching till print layout, derived from real data only. */
 export function buildReceiptPreviewText(
   draft: HqOrgSettings,
   company: HqCompany | null,
@@ -46,32 +21,30 @@ export function buildReceiptPreviewText(
     customer?: { name?: string; phone?: string } | null;
   },
 ): string {
-  const lines = options?.lines ?? LINES;
-  const customerName = options?.customer?.name || DEMO.customerName;
-  const customerPhone = options?.customer?.phone || DEMO.customerPhone;
-  const title = (draft.receiptTitle ?? "").trim() || company?.name || "Your company";
+  const lines = options?.lines ?? [];
+  const customerName = options?.customer?.name || "";
+  const customerPhone = options?.customer?.phone || "";
+  const title = (draft.receiptTitle ?? "").trim() || company?.name || "";
   const address = (draft.receiptAddress ?? "").trim() || company?.address || "";
   const email = (draft.receiptEmail ?? "").trim() || company?.email || "";
   const phone = company?.phone || "";
-  const barcode =
-    (draft.receiptBarcodeValue ?? "").trim() || DEMO.ticketId;
+  const barcode = (draft.receiptBarcodeValue ?? "").trim() || "";
   const subtotal = lines.reduce((sum, line) => sum + line.qty * line.price, 0);
   const showDiscount = draft.receiptShowDiscount !== false;
-  const discount = showDiscount ? DEMO.discount : 0;
+  const discount = 0;
   const afterDiscount = Math.max(0, subtotal - discount);
   const tax = draft.receiptShowTax ? Math.round(afterDiscount * 0.075) : 0;
   const showLoyaltyRedeem = draft.receiptShowLoyalty && draft.receiptShowLoyaltyRedeemed !== false;
-  const loyaltyRedeem = showLoyaltyRedeem ? DEMO.loyaltyRedeemValue : 0;
-  const giftCharge = draft.receiptShowGiftCard ? DEMO.giftCardCharged : 0;
+  const loyaltyRedeem = 0;
+  const giftCharge = 0;
   const total = afterDiscount + (draft.pricesIncludeVat ? 0 : tax) - loyaltyRedeem;
   const due = Math.max(0, total - giftCharge);
-  const change = Math.max(0, DEMO.tendered - due);
+  const change = 0;
   const when = new Date();
-  const loyaltyAfter =
-    DEMO.loyaltyBalanceBefore - DEMO.loyaltyPointsRedeemed + DEMO.loyaltyPointsEarned;
+  const loyaltyAfter = 0;
 
   const rows: string[] = [
-    ...(draft.receiptShowTitle !== false ? [title] : []),
+    ...(draft.receiptShowTitle !== false && title ? [title] : []),
     ...(draft.receiptShowAddress !== false && address ? [address] : []),
     ...(draft.receiptShowEmail !== false && email ? [email] : []),
     ...(draft.receiptShowPhone !== false && phone ? [phone] : []),
@@ -79,7 +52,9 @@ export function buildReceiptPreviewText(
       ? [draft.receiptHeader]
       : []),
     "--------------------------------",
-    ...(draft.receiptShowTicketNumber !== false ? [`Receipt # ${barcode}`] : []),
+    ...(draft.receiptShowTicketNumber !== false && barcode
+      ? [`Receipt # ${barcode}`]
+      : []),
     ...(draft.receiptShowDate !== false
       ? [
           `${when.toLocaleDateString("en-GB")} ${when.toLocaleTimeString("en-GB", {
@@ -87,19 +62,19 @@ export function buildReceiptPreviewText(
           })}`,
         ]
       : []),
-    ...(draft.receiptShowCashier ? [`Cashier: ${DEMO.cashier}`] : []),
-    ...(draft.receiptShowTill ? [`Till: ${DEMO.till}`] : []),
+    ...(draft.receiptShowCashier ? [`Cashier: `] : []),
+    ...(draft.receiptShowTill ? [`Till: `] : []),
     ...(draft.receiptShowCustomer
       ? [
           `Customer: ${customerName}`,
-          ...(draft.receiptShowCustomerPhone !== false
+          ...(draft.receiptShowCustomerPhone !== false && customerPhone
             ? [`Phone: ${customerPhone}`]
             : []),
         ]
       : []),
     "--------------------------------",
     ...lines.flatMap((line) => [
-      `${line.name}${draft.showSkuOnReceipt ? ` · ${line.sku}` : ""}  ${money(
+      `${line.name}${draft.showSkuOnReceipt && line.sku ? ` · ${line.sku}` : ""}  ${money(
         line.qty * line.price,
         draft.currency,
       )}`,
@@ -117,8 +92,8 @@ export function buildReceiptPreviewText(
     `TOTAL        ${money(total, draft.currency)}`,
     ...(draft.receiptShowTender
       ? [
-          `Paid by ${DEMO.tender}`,
-          `Tendered     ${money(DEMO.tendered, draft.currency)}`,
+          `Paid by `,
+          `Tendered     ${money(0, draft.currency)}`,
           ...(draft.receiptShowChange !== false
             ? [`Change       ${money(change, draft.currency)}`]
             : []),
@@ -128,15 +103,15 @@ export function buildReceiptPreviewText(
       ? [
           "--------------------------------",
           "Loyalty",
-          `No. ${DEMO.loyaltyNumber}`,
+          `No. `,
           ...(draft.receiptShowLoyaltyBalance !== false
-            ? [`Balance before ${DEMO.loyaltyBalanceBefore} pts`]
+            ? [`Balance before 0 pts`]
             : []),
           ...(draft.receiptShowLoyaltyRedeemed !== false
-            ? [`Points used  -${DEMO.loyaltyPointsRedeemed} pts`]
+            ? [`Points used  -0 pts`]
             : []),
           ...(draft.receiptShowLoyaltyEarned !== false
-            ? [`Points earned +${DEMO.loyaltyPointsEarned} pts`]
+            ? [`Points earned +0 pts`]
             : []),
           ...(draft.receiptShowLoyaltyBalance !== false
             ? [`Balance after ${loyaltyAfter} pts`]
@@ -147,14 +122,14 @@ export function buildReceiptPreviewText(
       ? [
           "--------------------------------",
           "Gift card",
-          `Card ${DEMO.giftCardCode}`,
-          `Charged      ${money(DEMO.giftCardCharged, draft.currency)}`,
+          `Card `,
+          `Charged      ${money(0, draft.currency)}`,
           ...(draft.receiptShowGiftCardBalance !== false
-            ? [`Balance left ${money(DEMO.giftCardBalanceAfter, draft.currency)}`]
+            ? [`Balance left ${money(0, draft.currency)}`]
             : []),
         ]
       : []),
-    ...(draft.receiptShowBarcode ? [`*${barcode}*`] : []),
+    ...(draft.receiptShowBarcode && barcode ? [`*${barcode}*`] : []),
     "--------------------------------",
     ...(draft.receiptShowFooter !== false && draft.receiptFooter
       ? [draft.receiptFooter]

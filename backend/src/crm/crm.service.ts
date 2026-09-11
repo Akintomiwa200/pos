@@ -3,13 +3,6 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Observable, Subject } from "rxjs";
 import {
-  SEED_ACTIVITIES,
-  SEED_CONTACTS,
-  SEED_DEALS,
-  SEED_ISSUE_COMMENTS,
-  SEED_ISSUES,
-  SEED_PROJECTS,
-  SEED_TICKETS,
   type CrmActivity,
   type CrmContact,
   type CrmDeal,
@@ -30,7 +23,7 @@ export class CrmService implements OnModuleInit {
   private projects: CrmProject[] = [];
   private issues: CrmIssue[] = [];
   private issueComments: CrmIssueComment[] = [];
-  private issueCounter = 42;
+  private issueCounter = 0;
 
   private readonly events = new Subject<CrmEvent>();
   private readonly dir = join(process.cwd(), "data");
@@ -49,26 +42,41 @@ export class CrmService implements OnModuleInit {
       issueCounter?: number;
     } | null>(this.file, null);
 
-    if (stored?.contacts?.length) {
-      this.contacts = stored.contacts;
+    if (stored && this.isStored(stored)) {
+      this.contacts = stored.contacts ?? [];
       this.deals = stored.deals ?? [];
       this.tickets = stored.tickets ?? [];
       this.activities = stored.activities ?? [];
       this.projects = stored.projects ?? [];
       this.issues = stored.issues ?? [];
       this.issueComments = stored.issueComments ?? [];
-      this.issueCounter = stored.issueCounter ?? 42;
+      this.issueCounter = stored.issueCounter ?? 0;
     } else {
-      this.contacts = structuredClone(SEED_CONTACTS);
-      this.deals = structuredClone(SEED_DEALS);
-      this.tickets = structuredClone(SEED_TICKETS);
-      this.activities = structuredClone(SEED_ACTIVITIES);
-      this.projects = structuredClone(SEED_PROJECTS);
-      this.issues = structuredClone(SEED_ISSUES);
-      this.issueComments = structuredClone(SEED_ISSUE_COMMENTS);
-      this.issueCounter = 42;
       await this.persist();
     }
+  }
+
+  private isStored(
+    stored: {
+      contacts?: CrmContact[];
+      deals?: CrmDeal[];
+      tickets?: CrmTicket[];
+      activities?: CrmActivity[];
+      projects?: CrmProject[];
+      issues?: CrmIssue[];
+      issueComments?: CrmIssueComment[];
+      issueCounter?: number;
+    },
+  ): boolean {
+    return (
+      stored.contacts !== undefined ||
+      stored.deals !== undefined ||
+      stored.tickets !== undefined ||
+      stored.activities !== undefined ||
+      stored.projects !== undefined ||
+      stored.issues !== undefined ||
+      stored.issueComments !== undefined
+    );
   }
 
   private async readJson<T>(file: string, fallback: T): Promise<T> {

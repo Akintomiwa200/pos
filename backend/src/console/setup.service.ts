@@ -6,12 +6,8 @@ import { Observable, Subject } from "rxjs";
 import { DbService } from "../db/db.service";
 import { assertOrgSettingsInput } from "./setup-settings.validation";
 import {
-  SEED_BRANCHES,
-  SEED_COMPANY,
-  SEED_GATEWAYS,
+  DEFAULT_COMPANY,
   SEED_SETTINGS,
-  SEED_STOREFRONTS,
-  SEED_STORES,
   SEED_TAXES,
   type HqBranch,
   type HqCompany,
@@ -36,7 +32,7 @@ export type SettingsEvent = {
 
 @Injectable()
 export class SetupService implements OnModuleInit {
-  private company: HqCompany = SEED_COMPANY;
+  private company: HqCompany = DEFAULT_COMPANY;
   private branches: HqBranch[] = [];
   private stores: HqStore[] = [];
   private storefronts: HqStorefront[] = [];
@@ -53,37 +49,17 @@ export class SetupService implements OnModuleInit {
       `select key, data from hq_org_kv`,
     );
     const stored = new Map(rows.rows.map((row) => [row.key, row.data]));
-    const demo = this.db.isMemoryMode;
-    this.company = this.pick<HqCompany>(stored, "company", SEED_COMPANY);
-    this.branches = this.pick<HqBranch[]>(stored, "branches", demo ? SEED_BRANCHES : []);
-    this.stores = this.pick<HqStore[]>(stored, "stores", demo ? SEED_STORES : []);
-    this.storefronts = this.pick<HqStorefront[]>(
-      stored,
-      "storefronts",
-      demo ? SEED_STOREFRONTS : [],
-    );
-    this.gateways = this.pick<HqGateway[]>(stored, "gateways", SEED_GATEWAYS);
+    this.company = this.pick<HqCompany>(stored, "company", DEFAULT_COMPANY);
+    this.branches = this.pick<HqBranch[]>(stored, "branches", []);
+    this.stores = this.pick<HqStore[]>(stored, "stores", []);
+    this.storefronts = this.pick<HqStorefront[]>(stored, "storefronts", []);
+    this.gateways = this.pick<HqGateway[]>(stored, "gateways", []);
     this.taxes = this.pick<HqTax[]>(stored, "taxes", SEED_TAXES);
     this.settings = {
       ...SEED_SETTINGS,
       ...this.pick<HqOrgSettings>(stored, "settings", SEED_SETTINGS),
     };
-    if (!demo) this.stripSeedLocations();
     await this.persist();
-  }
-
-  private stripSeedLocations() {
-    const seedStoreIds = new Set(SEED_STORES.map((row) => row.id));
-    const seedBranchIds = new Set(SEED_BRANCHES.map((row) => row.id));
-    const seedFrontIds = new Set(SEED_STOREFRONTS.map((row) => row.id));
-    this.stores = this.stores.filter((row) => !seedStoreIds.has(row.id));
-    this.storefronts = this.storefronts.filter(
-      (row) => !seedFrontIds.has(row.id) && !seedStoreIds.has(row.storeId),
-    );
-    const inUse = new Set(
-      this.stores.map((row) => row.branchId).filter((id): id is string => Boolean(id)),
-    );
-    this.branches = this.branches.filter((row) => !seedBranchIds.has(row.id) || inUse.has(row.id));
   }
 
   private notifyOrg() {

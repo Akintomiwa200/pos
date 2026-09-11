@@ -1,5 +1,7 @@
 ﻿import { DepartmentPage } from "@/components/DepartmentPage";
-import { EntityReports, type EntityKind } from "@/components/reports/EntityReports";
+import { EntityBalanceBoard } from "@/components/reports/entity/EntityBalanceBoard";
+import { EntityBalanceDetailPage } from "@/components/reports/entity/EntityBalanceDetailPage";
+import type { EntityKind } from "@/components/reports/entity/shared";
 
 const KINDS: Record<string, EntityKind> = {
   customer: "customer",
@@ -8,7 +10,7 @@ const KINDS: Record<string, EntityKind> = {
   staff: "staff",
 };
 
-export default async function ReportPage({
+export default async function BalanceReportPage({
   params,
 }: {
   params: Promise<{ slug?: string[] }>;
@@ -24,5 +26,9 @@ export default async function ReportPage({
       />
     );
   }
-  return <EntityReports report="balance" entity={entity} />;
+  const accountId = decodeURIComponent(slug[1] ?? "");
+  if (accountId) {
+    return <EntityBalanceDetailPage entity={entity} accountId={accountId} />;
+  }
+  return <EntityBalanceBoard entity={entity} />;
 }

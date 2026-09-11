@@ -143,13 +143,7 @@ function SystemNotificationsPage() {
 
 function FeatureFlagsPage() {
   const { live } = useLivePos();
-  const flags = [
-    { name: "Google OAuth", key: "google-auth", enabled: true, description: "Allow Google sign-in for authentication" },
-    { name: "Multi-branch", key: "multi-branch", enabled: true, description: "Enable multi-branch support for companies" },
-    { name: "Storefronts", key: "storefronts", enabled: true, description: "Online storefront creation for companies" },
-    { name: "API access", key: "api-access", enabled: false, description: "Expose REST API for external integrations" },
-    { name: "Custom themes", key: "custom-themes", enabled: false, description: "Allow companies to customise their POS theme" },
-  ];
+  const flags: { name: string; key: string; enabled: boolean; description: string }[] = [];
 
   return (
     <div>
@@ -164,29 +158,8 @@ function FeatureFlagsPage() {
         <SetupStat label="Disabled" value={String(flags.filter((f) => !f.enabled).length)} hint="Off flags" />
         <SetupStat label="Total" value={String(flags.length)} hint="All flags" />
       </div>
-      <div className="space-y-2">
-        {flags.map((flag) => (
-          <div
-            key={flag.key}
-            className="flex items-center justify-between rounded-[18px] border border-pos-border bg-pos-surface p-4"
-          >
-            <div>
-              <div className="text-[13px] font-medium text-pos-ink">{flag.name}</div>
-              <div className="text-[12px] text-pos-ink-muted">{flag.description}</div>
-            </div>
-            <div
-              className={`flex h-7 w-12 cursor-pointer items-center rounded-full px-1 transition-colors ${
-                flag.enabled ? "bg-pos-primary" : "bg-pos-surface-muted"
-              }`}
-            >
-              <div
-                className={`h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
-                  flag.enabled ? "translate-x-5" : "translate-x-0"
-                }`}
-              />
-            </div>
-          </div>
-        ))}
+      <div className="rounded-[18px] border border-pos-border bg-pos-surface p-5 text-sm text-pos-ink-muted">
+        <p>Platform feature flags are configured on the server.</p>
       </div>
     </div>
   );

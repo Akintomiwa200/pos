@@ -1197,7 +1197,6 @@ export class ConsoleService implements OnModuleInit {
   }
 
   async securityOverview() {
-    await this.ensureSecuritySeed();
     const [accounts, groups, sessions, logins, audits, events] = await Promise.all([
       this.listAccounts(),
       this.listGroups(),
@@ -1338,75 +1337,6 @@ export class ConsoleService implements OnModuleInit {
         members: accounts.filter((a) => a.groupId === g.id).length,
       })),
     };
-  }
-
-  /**
-   * Seed a small trail of login/audit/security activity once, so the
-   * Security dashboard has meaningful charts on first run. Idempotent.
-   */
-  private async ensureSecuritySeed() {
-    try {
-      const count = await this.db.query<{ count: string }>(
-        `select count(*)::text as count from hq_login_events`,
-      );
-      if (Number(count.rows[0]?.count ?? 0) > 0) return;
-      const accounts = await this.listAccounts();
-      const emails = accounts.map((account) => account.email);
-      const pick = (index: number) =>
-        emails[index % Math.max(emails.length, 1)] ?? "owner@theplace.ng";
-      const day = 86_400_000;
-      const now = Date.now();
-      const loginRows: string[] = [];
-      const auditRows: string[] = [];
-      const eventRows: string[] = [];
-      let cursor = now - 13 * day;
-      let index = 0;
-      while (cursor < now) {
-        const countToday = cursor > now - day ? 4 : 3;
-        for (let j = 0; j < countToday; j += 1) {
-          const at = new Date(cursor + j * 3 * 3_600_000).toISOString();
-          const email = pick(index).replace(/'/g, "");
-          const success = index % 4 !== 0;
-          loginRows.push(
-            `('l-${index}', '${email}', ${success}, ${
-              success ? "null" : "'invalid_credentials'"
-            }, '${at}'::timestamptz)`,
-          );
-          if (index % 4 === 0) {
-            eventRows.push(
-              `('e-${index}', 'failed_login', 'warning', 'Failed sign-in for ${email}', 'The email or password entered was incorrect.', null, '${at}'::timestamptz)`,
-            );
-          }
-          index += 1;
-        }
-        cursor += day;
-      }
-      const nowIso = new Date(now).toISOString();
-      auditRows.push(
-        `('a-s1', 'HQ Owner', 'session.start', 'owner@theplace.ng', null, '${nowIso}'::timestamptz)`,
-        `('a-s2', 'HQ Owner', 'password.set', 'owner@theplace.ng', null, '${nowIso}'::timestamptz)`,
-        `('a-s3', 'HQ Owner', 'account.create', 'tunde.bakare@example.com', 'New HQ account', '${nowIso}'::timestamptz)`,
-        `('a-s4', 'HQ Owner', 'group.update', 'Store Manager', '4 departments · 9 privileges', '${nowIso}'::timestamptz)`,
-      );
-      await this.db.query(
-        `insert into hq_login_events (id, email, success, reason, created_at) values ${loginRows.join(
-          ",",
-        )}`,
-      );
-      await this.db.query(
-        `insert into hq_audit_logs (id, actor_name, action, target, detail, created_at) values ${auditRows.join(
-          ",",
-        )}`,
-      );
-      if (eventRows.length) {
-        await this.db.query(
-          `insert into hq_security_events (id, kind, severity, title, body, account_id, created_at)
-           values ${eventRows.join(",")}`,
-        );
-      }
-    } catch {
-      /* demo seed is best-effort */
-    }
   }
 
   // ---------- notices ----------

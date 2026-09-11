@@ -4,8 +4,6 @@ import { join } from "node:path";
 import { Observable, Subject } from "rxjs";
 import { ConsoleService } from "../console/console.service";
 import {
-  SEED_CONVERSATIONS,
-  SEED_MESSAGES,
   type CallSignal,
   type ChatConversation,
   type ChatEvent,
@@ -30,13 +28,11 @@ export class ChatService implements OnModuleInit {
 
   async onModuleInit() {
     await mkdir(this.dir, { recursive: true });
-    this.conversations = await this.readJson(this.conversationsFile, SEED_CONVERSATIONS);
-    this.messages = await this.readJson(this.messagesFile, SEED_MESSAGES);
-    if (!this.conversations.length) {
-      this.conversations = structuredClone(SEED_CONVERSATIONS);
-      this.messages = structuredClone(SEED_MESSAGES);
-      await this.persist();
-    }
+    this.conversations = await this.readJson<ChatConversation[]>(
+      this.conversationsFile,
+      [],
+    );
+    this.messages = await this.readJson<ChatMessage[]>(this.messagesFile, []);
   }
 
   private async readJson<T>(file: string, fallback: T): Promise<T> {

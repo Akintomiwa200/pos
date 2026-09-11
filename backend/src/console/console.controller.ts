@@ -422,11 +422,6 @@ export class ConsoleController {
     };
   }
 
-  @Post("setup/data/purge-catalog")
-  purgeCatalog() {
-    return this.catalog.resetToSeed();
-  }
-
   @Post("setup/import/catalog")
   importCatalog(@Body() body: { rows?: CatalogRow[] }) {
     return this.catalog.upsertMany(body.rows ?? []);

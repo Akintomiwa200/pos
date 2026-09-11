@@ -165,115 +165,19 @@ export type HqOrgSettings = {
   uiReduceMotion: boolean;
 };
 
-export const SEED_COMPANY: HqCompany = {
-  id: "co-place",
-  name: "The Place",
-  legalName: "The Place Restaurants Limited",
-  rc: "RC-1234567",
-  tin: "12345678-0001",
-  email: "accounts@theplace.ng",
-  phone: "+234 801 234 5678",
-  address: "14 Adeola Odeku Street, Victoria Island, Lagos",
-  state: "Lagos",
+export const DEFAULT_COMPANY: HqCompany = {
+  id: "",
+  name: "",
+  legalName: "",
+  rc: "",
+  tin: "",
+  email: "",
+  phone: "",
+  address: "",
+  state: "",
   country: "Nigeria",
   currency: "NGN",
 };
-
-export const SEED_BRANCHES: HqBranch[] = [
-  {
-    id: "br-vi",
-    companyId: "co-place",
-    name: "Victoria Island",
-    city: "Lagos",
-    state: "Lagos",
-    address: "14 Adeola Odeku Street",
-    phone: "+234 801 234 5678",
-    manager: "Chika Obi",
-    active: true,
-  },
-  {
-    id: "br-ikeja",
-    companyId: "co-place",
-    name: "Ikeja",
-    city: "Ikeja",
-    state: "Lagos",
-    address: "Allen Avenue",
-    phone: "+234 802 111 2233",
-    manager: "Emma Bello",
-    active: true,
-  },
-];
-
-export const SEED_STORES: HqStore[] = [
-  {
-    id: "st-demo-retail",
-    companyId: "co-place",
-    name: "Demo Store",
-    kind: "retail",
-    address: "",
-    active: true,
-  },
-];
-
-export const SEED_STOREFRONTS: HqStorefront[] = [
-  {
-    id: "sf-vi",
-    storeId: "st-demo-retail",
-    name: "The Place VI shop",
-    url: "https://shop.theplace.ng",
-    hours: "08:00 – 22:00",
-    enabled: false,
-    syncPrices: true,
-    syncStock: true,
-  },
-];
-
-export const SEED_GATEWAYS: HqGateway[] = [
-  {
-    id: "gw-paystack",
-    name: "Paystack",
-    provider: "paystack",
-    enabled: true,
-    isDefault: true,
-    publicKey: "",
-    accountName: "",
-    accountNumber: "",
-    bankName: "",
-  },
-  {
-    id: "gw-moniepoint",
-    name: "Moniepoint",
-    provider: "moniepoint",
-    enabled: true,
-    isDefault: false,
-    publicKey: "",
-    accountName: "The Place VI",
-    accountNumber: "0123456789",
-    bankName: "Moniepoint MFB",
-  },
-  {
-    id: "gw-cash",
-    name: "Cash",
-    provider: "cash",
-    enabled: true,
-    isDefault: false,
-    publicKey: "",
-    accountName: "",
-    accountNumber: "",
-    bankName: "",
-  },
-  {
-    id: "gw-card",
-    name: "Card / POS",
-    provider: "card",
-    enabled: true,
-    isDefault: false,
-    publicKey: "",
-    accountName: "",
-    accountNumber: "",
-    bankName: "",
-  },
-];
 
 export const SEED_TAXES: HqTax[] = [
   {

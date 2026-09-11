@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, OnModuleInit } from "@nestjs/common";
 import { Observable, Subject } from "rxjs";
-import { CATALOG_SEED, type CatalogItem } from "./catalog.seed";
+import { type CatalogItem } from "./catalog.seed";
 import { loadCatalogFile, saveCatalogFile } from "./catalog.store";
 import {
   generateBarcode,
@@ -59,7 +59,7 @@ export type CatalogPatch = {
 
 @Injectable()
 export class CatalogService implements OnModuleInit {
-  private items: CatalogItem[] = CATALOG_SEED.map((item) => this.normalizeLoaded(item));
+  private items: CatalogItem[] = [];
   private readonly events = new Subject<CatalogEvent>();
 
   constructor(private readonly cloudinary: CloudinaryService) {}
@@ -317,13 +317,6 @@ export class CatalogService implements OnModuleInit {
     }
     void this.persist();
     return { created, updated, total: this.items.length };
-  }
-
-  resetToSeed() {
-    this.items = CATALOG_SEED.map((item) => this.normalizeLoaded(item));
-    void this.persist();
-    this.events.next({ type: "snapshot", items: this.items });
-    return { ok: true, total: this.items.length };
   }
 
   stats() {

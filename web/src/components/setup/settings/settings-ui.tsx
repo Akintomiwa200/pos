@@ -191,7 +191,7 @@ export function ReceiptStudio({
             <div className="space-y-1 px-5 py-2 sm:px-6">
               <SettingRow
                 title="Show title name"
-                description="Brand / store name at the top of the ticket."
+                description="Brand / store name at the top. Empty = your company name."
                 control={
                   <Switch
                     checked={draft.receiptShowTitle !== false}
@@ -214,7 +214,7 @@ export function ReceiptStudio({
               ) : null}
               <SettingRow
                 title="Show branch address"
-                description="Street address under the title."
+                description="Street address under the title. Empty = company address."
                 control={
                   <Switch
                     checked={draft.receiptShowAddress !== false}
@@ -237,7 +237,7 @@ export function ReceiptStudio({
               ) : null}
               <SettingRow
                 title="Show email"
-                description="Contact email on the ticket."
+                description="Contact email on the ticket. Empty = company email."
                 control={
                   <Switch
                     checked={draft.receiptShowEmail !== false}
@@ -261,7 +261,7 @@ export function ReceiptStudio({
               ) : null}
               <SettingRow
                 title="Show phone"
-                description="Company phone under the address."
+                description="Company phone under the address. Empty = company phone."
                 control={
                   <Switch
                     checked={draft.receiptShowPhone !== false}
@@ -615,8 +615,8 @@ export function ReceiptStudio({
                   />
                 </Field>
                 <p className="mt-1 text-[12px] text-pos-ink-faint">
-                  Encoded as Code 128. Live sales use the ticket id; this value drives the settings
-                  preview.
+                  Encoded as Code 128. Leave empty to print the sale ticket id; a custom value here
+                  drives the settings preview.
                 </p>
               </div>
             ) : null}

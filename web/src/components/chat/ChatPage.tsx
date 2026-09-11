@@ -5,22 +5,35 @@ import {
   ChevronDown,
   ChevronUp,
   Paperclip,
+  Phone,
+  PhoneCall,
   Search,
   SendHorizontal,
   Smile,
+  Users,
 } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { naira } from "@/lib/hq-ops";
 import {
+  createChatConversation,
   getChatThread,
   listChatConversations,
+  listChatTargets,
   patchChatConversation,
+  sendCallSignal,
   sendChatMessage,
+  sendChatPresence,
+  sendChatTyping,
+  type CallSignal,
   type ChatConversation,
   type ChatMessage,
+  type ChatTarget,
 } from "@/lib/hq-chat";
 import { useLiveChat } from "@/lib/live-workspace";
+import { useAuth } from "@/components/AuthProvider";
 import { ManagerSkeleton } from "../Skeleton";
+import { useCallManager, IncomingCallModal, ActiveCallOverlay } from "./CallView";
+import { NewChatModal } from "./NewChatModal";
 
 function relativeTime(iso: string) {
   const diff = Date.now() - new Date(iso).getTime();
@@ -83,7 +96,15 @@ function Avatar({
 }
 
 export function ChatPage() {
+  const { session } = useAuth();
+  const self = useMemo(
+    () => (session ? { id: session.id, name: session.name } : null),
+    [session?.id, session?.name],
+  );
   const activeIdRef = useRef<string | null>(null);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [typingMap, setTypingMap] = useState<Record<string, { name: string; state: "on" | "off" }>>({});
+
   const onLiveMessage = useCallback((conversationId: string, message: ChatMessage) => {
     if (conversationId === activeIdRef.current) {
       setMessages((current) =>
@@ -92,7 +113,20 @@ export function ChatPage() {
     }
   }, []);
 
-  const { conversations, setConversations, live } = useLiveChat(onLiveMessage);
+  const onLiveCall = useCallback(
+    (conversationId: string, signal: CallSignal) => {
+      if (conversationId === activeIdRef.current) {
+        callManager.handleSignal(signal);
+      }
+    },
+    [], // callManager ref is stable
+  );
+
+  const { conversations, setConversations, live, typing, presenceMap } = useLiveChat({
+    onMessage: onLiveMessage,
+    onCall: onLiveCall,
+  });
+
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [active, setActive] = useState<ChatConversation | null>(null);
@@ -100,11 +134,29 @@ export function ChatPage() {
   const [draft, setDraft] = useState("");
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [typing, setTyping] = useState(false);
   const [openPurchased, setOpenPurchased] = useState(true);
   const [openOrders, setOpenOrders] = useState(false);
   const [openBuy, setOpenBuy] = useState(false);
+  const [showNewChat, setShowNewChat] = useState(false);
+  const [targets, setTargets] = useState<ChatTarget[]>([]);
+  const [newChatMode, setNewChatMode] = useState<"direct" | "group">("direct");
+  const [newChatSelected, setNewChatSelected] = useState<string[]>([]);
+  const [newChatTitle, setNewChatTitle] = useState("");
+  const [creatingChat, setCreatingChat] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const typingState = activeId ? typing[activeId] : undefined;
+  const peerName = active?.name || "Unknown";
+  const peerOnline =
+    active?.kind === "direct" &&
+    active?.memberIds.some((id) => id !== self?.id && presenceMap[id]);
+  const callManager = useCallManager({
+    self,
+    peerName,
+    initialMode: "audio",
+    onSignal: (sig) => {
+      if (activeId) void sendCallSignal(activeId, sig, self ?? undefined);
+    },
+  });
 
   useEffect(() => {
     activeIdRef.current = activeId;
@@ -144,7 +196,28 @@ export function ChatPage() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, typing]);
+  }, [messages, typingState]);
+
+  // Send outgoing typing indicators
+  useEffect(() => {
+    if (!activeId || !draft.trim()) return;
+    void sendChatTyping(activeId, "on", self?.name ?? "You");
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = setTimeout(() => {
+      void sendChatTyping(activeId, "off", self?.name ?? "You");
+    }, 1200);
+    return () => {
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    };
+  }, [draft, activeId, self?.name]);
+
+  // Presence heartbeat
+  useEffect(() => {
+    if (!self) return;
+    const id = setInterval(() => void sendChatPresence(self.id, self.name), 18_000);
+    void sendChatPresence(self.id, self.name);
+    return () => clearInterval(id);
+  }, [self?.id, self?.name]);
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -181,8 +254,6 @@ export function ChatPage() {
           )
           .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
       );
-      setTyping(true);
-      window.setTimeout(() => setTyping(false), 1800);
     } catch (err) {
       toast.error(err, "Could not send message.");
     } finally {
@@ -195,8 +266,21 @@ export function ChatPage() {
   return (
     <div className="-mx-4 -mb-4 flex h-[calc(100svh-7.5rem)] min-h-[560px] overflow-hidden rounded-[28px] bg-pos-surface shadow-pos-md sm:-mx-0 lg:h-[calc(100svh-8.5rem)]">
       {/* Inbox */}
-      <aside className="flex w-full max-w-[320px] shrink-0 flex-col border-r border-pos-border/70 bg-pos-surface">
-        <div className="p-4">
+<aside className="flex w-full max-w-[320px] shrink-0 flex-col border-r border-pos-border/70 bg-pos-surface">
+        <div className="p-4 pb-2">
+          <button
+            type="button"
+            onClick={() => {
+              setShowNewChat(true);
+              if (!targets.length) {
+                listChatTargets().then(setTargets).catch(() => {});
+              }
+            }}
+            className="mb-3 flex w-full items-center justify-center gap-2 rounded-full bg-pos-primary px-3.5 py-2.5 text-sm font-medium text-white shadow-pos-primary transition hover:opacity-90"
+          >
+            <Users size={15} />
+            New chat
+          </button>
           <div className="flex items-center gap-2 rounded-full bg-pos-surface-muted px-3.5 py-2.5">
             <Search size={16} className="shrink-0 text-pos-ink-faint" />
             <input
@@ -224,7 +308,10 @@ export function ChatPage() {
                 <Avatar name={row.name} src={row.avatar} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-2">
-                    <p className="truncate text-sm font-semibold text-pos-ink">{row.name}</p>
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      {row.kind === "group" && <Users size={12} className="shrink-0 text-pos-ink-faint" />}
+                      <p className="truncate text-sm font-semibold text-pos-ink">{row.name}</p>
+                    </div>
                     <span
                       className={`shrink-0 text-[11px] font-medium ${
                         row.active && relativeTime(row.updatedAt) === "Active"
@@ -235,7 +322,13 @@ export function ChatPage() {
                       {relativeTime(row.updatedAt)}
                     </span>
                   </div>
-                  <p className="mt-0.5 truncate text-[12px] text-pos-ink-muted">{row.preview}</p>
+                  <div className="mt-0.5 flex items-center gap-1">
+                    {typing[row.id]?.state === "on" ? (
+                      <span className="truncate text-[12px] font-medium text-pos-primary">Typing…</span>
+                    ) : (
+                      <p className="truncate text-[12px] text-pos-ink-muted">{row.preview}</p>
+                    )}
+                  </div>
                 </div>
               </button>
             );
@@ -244,7 +337,7 @@ export function ChatPage() {
       </aside>
 
       {/* Thread */}
-      <section className="flex min-w-0 flex-1 flex-col bg-pos-bg/40">
+      <section className="relative flex min-w-0 flex-1 flex-col bg-pos-bg/40">
         {active ? (
           <>
             <header className="flex items-center gap-3 border-b border-pos-border/70 bg-pos-surface px-5 py-4">
@@ -252,9 +345,29 @@ export function ChatPage() {
               <div className="min-w-0 flex-1">
                 <p className="truncate font-semibold text-pos-ink">{active.name}</p>
                 <p className="text-[12px] text-pos-ink-faint">
-                  {typing ? "Typing…" : active.active ? "Active now" : relativeTime(active.updatedAt)}
+                  {typingState ? `${typingState.name} is typing…` : active.active ? "Active now" : relativeTime(active.updatedAt)}
                 </p>
               </div>
+              {active.kind === "direct" && callManager.state === "idle" ? (
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => callManager.startCall("audio")}
+                    title="Voice call"
+                    className="grid h-9 w-9 place-items-center rounded-full bg-pos-primary-soft text-pos-primary transition hover:bg-pos-primary hover:text-white"
+                  >
+                    <PhoneCall size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => callManager.startCall("video")}
+                    title="Video call"
+                    className="grid h-9 w-9 place-items-center rounded-full bg-pos-primary-soft text-pos-primary transition hover:bg-pos-primary hover:text-white"
+                  >
+                    <Phone size={16} />
+                  </button>
+                </div>
+              ) : null}
               <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-pos-ink-faint">
                 <span
                   className={`h-2 w-2 rounded-full ${live ? "bg-pos-success animate-pulse" : "bg-pos-ink-faint/40"}`}
@@ -273,7 +386,17 @@ export function ChatPage() {
                   </div>
                   <div className="space-y-4">
                     {group.items.map((message) => {
-                      const mine = message.sender === "staff";
+                      if (message.sender === "system" || message.kind === "system") {
+                        return (
+                          <div key={message.id} className="flex justify-center">
+                            <span className="max-w-[70%] rounded-full bg-pos-surface-muted px-4 py-1.5 text-center text-[11px] font-medium text-pos-ink-faint">
+                              {message.body}
+                            </span>
+                          </div>
+                        );
+                      }
+                      const mine = message.sender === "staff" && message.senderId === self?.id;
+                      const showSender = active.kind !== "customer" && message.sender === "staff";
                       return (
                         <div
                           key={message.id}
@@ -285,14 +408,17 @@ export function ChatPage() {
                                 mine ? "flex-row-reverse" : ""
                               }`}
                             >
-                              <Avatar
-                                name={message.senderName}
-                                src={mine ? undefined : active.avatar}
-                                size={22}
-                              />
-                              <span className="font-medium text-pos-ink-muted">
-                                {mine ? "You" : message.senderName}
-                              </span>
+                              {!mine && showSender ? (
+                                <Avatar name={message.senderName} size={22} />
+                              ) : null}
+                              {!mine && !showSender ? (
+                                <Avatar name={message.senderName} src={active.avatar} size={22} />
+                              ) : null}
+                              {showSender || mine ? (
+                                <span className="font-medium text-pos-ink-muted">
+                                  {mine ? "You" : message.senderName}
+                                </span>
+                              ) : null}
                               <span>{clock(message.at)}</span>
                             </div>
                             <div
@@ -311,8 +437,8 @@ export function ChatPage() {
                   </div>
                 </div>
               ))}
-              {typing ? (
-                <p className="text-[12px] text-pos-ink-faint">{active.name} is typing…</p>
+              {typingState ? (
+                <p className="text-[12px] text-pos-ink-faint">{typingState.name} is typing…</p>
               ) : null}
               <div ref={bottomRef} />
             </div>
@@ -353,13 +479,53 @@ export function ChatPage() {
             Select a conversation
           </div>
         )}
+
+        <ActiveCallOverlay call={callManager} />
       </section>
+
+      {callManager.state === "ringing-in" ? (
+        <IncomingCallModal
+          callerName={peerName}
+          mode={callManager.mode}
+          onAccept={callManager.acceptCall}
+          onDecline={callManager.declineCall}
+        />
+      ) : null}
+
+      <NewChatModal
+        open={showNewChat}
+        self={self}
+        onClose={() => setShowNewChat(false)}
+        onCreated={async (conversation) => {
+          setShowNewChat(false);
+          setActiveId(conversation.id);
+          setConversations((current) =>
+            current.some((row) => row.id === conversation.id)
+              ? current
+              : [{ ...conversation }, ...current],
+          );
+          await openThread(conversation.id);
+        }}
+      />
 
       {/* Profile */}
       <aside className="hidden w-[300px] shrink-0 flex-col border-l border-pos-border/70 bg-pos-surface xl:flex">
         {active ? (
-          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-5">
-            <div className="flex flex-col items-center text-center">
+          active.kind !== "customer" ? (
+            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-5">
+              <div className="flex flex-col items-center text-center">
+                <Avatar name={active.name} size={88} />
+                <h2 className="mt-3 text-lg font-semibold text-pos-ink">{active.name}</h2>
+                <p className="mt-1 text-xs text-pos-ink-faint">
+                  {active.kind === "group"
+                    ? `${active.memberIds.length + 1} members`
+                    : "Staff direct chat"}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-5">
+              <div className="flex flex-col items-center text-center">
               <Avatar name={active.name} src={active.avatar} size={88} />
               <h2 className="mt-3 text-lg font-semibold text-pos-ink">{active.name}</h2>
               <p className="mt-1 text-xs text-pos-ink-faint">
@@ -459,6 +625,7 @@ export function ChatPage() {
               ) : null}
             </div>
           </div>
+          )
         ) : null}
       </aside>
     </div>

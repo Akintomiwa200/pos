@@ -11,6 +11,7 @@ import {
   ArrowUpRight,
   Banknote,
   BarChart3,
+  Check,
   ChevronDown,
   CreditCard,
   Link2,
@@ -187,6 +188,184 @@ function rangeLabel(from: Date, to: Date) {
 function inRange(sale: HqSale, from: Date, to: Date) {
   const at = Date.parse(sale.paidAt);
   return Number.isFinite(at) && at >= from.getTime() && at <= to.getTime();
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function startOfDay(date: Date) {
+  const next = new Date(date);
+  next.setHours(0, 0, 0, 0);
+  return next;
+}
+
+function endOfDay(date: Date) {
+  const next = new Date(date);
+  next.setHours(23, 59, 59, 999);
+  return next;
+}
+
+function addDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setTime(next.getTime() + days * DAY_MS);
+  return next;
+}
+
+type RangePreset = "7d" | "30d" | "90d" | "thisMonth" | "lastMonth" | "12m" | "all";
+type BucketUnit = "day" | "week" | "month";
+
+const RANGE_PRESETS: { id: RangePreset; label: string }[] = [
+  { id: "7d", label: "Last 7 days" },
+  { id: "30d", label: "Last 30 days" },
+  { id: "90d", label: "Last 90 days" },
+  { id: "thisMonth", label: "This month" },
+  { id: "lastMonth", label: "Last month" },
+  { id: "12m", label: "Last 12 months" },
+  { id: "all", label: "All time" },
+];
+
+function rangeForPreset(sales: HqSale[], preset: RangePreset): { from: Date; to: Date } {
+  const now = new Date();
+  const today = startOfDay(now);
+  switch (preset) {
+    case "7d":
+      return { from: addDays(today, -6), to: endOfDay(now) };
+    case "30d":
+      return { from: addDays(today, -29), to: endOfDay(now) };
+    case "90d":
+      return { from: addDays(today, -89), to: endOfDay(now) };
+    case "thisMonth":
+      return {
+        from: new Date(now.getFullYear(), now.getMonth(), 1),
+        to: endOfDay(now),
+      };
+    case "lastMonth":
+      return {
+        from: new Date(now.getFullYear(), now.getMonth() - 1, 1),
+        to: new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999),
+      };
+    case "12m":
+      return { from: addDays(today, -364), to: endOfDay(now) };
+    case "all": {
+      const ats = sales.map((sale) => Date.parse(sale.paidAt)).filter(Number.isFinite);
+      if (!ats.length) return { from: addDays(today, -89), to: endOfDay(now) };
+      const min = new Date(Math.min(...ats));
+      const max = new Date(Math.max(...ats));
+      return { from: startOfDay(min), to: endOfDay(max) };
+    }
+  }
+}
+
+function rangeForCustom(fromIso: string, toIso: string): { from: Date; to: Date } {
+  const [fromYear, fromMonth, fromDay] = fromIso.split("-").map(Number);
+  const [toYear, toMonth, toDay] = toIso.split("-").map(Number);
+  let from = new Date(fromYear, fromMonth - 1, fromDay, 0, 0, 0, 0);
+  let to = new Date(toYear, toMonth - 1, toDay, 23, 59, 59, 999);
+  if (!Number.isFinite(from.getTime()) || !Number.isFinite(to.getTime())) {
+    return rangeForPreset([], "90d");
+  }
+  if (from.getTime() > to.getTime()) {
+    const swap = from;
+    from = to;
+    to = swap;
+  }
+  return { from, to };
+}
+
+type Bucket = {
+  label: string;
+  start: Date;
+  end: Date;
+  value: number;
+  tickets: number;
+  totals: NamedTotal[];
+};
+
+function sizeBuckets(
+  rows: HqSale[],
+  from: Date,
+  to: Date,
+): { buckets: Bucket[]; unit: BucketUnit } {
+  const days =
+    Math.round((endOfDay(to).getTime() - startOfDay(from).getTime()) / DAY_MS) + 1;
+  const unit: BucketUnit = days <= 35 ? "day" : days <= 181 ? "week" : "month";
+  const buckets: Bucket[] = [];
+  const labelOf = (date: Date) =>
+    date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const makeBucket = (label: string, coverStart: Date, coverEnd: Date) => {
+    const bucket = rows.filter((row) => inRange(row, coverStart, coverEnd));
+    return {
+      label,
+      start: coverStart,
+      end: coverEnd,
+      value: bucket.reduce((sum, row) => sum + row.totalMinor, 0),
+      tickets: bucket.length,
+      totals: sumBy(bucket, (row) => row.cashierName || "Till", (row) => row.totalMinor),
+    };
+  };
+
+  if (unit === "month") {
+    let cursor = new Date(from.getFullYear(), from.getMonth(), 1);
+    let guard = 0;
+    while (cursor.getTime() <= to.getTime() && guard < 60) {
+      const end = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0, 23, 59, 59, 999);
+      const coverStart = cursor.getTime() < from.getTime() ? from : cursor;
+      const coverEnd = end.getTime() > to.getTime() ? to : end;
+      buckets.push(makeBucket(
+        cursor.toLocaleDateString("en-US", { month: "short" }),
+        coverStart,
+        coverEnd,
+      ));
+      cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+      guard += 1;
+    }
+    return { buckets, unit };
+  }
+
+  if (unit === "week") {
+    let cursor = addDays(startOfDay(from), -startOfDay(from).getDay());
+    let guard = 0;
+    while (cursor.getTime() <= to.getTime() && guard < 120) {
+      const bucketEnd = new Date(cursor.getTime() + 7 * DAY_MS - 1);
+      const coverStart = cursor.getTime() < from.getTime() ? from : cursor;
+      const coverEnd = bucketEnd.getTime() > to.getTime() ? to : bucketEnd;
+      buckets.push(makeBucket(labelOf(coverStart), coverStart, coverEnd));
+      cursor = new Date(cursor.getTime() + 7 * DAY_MS);
+      guard += 1;
+    }
+    return { buckets, unit };
+  }
+
+  let cursor = startOfDay(from);
+  let guard = 0;
+  while (cursor.getTime() <= to.getTime() && guard < 740) {
+    const coverEnd = endOfDay(cursor).getTime() > to.getTime() ? to : endOfDay(cursor);
+    buckets.push(makeBucket(labelOf(cursor), cursor, coverEnd));
+    cursor = addDays(cursor, 1);
+    guard += 1;
+  }
+  return { buckets, unit };
+}
+
+function bucketChart(bucket: Bucket) {
+  const a = bucket.totals[0]?.total ?? 0;
+  const b = bucket.totals[1]?.total ?? 0;
+  const c = bucket.totals[2]?.total ?? 0;
+  return {
+    month: bucket.label,
+    start: bucket.start,
+    end: bucket.end,
+    total: bucket.value,
+    a,
+    b,
+    c,
+    ta: bucket.totals[0] ? bucket.totals[0].total : 0,
+    tb: bucket.totals[1] ? bucket.totals[1].total : 0,
+    tc: bucket.totals[2] ? bucket.totals[2].total : 0,
+    ma: bucket.value ? Math.round((a / bucket.value) * 100) : 0,
+    mb: bucket.value ? Math.round((b / bucket.value) * 100) : 0,
+    mc: bucket.value ? Math.round((c / bucket.value) * 100) : 0,
+    people: bucket.totals.slice(0, 3),
+  };
 }
 
 function Avatar({ name, size = 36, index = 0 }: { name: string; size?: number; index?: number }) {
@@ -513,6 +692,7 @@ function PlatformMonthChart({
   months,
   people,
   focus,
+  unit,
 }: {
   months: Array<{
     month: string;
@@ -529,6 +709,7 @@ function PlatformMonthChart({
   }>;
   people: { name: string }[];
   focus: "revenue" | "tickets" | "mix";
+  unit: BucketUnit;
 }) {
   const colors = useThemeColors();
   useOrgLocale();
@@ -540,13 +721,15 @@ function PlatformMonthChart({
     a: focus === "tickets" ? row.ta : focus === "mix" ? row.ma : row.a,
     b: focus === "tickets" ? row.tb : focus === "mix" ? row.mb : row.b,
     c: focus === "tickets" ? row.tc : focus === "mix" ? row.mc : row.c,
-    stripe: index === 1 ? 0 : 1,
+    stripe: index === months.length - 1 ? 0 : 1,
     faces: Math.max(1, Math.min(3, row.people.length || faces.length)),
     people: row.people.length ? row.people : faces,
   }));
   const max = niceMax(Math.max(...data.flatMap((row) => [row.a, row.b, row.c]), 1));
   const format = focus === "tickets" ? "count" : focus === "mix" ? "pct" : "money";
-  const ticks = [max * 0.28, max * 0.52, max * 0.76, max].map((value) => Math.round(value));
+  const ticks = [...new Set(
+    [max * 0.28, max * 0.52, max * 0.76, max].map((value) => Math.round(value)),
+  )];
   return (
     <div className="flex min-w-0 flex-1 flex-col justify-end px-2 pb-3 pt-1">
       <div className="h-[188px] w-full">
@@ -607,15 +790,18 @@ function PlatformMonthChart({
           </BarChart>
         </ResponsiveContainer>
       </div>
-      <div className="mt-1 grid grid-cols-3 pr-[56px]">
-        {data.map((row) => (
-          <div key={row.month} className="flex flex-col items-center">
+      <div
+        className="mt-1 grid pr-[56px]"
+        style={{ gridTemplateColumns: `repeat(${Math.max(data.length, 1)}, minmax(0, 1fr))` }}
+      >
+        {data.map((row, index) => (
+          <div key={`${row.month}-${index}`} className="flex min-w-0 flex-col items-center">
             <div className="flex -space-x-1.5">
               {(row.people ?? faces).slice(0, row.faces).map((person, index) => (
                 <Avatar key={`${row.month}-${person.name}`} name={person.name} size={20} index={index} />
               ))}
             </div>
-            <span className="mt-1 text-[12px] text-pos-ink-faint">{row.month}</span>
+            <span className="mt-1 max-w-full truncate text-[12px] text-pos-ink-faint">{row.month}</span>
           </div>
         ))}
       </div>
@@ -630,42 +816,55 @@ function SalesWaveDot({
   cy,
   index = 0,
   people,
+  count,
 }: {
   cx?: number;
   cy?: number;
   index?: number;
   people: { name: string }[];
+  count: number;
 }) {
   const colors = useThemeColors();
   if (cx == null || cy == null) return null;
+  const n = Math.max(count, 1);
+  const at = (ratio: number) => Math.round((n - 1) * ratio);
   const person = people[index % Math.max(people.length, 1)];
-  if (person && (index === 4 || index === 6 || index === 10)) {
+  if (person && (index === at(0.22) || index === at(0.5) || index === at(0.78))) {
     return (
       <foreignObject x={cx - 11} y={cy - 11} width={22} height={22}>
         <Avatar name={person.name} size={22} index={index} />
       </foreignObject>
     );
   }
-  if (index === 2 || index === 8) {
+  if (index === at(0.38) || index === at(0.62)) {
     return <circle cx={cx} cy={cy} r={4} fill={colors.primary} stroke={colors.surface} strokeWidth={2} />;
   }
   return <g />;
 }
 
 function SalesDynamicChart({
-  weeks,
+  points,
   people,
+  unit,
 }: {
-  weeks: { week: string; value: number; tickets: number }[];
+  points: { label: string; value: number; tickets: number }[];
   people: { name: string }[];
+  unit: BucketUnit;
 }) {
   const colors = useThemeColors();
-  const data = weeks.map((row) => ({
-    week: row.week.replace(/^W/, "W "),
+  const data = points.map((row) => ({
+    label: row.label,
     a: row.value,
     b: Math.round(row.value * 0.72),
   }));
-  const wins = weeks.reduce((sum, row) => sum + row.tickets, 0);
+  const count = Math.max(points.length, 1);
+  const markAt = (ratio: number) => Math.min(count - 1, Math.round((count - 1) * ratio));
+  const tickStep = Math.max(1, Math.ceil(count / 6));
+  const marks = [
+    { at: markAt(0.2), left: "16%", tone: colors.avatar[0], name: people[0]?.name, face: 0 },
+    { at: markAt(0.5), left: "48%", tone: colors.avatar[1], name: people[1]?.name, face: 1 },
+    { at: markAt(0.9), left: "82%", tone: colors.primary, name: people[2]?.name ?? people[0]?.name, face: 2 },
+  ];
   return (
     <div className="mt-4">
       <p className="text-[14px] font-medium">Sales dynamic</p>
@@ -673,15 +872,12 @@ function SalesDynamicChart({
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 14, right: 8, left: 0, bottom: 0 }}>
             <XAxis
-              dataKey="week"
+              dataKey="label"
               axisLine={false}
               tickLine={false}
               interval={0}
               tick={{ fontSize: 11, fill: colors.inkFaint }}
-              tickFormatter={(value) => {
-                const week = Number(String(value).replace(/\D/g, ""));
-                return week % 2 === 1 ? `W ${week}` : "";
-              }}
+              tickFormatter={(value, tickIndex) => (tickIndex % tickStep === 0 ? String(value) : "")}
             />
             <Line
               type="monotone"
@@ -704,6 +900,7 @@ function SalesDynamicChart({
                   cy={props.cy}
                   index={props.index}
                   people={people}
+                  count={count}
                 />
               )}
             />
@@ -711,11 +908,7 @@ function SalesDynamicChart({
         </ResponsiveContainer>
       </div>
       <div className="relative mt-7 h-2.5 rounded-full bg-pos-border">
-        {[
-          { left: "16%", value: Math.max(weeks[2]?.tickets ?? 0, 0), tone: colors.avatar[0], name: people[0]?.name, face: 0 },
-          { left: "48%", value: Math.max(weeks[5]?.tickets ?? 0, 0), tone: colors.avatar[1], name: people[1]?.name, face: 1 },
-          { left: "82%", value: Math.max(weeks[9]?.tickets ?? wins, 0), tone: colors.primary, name: people[2]?.name ?? people[0]?.name, face: 2 },
-        ].map((mark) => (
+        {marks.map((mark) => (
           <span
             key={mark.left}
             className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2"
@@ -726,7 +919,7 @@ function SalesDynamicChart({
                 className="grid h-5 w-5 place-items-center rounded-full text-[9px] font-bold text-white"
                 style={{ background: mark.tone }}
               >
-                {mark.value}
+                {Math.max(points[mark.at]?.tickets ?? 0, 0)}
               </span>
               {mark.name ? (
                 <span className="absolute -top-4 left-1/2 -translate-x-1/2">
@@ -748,6 +941,7 @@ function SalesTeamCard({
   sales,
   weeks,
   revenue,
+  unit,
   selected,
   onSelect,
 }: {
@@ -755,8 +949,9 @@ function SalesTeamCard({
   ticketsByCashier: NamedTotal[];
   linesByCashier: NamedTotal[];
   sales: HqSale[];
-  weeks: { week: string; value: number; tickets: number }[];
+  weeks: { week: string; value: number; tickets: number; start: Date; end: Date }[];
   revenue: number;
+  unit: BucketUnit;
   selected: string | null;
   onSelect: (name: string) => void;
 }) {
@@ -801,13 +996,10 @@ function SalesTeamCard({
               { name: thirdExtra.name, value: padDonut ? 5 : Math.max(thirdExtra.total, 0), fill: colors.chartSlice3 },
               { name: "Other", value: padDonut ? 8 : Math.max(otherTotal, 0), fill: colors.chartSlice4 },
             ].filter((slice) => slice.value > 0);
-            const myWeeks = weeks.map((week, weekIndex) => {
-              const to = new Date();
-              const end = new Date(to.getTime() - (10 - weekIndex) * 7 * 24 * 60 * 60 * 1000);
-              const start = new Date(end.getTime() - 7 * 24 * 60 * 60 * 1000);
-              const rows = mine.filter((sale) => inRange(sale, start, end));
+            const myWeeks = weeks.map((week) => {
+              const rows = mine.filter((sale) => inRange(sale, week.start, week.end));
               return {
-                week: week.week,
+                label: week.week,
                 value: rows.reduce((sum, sale) => sum + sale.totalMinor, 0),
                 tickets: rows.length,
               };
@@ -943,7 +1135,7 @@ function SalesTeamCard({
                         </p>
                       </div>
                     </div>
-                    <SalesDynamicChart weeks={myWeeks} people={cashiers} />
+                    <SalesDynamicChart points={myWeeks} people={cashiers} unit={unit} />
                   </div>
                 ) : null}
               </div>
@@ -966,32 +1158,6 @@ function sumBy<T>(rows: T[], key: (row: T) => string, amount: (row: T) => number
     .sort((a, b) => b.total - a.total);
 }
 
-function buildMonths(rows: HqSale[], to: Date) {
-  return Array.from({ length: 3 }, (_, index) => {
-    const date = new Date(to.getFullYear(), to.getMonth() - (2 - index), 1);
-    const start = new Date(date.getFullYear(), date.getMonth(), 1);
-    const end = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59);
-    const bucket = rows.filter((row) => inRange(row, start, end));
-    const people = sumBy(bucket, (row) => row.cashierName || "Till", (row) => row.totalMinor);
-    const peopleTickets = sumBy(bucket, (row) => row.cashierName || "Till", () => 1);
-    const monthTotal = bucket.reduce((sum, row) => sum + row.totalMinor, 0);
-    return {
-      month: date.toLocaleDateString("en-US", { month: "short" }),
-      total: monthTotal,
-      a: people[0]?.total ?? 0,
-      b: people[1]?.total ?? 0,
-      c: people[2]?.total ?? 0,
-      ta: peopleTickets[0]?.total ?? 0,
-      tb: peopleTickets[1]?.total ?? 0,
-      tc: peopleTickets[2]?.total ?? 0,
-      ma: monthTotal ? Math.round(((people[0]?.total ?? 0) / monthTotal) * 100) : 0,
-      mb: monthTotal ? Math.round(((people[1]?.total ?? 0) / monthTotal) * 100) : 0,
-      mc: monthTotal ? Math.round(((people[2]?.total ?? 0) / monthTotal) * 100) : 0,
-      people: people.slice(0, 3),
-    };
-  });
-}
-
 export function HqDashboard() {
   const router = useRouter();
   const { session } = useAuth();
@@ -1000,7 +1166,10 @@ export function HqDashboard() {
   const [sales, setSales] = useState<HqSale[]>([]);
   const [catalog, setCatalog] = useState<HqCatalogItem[]>([]);
   const [ready, setReady] = useState(false);
-  const [days, setDays] = useState(90);
+  const [preset, setPreset] = useState<RangePreset>("90d");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+  const [customMode, setCustomMode] = useState(false);
   const [rangeOpen, setRangeOpen] = useState(false);
   const rangeRef = useRef<HTMLDivElement>(null);
   const [focus, setFocus] = useState<"revenue" | "tickets" | "mix">("revenue");
@@ -1034,10 +1203,14 @@ export function HqDashboard() {
   }, []);
 
   const report = useMemo(() => {
-    const to = new Date();
-    const from = new Date(to.getTime() - days * 24 * 60 * 60 * 1000);
+    const range =
+      customMode && customFrom && customTo
+        ? rangeForCustom(customFrom, customTo)
+        : rangeForPreset(sales, preset);
+    const { from, to } = range;
+    const span = to.getTime() - from.getTime() + 1;
     const prevTo = new Date(from.getTime() - 1);
-    const prevFrom = new Date(prevTo.getTime() - days * 24 * 60 * 60 * 1000);
+    const prevFrom = new Date(prevTo.getTime() - span + 1);
     const current = sales.filter((row) => inRange(row, from, to));
     const previous = sales.filter((row) => inRange(row, prevFrom, prevTo));
     const revenue = current.reduce((sum, row) => sum + row.totalMinor, 0);
@@ -1059,22 +1232,21 @@ export function HqDashboard() {
       null,
     );
     const card = current.filter((row) => /card|pos|transfer/i.test(row.tender)).length;
-    const weeks = Array.from({ length: 11 }, (_, index) => {
-      const end = new Date(to.getTime() - (10 - index) * 7 * 24 * 60 * 60 * 1000);
-      const start = new Date(end.getTime() - 7 * 24 * 60 * 60 * 1000);
-      const rows = current.filter((row) => inRange(row, start, end));
-      return {
-        week: `W${index + 1}`,
-        value: rows.reduce((sum, row) => sum + row.totalMinor, 0),
-        tickets: rows.length,
-      };
-    });
-    const months = buildMonths(current, to);
+    const { buckets, unit } = sizeBuckets(current, from, to);
+    const weeks = buckets.map((bucket) => ({
+      week: bucket.label,
+      value: bucket.value,
+      tickets: bucket.tickets,
+      start: bucket.start,
+      end: bucket.end,
+    }));
+    const months = buckets.map(bucketChart);
     return {
       from,
       to,
       prevFrom,
       prevTo,
+      unit,
       current,
       revenue,
       prevRevenue,
@@ -1094,7 +1266,7 @@ export function HqDashboard() {
       months,
       avgTicket: current.length ? revenue / current.length : 0,
     };
-  }, [sales, days]);
+  }, [sales, preset, customMode, customFrom, customTo]);
 
   useEffect(() => {
     if (selectedCashier && report.cashiers.some((row) => row.name === selectedCashier)) return;
@@ -1165,10 +1337,11 @@ export function HqDashboard() {
   const featuredTickets = report.current.filter(
     (row) => (row.tender || "Other") === featured.name,
   ).length;
-  const featuredMonths = buildMonths(
+  const featuredMonths = sizeBuckets(
     report.current.filter((row) => (row.tender || "Other") === featured.name),
+    report.from,
     report.to,
-  );
+  ).buckets.map(bucketChart);
   const featuredMix = featuredTickets
     ? Math.round(
         (report.current.filter(
@@ -1179,6 +1352,7 @@ export function HqDashboard() {
           100,
       )
     : 0;
+  const periodLabel = report.unit === "month" ? "Average monthly" : report.unit === "week" ? "Average weekly" : "Average daily";
   const people = accounts.slice(0, 3);
   const extra = accounts[3];
   const cashierBar = fillCashierBar(report.cashiers, accounts);
@@ -1268,20 +1442,6 @@ export function HqDashboard() {
           </h1>
           <div className="flex items-center gap-3">
             <span className="text-sm text-pos-ink-faint">Timeframe</span>
-            <button
-              type="button"
-              className={`relative h-6 w-11 rounded-full transition-colors ${
-                days === 30 ? "bg-pos-primary" : "bg-pos-border"
-              }`}
-              onClick={() => setDays((value) => (value === 30 ? 90 : 30))}
-              aria-label="Toggle 30 or 90 days"
-            >
-              <span
-                className={`absolute top-0.5 h-5 w-5 rounded-full bg-pos-surface transition ${
-                  days === 30 ? "right-0.5" : "left-0.5"
-                }`}
-              />
-            </button>
             <div className="relative" ref={rangeRef}>
               <button
                 type="button"
@@ -1293,26 +1453,64 @@ export function HqDashboard() {
                 <ChevronDown size={14} strokeWidth={2} className="text-pos-ink-faint" />
               </button>
               {rangeOpen ? (
-                <div className="absolute right-0 z-20 mt-2 w-48 overflow-hidden rounded-2xl bg-pos-surface py-1 shadow-pos-md">
-                  {[
-                    { days: 30, label: "Last 30 days" },
-                    { days: 90, label: "Last 90 days" },
-                    { days: 365, label: "Last 12 months" },
-                  ].map((row) => (
+                <div className="absolute right-0 z-20 mt-2 w-64 overflow-hidden rounded-2xl bg-pos-surface py-1 shadow-pos-md">
+                  {RANGE_PRESETS.map((row) => {
+                    const active = !customMode && preset === row.id;
+                    return (
+                      <button
+                        key={row.id}
+                        type="button"
+                        className={`flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-pos-ink ${
+                          active ? "bg-pos-primary-soft font-medium text-pos-primary" : "hover:bg-pos-surface-muted"
+                        }`}
+                        onClick={() => {
+                          setPreset(row.id);
+                          setCustomMode(false);
+                          setRangeOpen(false);
+                        }}
+                      >
+                        <span className="flex-1">{row.label}</span>
+                        {active ? <Check size={14} strokeWidth={2.4} /> : null}
+                      </button>
+                    );
+                  })}
+                  <div className="mt-1 border-t border-pos-border/60 p-3">
+                    <p className="text-[12px] font-medium text-pos-ink">Custom range</p>
+                    <div className="mt-2 grid grid-cols-2 items-center gap-2">
+                      <div>
+                        <p className="mb-1 text-[11px] text-pos-ink-faint">From</p>
+                        <input
+                          type="date"
+                          value={customFrom}
+                          onChange={(event) => setCustomFrom(event.target.value)}
+                          className="w-full rounded-lg border border-pos-border bg-pos-surface px-2 py-1.5 text-[13px] text-pos-ink outline-none focus:border-pos-primary"
+                        />
+                      </div>
+                      <div>
+                        <p className="mb-1 text-[11px] text-pos-ink-faint">To</p>
+                        <input
+                          type="date"
+                          value={customTo}
+                          onChange={(event) => setCustomTo(event.target.value)}
+                          className="w-full rounded-lg border border-pos-border bg-pos-surface px-2 py-1.5 text-[13px] text-pos-ink outline-none focus:border-pos-primary"
+                        />
+                      </div>
+                    </div>
                     <button
-                      key={row.days}
                       type="button"
-                      className={`block w-full px-4 py-2 text-left text-sm text-pos-ink ${
-                        days === row.days ? "bg-pos-surface-muted font-medium" : "hover:bg-pos-surface-muted"
-                      }`}
+                      className="mt-2 w-full rounded-xl bg-pos-primary px-3 py-2 text-[13px] font-medium text-white shadow-pos-primary"
                       onClick={() => {
-                        setDays(row.days);
-                        setRangeOpen(false);
+                        if (customFrom && customTo) {
+                          setCustomMode(true);
+                          setRangeOpen(false);
+                        } else if (!customFrom || !customTo) {
+                          toast.info("Pick a start and end date first.");
+                        }
                       }}
                     >
-                      {row.label}
+                      Apply dates
                     </button>
-                  ))}
+                  </div>
                 </div>
               ) : null}
             </div>
@@ -1584,7 +1782,7 @@ export function HqDashboard() {
                   className="flex w-7 shrink-0 items-center justify-center text-[11px] font-medium tracking-[0.06em] text-white/70"
                   style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
                 >
-                  Average monthly
+                  {periodLabel}
                 </p>
                 <div className="flex min-w-0 flex-1 flex-col justify-center gap-[18px] py-6 pr-5 text-white [font-feature-settings:'tnum']">
                   <div className="min-w-0">
@@ -1617,6 +1815,7 @@ export function HqDashboard() {
                 months={featuredMonths.some((row) => row.total) ? featuredMonths : report.months}
                 people={accounts}
                 focus={focus}
+                unit={report.unit}
               />
             </div>
           </div>
@@ -1629,6 +1828,7 @@ export function HqDashboard() {
           sales={report.current}
           weeks={report.weeks}
           revenue={report.revenue}
+          unit={report.unit}
           selected={selectedCashier}
           onSelect={setSelectedCashier}
         />

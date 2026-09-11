@@ -30,6 +30,12 @@ export type PasswordResetMail = {
   resetUrl: string;
 };
 
+export type EmailVerificationMail = {
+  to: string;
+  name: string;
+  verifyUrl: string;
+};
+
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
@@ -280,6 +286,29 @@ ${input.resetUrl}
     return this.send({
       to: input.to,
       subject: "Reset your POS HQ password",
+      text,
+      html,
+    });
+  }
+
+  async sendEmailVerification(input: EmailVerificationMail) {
+    const html = this.layout(
+      "Verify your email address",
+      `<p style="margin:0 0 12px;">Hi ${input.name},</p>
+<p style="margin:0 0 12px;color:#52525b;">Confirm your email address to finish setting up your POS HQ account. This link expires in seven days.</p>
+${this.button(input.verifyUrl, "Verify email")}
+<p style="margin:16px 0 0;font-size:13px;color:#71717a;">If you did not create this account, you can ignore this email.</p>`,
+    );
+
+    const text = `Hi ${input.name},
+
+Verify your POS HQ email address (expires in seven days):
+${input.verifyUrl}
+`;
+
+    return this.send({
+      to: input.to,
+      subject: "Verify your email address",
       text,
       html,
     });

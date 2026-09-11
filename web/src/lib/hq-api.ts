@@ -302,11 +302,13 @@ export type HqSale = {
   cashierName: string;
   totalMinor: number;
   loyaltyNumber?: string | null;
+  loyaltyPointsEarned?: number | null;
   tillKey?: string | null;
   customerName?: string | null;
   customerPhone?: string | null;
   storeId?: string | null;
   storeName?: string | null;
+  receiptText?: string | null;
   lines?: Array<{
     id?: string;
     itemId?: string;

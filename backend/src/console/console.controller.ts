@@ -113,6 +113,16 @@ export class ConsoleController {
     return this.consoleService.resetPassword(body.token ?? "", body.password ?? "");
   }
 
+  @Get("verify-email")
+  verifyEmail(@Query("token") token?: string) {
+    return this.consoleService.verifyEmail(token ?? "");
+  }
+
+  @Post("verify-email/resend")
+  resendVerification(@Body() body: { email?: string; username?: string }) {
+    return this.consoleService.resendVerification(body.email ?? body.username ?? "");
+  }
+
   @Get("me")
   me(@Headers("authorization") authorization?: string) {
     return this.consoleService.me(bearer(authorization));

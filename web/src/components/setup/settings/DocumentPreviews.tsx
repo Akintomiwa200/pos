@@ -1,21 +1,22 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import type { HqCompany, HqOrgSettings } from "@/lib/hq-setup";
+import { useAuth } from "@/components/AuthProvider";
+import { listCatalog, listSales, type HqCatalogItem, type HqSale } from "@/lib/hq-api";
+import { listDirectory, type DirectoryRecord } from "@/lib/hq-directory";
 import { ReceiptBarcode } from "./ReceiptBarcode";
 
-const RECEIPT_LINES = [
+const FALLBACK_RECEIPT_LINES = [
   { name: "Jollof rice (large)", sku: "FD-101", qty: 2, price: 3500 },
   { name: "Chapman", sku: "DR-044", qty: 1, price: 2500 },
   { name: "Grilled chicken", sku: "FD-220", qty: 1, price: 6500 },
 ];
 
-/** Demo sale used only for the Settings live preview. */
-const DEMO_SALE = {
+/** Demo amounts used only for the Settings layout preview (toggles stay meaningful). */
+const DEMO_AMOUNTS = {
   ticketId: "10482001933",
-  cashier: "Adaeze Okafor",
   till: "TILL-01 · VI",
-  customerName: "Chioma Adeyemi",
-  customerPhone: "0803 123 4567",
   tender: "Cash",
   tendered: 20000,
   discount: 500,
@@ -29,11 +30,165 @@ const DEMO_SALE = {
   giftCardBalanceAfter: 8000,
 };
 
-const INVOICE_LINES = [
-  { name: "Business consultation", qty: 1, price: 150000 },
-  { name: "Website development", qty: 1, price: 280000 },
-  { name: "Logo design", qty: 1, price: 65000 },
+const FALLBACK_INVOICE_LINES = [
+  { name: "Business consultation", sku: "", qty: 1, price: 150000 },
+  { name: "Website development", sku: "", qty: 1, price: 280000 },
+  { name: "Logo design", sku: "", qty: 1, price: 65000 },
 ];
+
+type PreviewLine = { name: string; sku?: string; qty: number; price: number };
+
+function tenderLabel(tender?: string | null) {
+  switch ((tender || "").toLowerCase()) {
+    case "cash":
+      return "Cash";
+    case "card":
+      return "Credit Card";
+    case "transfer":
+      return "Bank Transfer";
+    case "pos":
+      return "POS";
+    default:
+      return tender || "Cash";
+  }
+}
+
+/** Pulls the real amounts straight out of the till-printed receipt text. */
+function parseReceiptAmounts(text: string | null | undefined) {
+  const out: {
+    subtotalMinor?: number;
+    serviceMinor?: number;
+    taxMinor?: number;
+    discountMinor?: number;
+    totalMinor?: number;
+    tenderedMinor?: number;
+    changeMinor?: number;
+  } = {};
+  if (!text) return out;
+  const lineFor = (label: string) => {
+    const m = text.match(new RegExp(`^${label}[^\\n]*$`, "m"));
+    return m ? m[0] : "";
+  };
+  const amountOf = (label: string): number | undefined => {
+    const line = lineFor(label);
+    if (!line) return undefined;
+    const tokens = line.match(/[?\d][\d.,]*\d/g);
+    const last = tokens?.reverse().find((token) => /\d/.test(token));
+    const n = last ? parseFloat(last.replace(/[^\d.]/g, "")) : NaN;
+    return Number.isFinite(n) ? Math.round(n * 100) : undefined;
+  };
+  out.subtotalMinor = amountOf("Subtotal");
+  out.serviceMinor = amountOf("Service");
+  out.taxMinor = amountOf("VAT");
+  out.discountMinor = amountOf("Discount");
+  out.totalMinor = amountOf("TOTAL");
+  out.tenderedMinor = amountOf("Tendered");
+  out.changeMinor = amountOf("Change");
+  return out;
+}
+
+/**
+ * Fetches live data so Settings previews reflect the latest real sale:
+ * catalog items, first customer, and the most recent till receipt.
+ */
+export function usePreviewData() {
+  const { session } = useAuth();
+  const [catalog, setCatalog] = useState<HqCatalogItem[]>([]);
+  const [customers, setCustomers] = useState<DirectoryRecord[]>([]);
+  const [sales, setSales] = useState<HqSale[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const [items, people, sold] = await Promise.all([
+          listCatalog(),
+          listDirectory("customers"),
+          listSales(),
+        ]);
+        if (!cancelled) {
+          setCatalog(items);
+          setCustomers(people);
+          setSales(sold);
+        }
+      } catch {
+        /* silent — fall back to sample lines */
+      }
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const sessionName = session?.name || "Cashier";
+  const firstCustomer = customers[0] ?? null;
+  const latest = sales[0] ?? null;
+  const fromCatalog = (items: HqCatalogItem[]): PreviewLine[] =>
+    items
+      .filter((item) => item.priceMinor > 0)
+      .slice(0, 3)
+      .map((item) => ({
+        name: item.name,
+        sku: item.sku || item.barcode || "",
+        qty: 1,
+        price: item.priceMinor,
+      }));
+  const fromSale = (sale: HqSale): PreviewLine[] =>
+    (sale.lines ?? []).map((line) => ({
+      name: line.name,
+      sku: "",
+      qty: line.quantity,
+      price: line.unitPriceMinor,
+    }));
+  const catalogLines = fromCatalog(catalog);
+  const saleLines = latest ? fromSale(latest) : [];
+  const receiptLines = saleLines.length
+    ? saleLines
+    : catalogLines.length
+      ? catalogLines
+      : FALLBACK_RECEIPT_LINES;
+  const invoiceLines = catalogLines.length ? catalogLines : FALLBACK_INVOICE_LINES;
+
+  const amounts = parseReceiptAmounts(latest?.receiptText ?? null);
+  const saleTotalMinor = amounts.totalMinor ?? latest?.totalMinor ?? 0;
+  const tenderedMinor = latest
+    ? amounts.tenderedMinor ?? Math.ceil(saleTotalMinor / 1000) * 1000
+    : DEMO_AMOUNTS.tendered;
+  const changeMinor = latest ? Math.max(0, tenderedMinor - saleTotalMinor) : 0;
+  const tender = tenderLabel(latest?.tender);
+
+  return {
+    latestSale: latest,
+    saleText: latest?.receiptText ?? null,
+    sessionName,
+    firstCustomer,
+    receiptLines,
+    invoiceLines,
+    sale: {
+      hasSale: Boolean(latest),
+      isCash: tender.toLowerCase() === "cash",
+      ticketId: latest?.ticketId || DEMO_AMOUNTS.ticketId,
+      cashier: latest?.cashierName || sessionName,
+      till: latest?.tillKey || DEMO_AMOUNTS.till,
+      tender,
+      tendered: tenderedMinor,
+      change: changeMinor,
+      customerName: latest?.customerName || firstCustomer?.name || "",
+      customerPhone: latest?.customerPhone || firstCustomer?.phone || "",
+      paidAt: latest ? new Date(latest.paidAt) : new Date(),
+      loyaltyNumber: latest?.loyaltyNumber ?? null,
+      loyaltyPointsEarned: latest?.loyaltyPointsEarned ?? null,
+      hasLoyalty: Boolean(latest?.loyaltyNumber || latest?.loyaltyPointsEarned),
+      hasGiftCard: false,
+      subtotalMinor: amounts.subtotalMinor,
+      serviceMinor: amounts.serviceMinor,
+      taxMinor: amounts.taxMinor,
+      discountMinor: amounts.discountMinor,
+      totalMinor: amounts.totalMinor,
+    },
+  };
+}
 
 function money(n: number, currency: string, fraction = 0) {
   try {
@@ -67,19 +222,38 @@ export function ReceiptLivePreview({
   company: HqCompany | null;
   onChange?: (patch: Partial<HqOrgSettings>) => void;
 }) {
-  const subtotal = RECEIPT_LINES.reduce((sum, line) => sum + line.qty * line.price, 0);
+  const { receiptLines, sale } = usePreviewData();
+  const computedSubtotal = receiptLines.reduce((sum, line) => sum + line.qty * line.price, 0);
+  const subtotal =
+    sale.hasSale && sale.subtotalMinor != null ? sale.subtotalMinor : computedSubtotal;
   const showDiscount = draft.receiptShowDiscount !== false;
-  const discount = showDiscount ? DEMO_SALE.discount : 0;
+  const discount = sale.hasSale ? (sale.discountMinor ?? 0) : showDiscount ? DEMO_AMOUNTS.discount : 0;
   const afterDiscount = Math.max(0, subtotal - discount);
-  const tax = draft.receiptShowTax ? Math.round(afterDiscount * 0.075) : 0;
+  const tax =
+    sale.hasSale
+      ? (sale.taxMinor ?? Math.round(afterDiscount * 0.075))
+      : draft.receiptShowTax
+        ? Math.round(afterDiscount * 0.075)
+        : 0;
+  const serviceCharge = sale.hasSale ? (sale.serviceMinor ?? 0) : 0;
   const loyaltyRedeem =
     draft.receiptShowLoyalty && draft.receiptShowLoyaltyRedeemed !== false
-      ? DEMO_SALE.loyaltyRedeemValue
+      ? sale.loyaltyNumber
+        ? DEMO_AMOUNTS.loyaltyRedeemValue
+        : 0
       : 0;
-  const giftCharge = draft.receiptShowGiftCard ? DEMO_SALE.giftCardCharged : 0;
-  const total = afterDiscount + (draft.pricesIncludeVat ? 0 : tax) - loyaltyRedeem;
+  const giftCharge = draft.receiptShowGiftCard
+    ? sale.hasGiftCard
+      ? DEMO_AMOUNTS.giftCardCharged
+      : 0
+    : 0;
+  const total =
+    sale.hasSale
+      ? (sale.totalMinor ??
+        afterDiscount + (draft.pricesIncludeVat ? 0 : tax) - loyaltyRedeem)
+      : afterDiscount + (draft.pricesIncludeVat ? 0 : tax) - loyaltyRedeem;
   const due = Math.max(0, total - giftCharge);
-  const change = Math.max(0, DEMO_SALE.tendered - due);
+  const change = sale.hasSale && !sale.isCash ? 0 : Math.max(0, sale.tendered - due);
   const paperPx = draft.receiptPaper === "58mm" ? 220 : 300;
   const accent = draft.receiptBrandColor || "#111827";
   const dense = draft.receiptTemplate === "compact" || draft.receiptTemplate === "minimal";
@@ -89,8 +263,8 @@ export function ReceiptLivePreview({
   const address = (draft.receiptAddress ?? "").trim() || company?.address || "";
   const email = (draft.receiptEmail ?? "").trim() || company?.email || "";
   const barcodeValue =
-    (draft.receiptBarcodeValue ?? "").trim() || DEMO_SALE.ticketId;
-  const paidAt = new Date();
+    (draft.receiptBarcodeValue ?? "").trim() || sale.ticketId;
+  const paidAt = sale.paidAt;
   const showTicket = draft.receiptShowTicketNumber !== false;
   const showDate = draft.receiptShowDate !== false;
   const showTitle = draft.receiptShowTitle !== false;
@@ -99,10 +273,6 @@ export function ReceiptLivePreview({
   const showPhone = draft.receiptShowPhone !== false;
   const showHeader = draft.receiptShowHeader !== false;
   const showFooter = draft.receiptShowFooter !== false;
-  const loyaltyBalanceAfter =
-    DEMO_SALE.loyaltyBalanceBefore -
-    DEMO_SALE.loyaltyPointsRedeemed +
-    DEMO_SALE.loyaltyPointsEarned;
 
   return (
     <div className="overflow-hidden rounded-[22px] bg-pos-inverse p-4 shadow-pos-md sm:p-5">
@@ -182,33 +352,35 @@ export function ReceiptLivePreview({
           {draft.receiptShowCashier ? (
             <div className="flex justify-between gap-2 opacity-80">
               <span>Cashier</span>
-              <span className="truncate text-right">{DEMO_SALE.cashier}</span>
+              <span className="truncate text-right">{sale.cashier}</span>
             </div>
           ) : null}
           {draft.receiptShowTill ? (
             <div className="flex justify-between gap-2 opacity-80">
               <span>Till</span>
-              <span>{DEMO_SALE.till}</span>
+              <span>{sale.till}</span>
             </div>
           ) : null}
           {draft.receiptShowCustomer ? (
             <div className="mt-1 space-y-0.5 border-t border-dashed border-black/20 pt-1">
               <div className="flex justify-between gap-2">
                 <span className="opacity-70">Customer</span>
-                <span className="truncate text-right font-medium">{DEMO_SALE.customerName}</span>
+                <span className="truncate text-right font-medium">
+                  {sale.customerName || "Customer"}
+                </span>
               </div>
               {draft.receiptShowCustomerPhone !== false ? (
                 <div className="flex justify-between gap-2 opacity-70">
                   <span>Phone</span>
-                  <span>{DEMO_SALE.customerPhone}</span>
+                  <span>{sale.customerPhone || ""}</span>
                 </div>
               ) : null}
             </div>
           ) : null}
 
           <div className="my-2 border-t border-dashed border-black/25" />
-          {RECEIPT_LINES.map((line) => (
-            <div key={line.sku} className="mb-1.5">
+          {receiptLines.map((line, lineIndex) => (
+            <div key={`${line.name}-${lineIndex}`} className="mb-1.5">
               <div className="flex justify-between gap-2">
                 <span className="min-w-0 truncate">
                   {line.name}
@@ -237,10 +409,18 @@ export function ReceiptLivePreview({
             </div>
           ) : null}
           {draft.receiptShowTax ? (
-            <div className="flex justify-between opacity-80">
-              <span>VAT 7.5%</span>
-              <span className="tabular-nums">{money(tax, draft.currency)}</span>
-            </div>
+            <>
+              {serviceCharge > 0 ? (
+                <div className="flex justify-between opacity-80">
+                  <span>Service 10%</span>
+                  <span className="tabular-nums">{money(serviceCharge, draft.currency)}</span>
+                </div>
+              ) : null}
+              <div className="flex justify-between opacity-80">
+                <span>VAT 7.5%</span>
+                <span className="tabular-nums">{money(tax, draft.currency)}</span>
+              </div>
+            </>
           ) : null}
           {draft.receiptShowLoyalty &&
           draft.receiptShowLoyaltyRedeemed !== false &&
@@ -262,73 +442,61 @@ export function ReceiptLivePreview({
             <div className="mt-2 space-y-0.5 border-t border-dashed border-black/25 pt-2">
               <div className="flex justify-between opacity-80">
                 <span>Paid by</span>
-                <span>{DEMO_SALE.tender}</span>
+                <span>{sale.tender}</span>
               </div>
-              <div className="flex justify-between opacity-80">
-                <span>Tendered</span>
-                <span className="tabular-nums">{money(DEMO_SALE.tendered, draft.currency)}</span>
-              </div>
-              {draft.receiptShowChange !== false ? (
-                <div className="flex justify-between font-medium">
-                  <span>Change</span>
-                  <span className="tabular-nums">{money(change, draft.currency)}</span>
-                </div>
+              {sale.isCash || !sale.hasSale ? (
+                <>
+                  <div className="flex justify-between opacity-80">
+                    <span>Tendered</span>
+                    <span className="tabular-nums">{money(sale.tendered, draft.currency)}</span>
+                  </div>
+                  {draft.receiptShowChange !== false ? (
+                    <div className="flex justify-between font-medium">
+                      <span>Change</span>
+                      <span className="tabular-nums">{money(change, draft.currency)}</span>
+                    </div>
+                  ) : null}
+                </>
               ) : null}
             </div>
           ) : null}
 
-          {draft.receiptShowLoyalty ? (
+          {(sale.hasSale ? sale.hasLoyalty : draft.receiptShowLoyalty) ? (
             <div className="mt-2 space-y-0.5 border-t border-dashed border-black/25 pt-2">
               <p className="font-semibold opacity-90">Loyalty</p>
-              <div className="flex justify-between opacity-80">
-                <span>Card / No.</span>
-                <span>{DEMO_SALE.loyaltyNumber}</span>
-              </div>
-              {draft.receiptShowLoyaltyBalance !== false ? (
+              {sale.loyaltyNumber ? (
                 <div className="flex justify-between opacity-80">
-                  <span>Balance before</span>
-                  <span className="tabular-nums">{DEMO_SALE.loyaltyBalanceBefore} pts</span>
+                  <span>Card / No.</span>
+                  <span>{sale.loyaltyNumber}</span>
                 </div>
               ) : null}
-              {draft.receiptShowLoyaltyRedeemed !== false ? (
-                <div className="flex justify-between opacity-80">
-                  <span>Points used</span>
-                  <span className="tabular-nums">-{DEMO_SALE.loyaltyPointsRedeemed} pts</span>
-                </div>
-              ) : null}
-              {draft.receiptShowLoyaltyEarned !== false ? (
+              {draft.receiptShowLoyaltyEarned !== false && sale.loyaltyPointsEarned != null ? (
                 <div className="flex justify-between opacity-80">
                   <span>Points earned</span>
-                  <span className="tabular-nums">+{DEMO_SALE.loyaltyPointsEarned} pts</span>
-                </div>
-              ) : null}
-              {draft.receiptShowLoyaltyBalance !== false ? (
-                <div className="flex justify-between font-medium">
-                  <span>Balance after</span>
-                  <span className="tabular-nums">{loyaltyBalanceAfter} pts</span>
+                  <span className="tabular-nums">+{sale.loyaltyPointsEarned} pts</span>
                 </div>
               ) : null}
             </div>
           ) : null}
 
-          {draft.receiptShowGiftCard ? (
+          {sale.hasSale ? sale.hasGiftCard : draft.receiptShowGiftCard ? (
             <div className="mt-2 space-y-0.5 border-t border-dashed border-black/25 pt-2">
               <p className="font-semibold opacity-90">Gift card</p>
               <div className="flex justify-between opacity-80">
                 <span>Card</span>
-                <span>{DEMO_SALE.giftCardCode}</span>
+                <span>{DEMO_AMOUNTS.giftCardCode}</span>
               </div>
               <div className="flex justify-between opacity-80">
                 <span>Charged</span>
                 <span className="tabular-nums">
-                  {money(DEMO_SALE.giftCardCharged, draft.currency)}
+                  {money(DEMO_AMOUNTS.giftCardCharged, draft.currency)}
                 </span>
               </div>
               {draft.receiptShowGiftCardBalance !== false ? (
                 <div className="flex justify-between font-medium">
                   <span>Balance left</span>
                   <span className="tabular-nums">
-                    {money(DEMO_SALE.giftCardBalanceAfter, draft.currency)}
+                    {money(DEMO_AMOUNTS.giftCardBalanceAfter, draft.currency)}
                   </span>
                 </div>
               ) : null}
@@ -386,7 +554,8 @@ export function InvoiceLivePreview({
   draft: HqOrgSettings;
   company: HqCompany | null;
 }) {
-  const subtotal = INVOICE_LINES.reduce((sum, line) => sum + line.qty * line.price, 0);
+  const { firstCustomer, invoiceLines } = usePreviewData();
+  const subtotal = invoiceLines.reduce((sum, line) => sum + line.qty * line.price, 0);
   const tax = Math.round(subtotal * 0.075);
   const total = draft.pricesIncludeVat ? subtotal : subtotal + tax;
   const brand = draft.invoiceBrandColor || "#0F2C59";
@@ -481,7 +650,7 @@ export function InvoiceLivePreview({
 
           <div className="px-4 py-4 sm:px-5">
             <p className="text-[11px] text-pos-ink-faint">Bill to</p>
-            <p className="text-sm font-semibold text-pos-ink">Sample Customer</p>
+            <p className="text-sm font-semibold text-pos-ink">{firstCustomer?.name || "Sample Customer"}</p>
             <table className="mt-4 w-full text-left text-[12px]">
               <thead>
                 <tr className="border-b border-pos-border text-[10px] uppercase tracking-wide text-pos-ink-faint">
@@ -492,8 +661,8 @@ export function InvoiceLivePreview({
                 </tr>
               </thead>
               <tbody>
-                {INVOICE_LINES.map((line) => (
-                  <tr key={line.name} className="border-b border-pos-border/50">
+                {invoiceLines.map((line, lineIndex) => (
+                  <tr key={`${line.name}-${lineIndex}`} className="border-b border-pos-border/50">
                     <td className="py-2 text-pos-ink">{line.name}</td>
                     <td className="py-2 text-pos-ink-muted">{line.qty}</td>
                     <td className="py-2 text-right tabular-nums text-pos-ink-muted">

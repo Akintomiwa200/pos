@@ -64,6 +64,7 @@ type AccountRow = {
   active: boolean;
   google_id: string | null;
   auth_provider: string;
+  email_verified: boolean;
 };
 
 function isoOrNull(value: Date | string | null): string | null {
@@ -168,6 +169,7 @@ export class ConsoleService implements OnModuleInit {
         row.auth_provider === "google" || row.auth_provider === "both"
           ? row.auth_provider
           : "password",
+      emailVerified: row.email_verified,
     };
   }
 
@@ -290,7 +292,7 @@ export class ConsoleService implements OnModuleInit {
   // ---------- accounts ----------
 
   private static ACCOUNT_COLUMNS =
-    "id, name, email, username, password_hash, group_id, active, google_id, auth_provider";
+    "id, name, email, username, password_hash, group_id, active, google_id, auth_provider, email_verified";
 
   private async findAccount(where: string, params: unknown[]): Promise<ConsoleAccount | undefined> {
     const result = await this.db.query<AccountRow>(
@@ -397,7 +399,7 @@ export class ConsoleService implements OnModuleInit {
       }
     >(
       `select a.id, a.name, a.email, a.username, a.password_hash, a.group_id, a.active,
-              a.google_id, a.auth_provider,
+              a.google_id, a.auth_provider, a.email_verified,
               g.name as group_name, g.departments, g.privileges,
               coalesce(g.scope, 'tenant') as scope
        from hq_sessions s
@@ -496,7 +498,15 @@ export class ConsoleService implements OnModuleInit {
       },
       { welcomePassword: password },
     );
-    return this.login(input.email ?? input.username ?? "", password);
+    const account = await this.findAccount(
+      "lower(email) = $1 or lower(username) = $1",
+      [input.email?.trim().toLowerCase() ?? input.username?.trim().toLowerCase()],
+    );
+    const verification = account
+      ? await this.provisionEmailVerification(account)
+      : undefined;
+    const session = await this.login(input.email ?? input.username ?? "", password);
+    return verification ? { ...session, verification } : session;
   }
 
   googleConfig() {
@@ -583,11 +593,16 @@ export class ConsoleService implements OnModuleInit {
       "lower(email) = $1 and lower(username) = $2",
       [email.toLowerCase(), username.toLowerCase()],
     );
+    let verification:
+      | { emailSent: true }
+      | { emailSent: false; devUrl: string }
+      | undefined;
     if (owner) {
       await this.sendCompanyOwnerEmail(owner, company.name);
+      verification = await this.provisionEmailVerification(owner);
     }
 
-    return { company, owner, email, password };
+    return { company, owner, email, password, verification };
   }
 
   /** Public signup — creates the owner and signs them into tenant HQ. */
@@ -602,7 +617,12 @@ export class ConsoleService implements OnModuleInit {
   }) {
     const created = await this.createCompanyWithOwner(input, "/setup/others/company");
     const session = await this.login(created.email, created.password);
-    return { ...session, company: created.company, onboarding: "company" as const };
+    return {
+      ...session,
+      company: created.company,
+      onboarding: "company" as const,
+      ...(created.verification ? { verification: created.verification } : {}),
+    };
   }
 
   /** Super Admin onboarding — creates the owner without stealing this session. */
@@ -722,10 +742,12 @@ export class ConsoleService implements OnModuleInit {
     const account = await this.findAccount("google_id = $1", [profile.sub]);
     if (!account) throw new BadRequestException("Could not finish Google signup");
     await this.sendCompanyOwnerEmail(account, company.name);
+    const verification = await this.provisionEmailVerification(account);
     return {
       ...(await this.issueSession(account)),
       company,
       onboarding: "company" as const,
+      verification,
     };
   }
 
@@ -848,6 +870,63 @@ export class ConsoleService implements OnModuleInit {
       href: "/setup/users/account",
     });
     return { ok: true as const };
+  }
+
+  /** Create (or rotate) the email verification token for an account. */
+  private async provisionEmailVerification(account: {
+    id: string;
+    email: string;
+    name: string;
+  }): Promise<{ emailSent: true } | { emailSent: false; devUrl: string }> {
+    await this.db.query(`delete from hq_email_verifications where account_id = $1`, [account.id]);
+    const token = generateSessionToken();
+    await this.db.query(
+      `insert into hq_email_verifications (token, account_id, email, expires_at)
+       values ($1, $2, $3, now() + interval '7 days')`,
+      [token, account.id, account.email],
+    );
+    const verifyUrl = `${this.email.hqAppUrl()}/verify-email?token=${encodeURIComponent(token)}`;
+    const mail = await this.email.sendEmailVerification({
+      to: account.email,
+      name: account.name,
+      verifyUrl,
+    });
+    if (mail.sent) return { emailSent: true };
+    this.logger.log(`[verify-email dev link] ${account.email} → ${verifyUrl}`);
+    return { emailSent: false, devUrl: verifyUrl };
+  }
+
+  async verifyEmail(token: string) {
+    const result = await this.db.query<{ id: string; name: string; email: string }>(
+      `select a.id, a.name, a.email
+       from hq_email_verifications v
+       join hq_accounts a on a.id = v.account_id
+       where v.token = $1 and v.expires_at > now()`,
+      [token.trim()],
+    );
+    const row = result.rows[0];
+    if (!row) throw new BadRequestException("Verification link is invalid or has expired");
+    await this.db.query(`update hq_accounts set email_verified = true where id = $1`, [row.id]);
+    await this.db.query(`delete from hq_email_verifications where account_id = $1`, [row.id]);
+    await this.recordSecurityEvent({
+      kind: "email_verified",
+      severity: "info",
+      title: "Email verified",
+      body: `${row.name} verified ${row.email}.`,
+      accountId: row.id,
+    });
+    return { verified: true as const, email: row.email, name: row.name };
+  }
+
+  async resendVerification(emailOrUsername: string) {
+    const key = emailOrUsername.trim().toLowerCase();
+    const account = await this.findAccount(
+      "active and (lower(email) = $1 or lower(username) = $1)",
+      [key],
+    );
+    if (!account) return { ok: true as const };
+    const result = await this.provisionEmailVerification(account);
+    return { ok: true as const, ...result };
   }
 
   async changePassword(token: string, current: string, nextPassword: string) {

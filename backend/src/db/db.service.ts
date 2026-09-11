@@ -1,14 +1,28 @@
-import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from "@nestjs/common";
+import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { join } from "node:path";
 import { Pool, type QueryResult, type QueryResultRow } from "pg";
 import { newDb } from "pg-mem";
 import { SEED_ACCOUNTS, SEED_GROUPS, SEED_PRODUCER_GROUPS } from "../console/console.types";
 import { hashPassword } from "../console/password.util";
 
+type TableDump = { columns: string[]; rows: unknown[][] };
+
 @Injectable()
-export class DbService implements OnModuleInit {
+export class DbService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(DbService.name);
   private pool!: Pool;
   private memoryMode = true;
+  private memDb?: ReturnType<typeof newDb>;
+  private persistTimer?: ReturnType<typeof setTimeout>;
+  private persistDirty = false;
+  private readonly memBackupDir = join(process.cwd(), "data");
+  private readonly memBackupFile = join(this.memBackupDir, "hq-memdb.json");
 
   constructor() {
     const connectionString = process.env.DATABASE_URL?.trim();
@@ -29,6 +43,7 @@ export class DbService implements OnModuleInit {
   }
 
   async onModuleInit() {
+    await mkdir(this.memBackupDir, { recursive: true }).catch(() => undefined);
     try {
       await this.pool.query("select 1");
     } catch (err) {
@@ -45,11 +60,24 @@ export class DbService implements OnModuleInit {
         : "Supabase Postgres connected",
     );
     await this.ensureSchema();
+    if (this.memoryMode && (await this.restoreMemoryBackup())) {
+      this.logger.log("Restored in-memory Postgres from data/hq-memdb.json");
+    }
     await this.seed();
+    if (this.memoryMode) await this.flushMemoryBackup();
+  }
+
+  async onModuleDestroy() {
+    if (this.persistTimer) {
+      clearTimeout(this.persistTimer);
+      this.persistTimer = undefined;
+    }
+    await this.flushMemoryBackup();
   }
 
   private useMemoryPool() {
     const mem = newDb({ autoCreateForeignKeyIndices: true });
+    this.memDb = mem;
     const { Pool: MemPool } = mem.adapters.createPg();
     this.pool = new MemPool() as unknown as Pool;
     this.memoryMode = true;
@@ -63,7 +91,74 @@ export class DbService implements OnModuleInit {
     sql: string,
     params?: unknown[],
   ): Promise<QueryResult<R>> {
-    return this.pool.query(sql, params as never[]);
+    const result = await this.pool.query(sql, params as never[]);
+    if (this.memoryMode && this.memDb && !this.isReadOnlyQuery(sql)) {
+      this.schedulePersist();
+    }
+    return result;
+  }
+
+  private isReadOnlyQuery(sql: string) {
+    const head = sql.trim().toLowerCase();
+    return head.startsWith("select") || head.startsWith("show");
+  }
+
+  private schedulePersist() {
+    this.persistDirty = true;
+    if (this.persistTimer) return;
+    this.persistTimer = setTimeout(() => {
+      this.persistTimer = undefined;
+      void this.flushMemoryBackup();
+    }, 800);
+  }
+
+  private async flushMemoryBackup() {
+    if (!this.persistDirty || !this.memDb) return;
+    this.persistDirty = false;
+    try {
+      await mkdir(this.memBackupDir, { recursive: true });
+      const dump: Record<string, TableDump> = {};
+      for (const table of this.memDb.public.listTables()) {
+        const result = await this.pool.query(`SELECT * FROM "${table.name}"`);
+        if (result.rows.length === 0) continue;
+        const columns = result.fields.map((f) => f.name);
+        const rows = result.rows.map((row) =>
+          columns.map((col) => (row as Record<string, unknown>)[col]),
+        );
+        dump[table.name] = { columns, rows };
+      }
+      await writeFile(this.memBackupFile, JSON.stringify(dump), "utf8");
+    } catch (err) {
+      this.persistDirty = true;
+      this.logger.warn(
+        `Could not persist in-memory DB to disk: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+  }
+
+  private async restoreMemoryBackup(): Promise<boolean> {
+    try {
+      const raw = await readFile(this.memBackupFile, "utf8");
+      const dump = JSON.parse(raw) as Record<string, TableDump>;
+      for (const [tableName, { columns, rows }] of Object.entries(dump)) {
+        if (!rows.length) continue;
+        const colList = columns.map((c) => `"${c}"`).join(", ");
+        const placeholders = columns.map((_, i) => `$${i + 1}`).join(", ");
+        for (const row of rows) {
+          await this.pool
+            .query(
+              `INSERT INTO "${tableName}" (${colList}) VALUES (${placeholders}) ON CONFLICT DO NOTHING`,
+              row,
+            )
+            .catch(() => undefined);
+        }
+      }
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private async ensureSchema() {
@@ -92,8 +187,16 @@ export class DbService implements OnModuleInit {
       active boolean not null default true,
       google_id text unique,
       auth_provider text not null default 'password',
+      email_verified boolean not null default false,
       created_at timestamptz not null default now()
     )`);
+    try {
+      await this.query(
+        `alter table hq_accounts add column if not exists email_verified boolean not null default false`,
+      );
+    } catch {
+      /* already present */
+    }
     await this.query(`create table if not exists hq_sessions (
       token text primary key,
       account_id text not null references hq_accounts(id) on delete cascade,
@@ -103,6 +206,13 @@ export class DbService implements OnModuleInit {
       token text primary key,
       account_id text not null references hq_accounts(id) on delete cascade,
       expires_at timestamptz not null
+    )`);
+    await this.query(`create table if not exists hq_email_verifications (
+      token text primary key,
+      account_id text not null references hq_accounts(id) on delete cascade,
+      email text not null,
+      expires_at timestamptz not null,
+      created_at timestamptz not null default now()
     )`);
     await this.query(`create table if not exists hq_notices (
       id text primary key,

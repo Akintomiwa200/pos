@@ -34,6 +34,8 @@ export type ConsoleAccount = {
   /** Google subject id when linked / signed up with Google */
   googleId?: string | null;
   authProvider?: "password" | "google" | "both";
+  /** Whether the account confirmed its email address (default false). */
+  emailVerified?: boolean;
 };
 
 export type HqNotice = {

@@ -83,7 +83,7 @@ export function validateOrgSettings(draft: HqOrgSettings): SettingsFieldErrors {
     errors.receiptEmail = "Receipt email must be 120 characters or fewer";
   }
   const barcode = (draft.receiptBarcodeValue ?? "").trim();
-  if (!/^[A-Za-z0-9-]{4,32}$/.test(barcode)) {
+  if (barcode && !/^[A-Za-z0-9-]{4,32}$/.test(barcode)) {
     errors.receiptBarcodeValue = "Barcode value must be 4–32 letters, numbers, or hyphens";
   }
 

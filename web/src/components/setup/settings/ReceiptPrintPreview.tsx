@@ -5,7 +5,7 @@ import { Copy, Printer, X } from "lucide-react";
 import type { HqCompany, HqOrgSettings } from "@/lib/hq-setup";
 import { toast } from "@/lib/toast";
 import { PrimaryButton, secondaryButtonClass } from "@/components/setup/SetupChrome";
-import { ReceiptLivePreview } from "./DocumentPreviews";
+import { ReceiptLivePreview, usePreviewData } from "./DocumentPreviews";
 import { buildReceiptPreviewText } from "./receipt-preview-text";
 
 export function ReceiptPrintPreviewButton({
@@ -49,7 +49,13 @@ function ReceiptPrintPreviewModal({
 }) {
   const titleId = useId();
   const [tab, setTab] = useState<"visual" | "text">("visual");
-  const text = buildReceiptPreviewText(draft, company);
+  const { receiptLines, firstCustomer, saleText } = usePreviewData();
+  const text =
+    saleText ??
+    buildReceiptPreviewText(draft, company, {
+      lines: receiptLines,
+      customer: firstCustomer,
+    });
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -134,7 +140,7 @@ function ReceiptPrintPreviewModal({
               Print preview
             </h2>
             <p className="mt-1 text-[13px] text-pos-ink-muted">
-              Sample sale using your current receipt settings — print or copy the till text.
+              Your latest sale with the current receipt settings — print or copy the till text.
             </p>
           </div>
           <button

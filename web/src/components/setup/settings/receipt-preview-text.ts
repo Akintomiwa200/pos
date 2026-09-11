@@ -41,14 +41,21 @@ function money(n: number, currency: string) {
 export function buildReceiptPreviewText(
   draft: HqOrgSettings,
   company: HqCompany | null,
+  options?: {
+    lines?: { name: string; sku?: string; qty: number; price: number }[];
+    customer?: { name?: string; phone?: string } | null;
+  },
 ): string {
+  const lines = options?.lines ?? LINES;
+  const customerName = options?.customer?.name || DEMO.customerName;
+  const customerPhone = options?.customer?.phone || DEMO.customerPhone;
   const title = (draft.receiptTitle ?? "").trim() || company?.name || "Your company";
   const address = (draft.receiptAddress ?? "").trim() || company?.address || "";
   const email = (draft.receiptEmail ?? "").trim() || company?.email || "";
   const phone = company?.phone || "";
   const barcode =
     (draft.receiptBarcodeValue ?? "").trim() || DEMO.ticketId;
-  const subtotal = LINES.reduce((sum, line) => sum + line.qty * line.price, 0);
+  const subtotal = lines.reduce((sum, line) => sum + line.qty * line.price, 0);
   const showDiscount = draft.receiptShowDiscount !== false;
   const discount = showDiscount ? DEMO.discount : 0;
   const afterDiscount = Math.max(0, subtotal - discount);
@@ -84,14 +91,14 @@ export function buildReceiptPreviewText(
     ...(draft.receiptShowTill ? [`Till: ${DEMO.till}`] : []),
     ...(draft.receiptShowCustomer
       ? [
-          `Customer: ${DEMO.customerName}`,
+          `Customer: ${customerName}`,
           ...(draft.receiptShowCustomerPhone !== false
-            ? [`Phone: ${DEMO.customerPhone}`]
+            ? [`Phone: ${customerPhone}`]
             : []),
         ]
       : []),
     "--------------------------------",
-    ...LINES.flatMap((line) => [
+    ...lines.flatMap((line) => [
       `${line.name}${draft.showSkuOnReceipt ? ` · ${line.sku}` : ""}  ${money(
         line.qty * line.price,
         draft.currency,

@@ -90,8 +90,8 @@ function openIdsForPath(pathname: string, nav: NavSection[]) {
 }
 
 function subtreeIndent(depth: number) {
-  // Align level 1 under parent label (icon + gaps), then step each level.
-  return 48 + depth * 20;
+  // Align level 1 under parent label (icon + gaps), then step each deeper level.
+  return depth === 0 ? 48 : 20;
 }
 
 function NestedList({
@@ -122,7 +122,7 @@ function NestedList({
             <div key={node.id}>
               <button
                 type="button"
-                className={`flex w-full items-center gap-2 rounded-lg py-1.5 pr-1 text-left text-[13px] transition ${
+                className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] transition ${
                   active
                     ? "font-medium text-pos-primary"
                     : "text-pos-ink-muted hover:text-pos-primary"

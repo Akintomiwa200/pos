@@ -20,6 +20,12 @@ import { SecuritySection } from "@/components/super/SecuritySection";
 import { SystemSection } from "@/components/super/SystemSection";
 import { DeveloperSection } from "@/components/super/DeveloperSection";
 import { AdminActivityPage } from "@/components/super/AdminActivityPage";
+import { PlatformAnalytics } from "@/components/super/PlatformAnalytics";
+import { BranchManager } from "@/components/setup/BranchManager";
+import { StoreManager } from "@/components/setup/StoreManager";
+import { StorefrontManager } from "@/components/setup/StorefrontManager";
+import { GatewayManager } from "@/components/setup/GatewayManager";
+import { TillManager } from "@/components/TillManager";
 
 function navLabel(path: string) {
   let best: { href: string; label: string; heading: string } | null = null;
@@ -52,8 +58,25 @@ export function SuperPlatformPage({ path }: { path: string }) {
   if (path === "/admin/administrators") return <AccountManager scope="producer" />;
   if (path === "/admin/administrators/roles") return <ProducerDepartments />;
   if (path === "/admin/administrators/activity") return <AdminActivityPage />;
+  if (path === "/admin/activity") return <AdminActivityPage />;
   if (path === "/admin/notifications") return <SuperNotifications />;
   if (path === "/admin/account") return <SuperAccount />;
+  if (path === "/admin/tills") return <TillManager />;
+  if (path === "/admin/branches") return <BranchManager />;
+  if (path === "/admin/stores") return <StoreManager />;
+  if (path === "/admin/storefronts") return <StorefrontManager />;
+  if (path === "/admin/commerce/gateways") return <GatewayManager />;
+  if (path === "/admin/people/owners") {
+    return (
+      <AccountManager
+        scope="tenant"
+        kicker="Producer · People"
+        title="Company owners"
+        copy="Administrators of the tenant company. They sign into company HQ."
+      />
+    );
+  }
+  if (path === "/admin/analytics") return <PlatformAnalytics />;
 
   return <SuperPlatformPanel path={path} label={label} />;
 }

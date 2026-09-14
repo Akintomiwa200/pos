@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "@/lib/toast";
 import {
+  AlertTriangle,
   ArrowDownRight,
   ArrowLeftRight,
   ArrowUp,
@@ -13,15 +14,20 @@ import {
   BarChart3,
   Check,
   ChevronDown,
+  Clock3,
   CreditCard,
   Link2,
   Menu,
   Package,
   Plus,
+  Receipt,
   Share2,
+  ShoppingBag,
   SlidersHorizontal,
   Star,
+  TrendingUp,
   Upload,
+  Users,
   Wallet,
   type LucideIcon,
 } from "lucide-react";
@@ -1157,6 +1163,464 @@ function sumBy<T>(rows: T[], key: (row: T) => string, amount: (row: T) => number
     .sort((a, b) => b.total - a.total);
 }
 
+function bestSellerRows(sales: HqSale[], from: Date, to: Date) {
+  const map = new Map<string, { name: string; qty: number; value: number }>();
+  for (const sale of sales) {
+    if (!inRange(sale, from, to)) continue;
+    for (const line of sale.lines ?? []) {
+      const key = line.name || line.itemId || "Item";
+      const row = map.get(key) ?? { name: key, qty: 0, value: 0 };
+      row.qty += line.quantity;
+      row.value += line.quantity * line.unitPriceMinor;
+      map.set(key, row);
+    }
+  }
+  return [...map.values()].sort((a, b) => b.value - a.value).slice(0, 6);
+}
+
+function peakHourRows(sales: HqSale[], from: Date, to: Date) {
+  const byHour = new Map<number, { value: number; tickets: number }>();
+  for (const sale of sales) {
+    if (!inRange(sale, from, to)) continue;
+    const at = Date.parse(sale.paidAt);
+    if (!Number.isFinite(at)) continue;
+    const hour = new Date(at).getHours();
+    const row = byHour.get(hour) ?? { value: 0, tickets: 0 };
+    row.value += sale.totalMinor;
+    row.tickets += 1;
+    byHour.set(hour, row);
+  }
+  return Array.from({ length: 24 }, (_, hour) => {
+    const hit = byHour.get(hour);
+    const label =
+      hour === 0
+        ? "12a"
+        : hour < 12
+          ? `${hour}a`
+          : hour === 12
+            ? "12p"
+            : `${hour - 12}p`;
+    return { hour: label, value: hit?.value ?? 0, tickets: hit?.tickets ?? 0 };
+  });
+}
+
+function lowStockRows(items: HqCatalogItem[]) {
+  return items
+    .filter((row) => row.active && row.reorderLevel > 0 && row.onHand <= row.reorderLevel)
+    .sort((a, b) => a.onHand - b.onHand)
+    .slice(0, 6);
+}
+
+function topCustomerRows(sales: HqSale[], from: Date, to: Date) {
+  const map = new Map<string, { name: string; spend: number; tickets: number }>();
+  for (const sale of sales) {
+    if (!inRange(sale, from, to)) continue;
+    const key = sale.customerName?.trim() || "Walk-in";
+    const row = map.get(key) ?? { name: key, spend: 0, tickets: 0 };
+    row.spend += sale.totalMinor;
+    row.tickets += 1;
+    map.set(key, row);
+  }
+  return [...map.values()].sort((a, b) => b.spend - a.spend).slice(0, 5);
+}
+
+function salesPulse() {
+  const now = new Date();
+  const todayStart = startOfDay(now);
+  const todayEnd = endOfDay(now);
+  const yesterdayStart = addDays(todayStart, -1);
+  const yesterdayEnd = endOfDay(addDays(todayStart, -1));
+  return { todayStart, todayEnd, yesterdayStart, yesterdayEnd };
+}
+
+function TodayStrip({ sales }: { sales: HqSale[] }) {
+  const { todayStart, todayEnd, yesterdayStart, yesterdayEnd } = salesPulse();
+  const yesterday = sales.filter((row) => inRange(row, yesterdayStart, yesterdayEnd));
+  const today = sales.filter((row) => inRange(row, todayStart, todayEnd));
+  const revenue = today.reduce((sum, row) => sum + row.totalMinor, 0);
+  const prevRevenue = yesterday.reduce((sum, row) => sum + row.totalMinor, 0);
+  const pct = prevRevenue ? ((revenue - prevRevenue) / prevRevenue) * 100 : revenue ? 100 : 0;
+  const avg = today.length ? revenue / today.length : 0;
+  const positive = pct >= 0;
+  const DeltaIcon = positive ? ArrowUpRight : ArrowDownRight;
+  return (
+    <div className="overflow-hidden rounded-[28px] bg-pos-surface shadow-pos-sm">
+      <div className="flex items-center gap-3 border-b border-pos-border/60 px-5 py-3.5">
+        <span className="grid size-9 place-items-center rounded-full bg-pos-primary-soft text-pos-primary">
+          <TrendingUp size={16} />
+        </span>
+        <div className="min-w-0">
+          <h2 className="text-[15px] font-semibold text-pos-ink">Today&apos;s pulse</h2>
+          <p className="truncate text-[12px] text-pos-ink-faint">
+            Live figures for{" "}
+            {new Date().toLocaleDateString("en-US", {
+              weekday: "short",
+              month: "short",
+              day: "numeric",
+            })}{" "}
+            · refreshes every few seconds
+          </p>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4">
+        <div className="border-b border-r border-pos-border/50 px-5 py-4 sm:border-b-0">
+          <p className="text-[12px] text-pos-ink-faint">Revenue</p>
+          <div className="mt-1.5">
+            <FitMoney minor={revenue} kind="card" />
+          </div>
+          <p
+            className={`mt-1.5 inline-flex items-center gap-1 text-[12px] font-semibold ${
+              positive ? "text-pos-success" : "text-red-600 dark:text-red-400"
+            }`}
+          >
+            <DeltaIcon size={13} strokeWidth={2.6} />
+            {Math.abs(pct).toFixed(1)}% vs yesterday
+          </p>
+        </div>
+        <div className="border-b border-pos-border/50 px-5 py-4 sm:border-b-0">
+          <p className="text-[12px] text-pos-ink-faint">Tickets</p>
+          <p className="mt-1.5 text-[28px] font-semibold leading-none tracking-tight tabular-nums text-pos-ink">
+            {today.length}
+          </p>
+          <p className="mt-1.5 text-[12px] text-pos-ink-faint">{yesterday.length} yesterday</p>
+        </div>
+        <div className="border-r border-pos-border/50 px-5 py-4">
+          <p className="text-[12px] text-pos-ink-faint">Avg ticket</p>
+          <div className="mt-1.5">
+            <FitMoney minor={avg} kind="card" />
+          </div>
+          <p className="mt-1.5 text-[12px] text-pos-ink-faint">so far today</p>
+        </div>
+        <div className="px-5 py-4">
+          <p className="text-[12px] text-pos-ink-faint">Yesterday</p>
+          <div className="mt-1.5">
+            <FitMoney minor={prevRevenue} kind="card" />
+          </div>
+          <p className="mt-1.5 text-[12px] text-pos-ink-faint">{yesterday.length} tickets</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BestSellersCard({ sales, from, to }: { sales: HqSale[]; from: Date; to: Date }) {
+  const router = useRouter();
+  const colors = useThemeColors();
+  const rows = useMemo(() => bestSellerRows(sales, from, to), [sales, from, to]);
+  const max = Math.max(...rows.map((row) => row.value), 1);
+  return (
+    <div className="flex h-full min-h-[260px] flex-col rounded-[28px] bg-pos-surface p-5 shadow-pos-sm">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <ShoppingBag size={16} className="text-pos-primary" />
+          <h3 className="text-[15px] font-semibold text-pos-ink">Best sellers</h3>
+        </div>
+        <PillMenu align="left" trigger={<MenuPill icon={BarChart3} />}>
+          <MenuItem
+            label="Invoice summary"
+            onClick={() => router.push("/reports/sales/invoice/summary")}
+          />
+          <MenuItem
+            label="Invoice list"
+            onClick={() => router.push("/reports/sales/invoice/list")}
+          />
+        </PillMenu>
+      </div>
+      {rows.length === 0 ? (
+        <p className="flex flex-1 items-center justify-center text-sm text-pos-ink-faint">
+          Product lines land here after sales post.
+        </p>
+      ) : (
+        <ul className="mt-4 flex flex-1 flex-col justify-center gap-2.5">
+          {rows.map((row, index) => (
+            <li key={row.name} className="flex items-center gap-3">
+              <span className="w-5 shrink-0 text-[12px] font-semibold text-pos-ink-faint">
+                {index + 1}
+              </span>
+              <div className="flex min-w-0 flex-1 flex-col gap-1">
+                <div className="flex min-w-0 items-center justify-between gap-2">
+                  <span className="truncate text-[14px] font-medium text-pos-ink">{row.name}</span>
+                  <span className="shrink-0 text-[13px] font-semibold tabular-nums text-pos-ink">
+                    {compact(row.value)}
+                  </span>
+                </div>
+                <div className="h-1.5 overflow-hidden rounded-full" style={{ background: colors.chartGrid }}>
+                  <div
+                    className="h-full rounded-full"
+                    style={{
+                      width: `${(row.value / max) * 100}%`,
+                      background: index === 0 ? colors.primary : colors.chartBarAccent,
+                    }}
+                  />
+                </div>
+              </div>
+              <span className="shrink-0 rounded-full bg-pos-surface-muted px-2 py-0.5 text-[11px] text-pos-ink-faint">
+                {row.qty} pcs
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function PeakHoursCard({ sales, from, to }: { sales: HqSale[]; from: Date; to: Date }) {
+  const colors = useThemeColors();
+  const [showCount, setShowCount] = useState(false);
+  const data = useMemo(() => peakHourRows(sales, from, to), [sales, from, to]);
+  const key = showCount ? "tickets" : "value";
+  const rawPeak = Math.max(...data.map((row) => row[key]), 1);
+  const max = niceMax(rawPeak);
+  const tight = data.reduce((lead, row) => (row[key] > lead[key] ? row : lead), data[0]!);
+  const peakLabel = showCount
+    ? `${tight.hour} · ${tight.tickets} tickets`
+    : `${tight.hour} · ${compact(tight.value)}`;
+  return (
+    <div className="flex h-full min-h-[260px] flex-col rounded-[28px] bg-pos-surface p-5 shadow-pos-sm">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Clock3 size={16} className="text-pos-primary" />
+          <h3 className="text-[15px] font-semibold text-pos-ink">Peak hours</h3>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowCount((value) => !value)}
+          className="rounded-full bg-pos-surface-muted px-3 py-1.5 text-[12px] font-medium text-pos-ink"
+        >
+          {showCount ? "By tickets" : "By revenue"}
+        </button>
+      </div>
+      <p className="mt-1 text-[12px] text-pos-ink-faint">
+        Busiest: <span className="font-medium text-pos-ink">{peakLabel}</span>
+      </p>
+      <div className="mt-4 min-h-0 flex-1">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data} margin={{ top: 8, right: 0, left: 0, bottom: 0 }}>
+            <defs>
+              <pattern
+                id="hq-peak-stripe"
+                width="8"
+                height="8"
+                patternUnits="userSpaceOnUse"
+                patternTransform="rotate(45)"
+              >
+                <rect width="8" height="8" fill={colors.chartGrid} />
+                <rect width="4" height="8" fill={colors.chartBarAccent} />
+              </pattern>
+            </defs>
+            <XAxis
+              dataKey="hour"
+              axisLine={false}
+              tickLine={false}
+              interval={2}
+              tick={{ fontSize: 10, fill: colors.inkFaint }}
+            />
+            <YAxis hide domain={[0, max]} />
+            <Bar dataKey={key} radius={[6, 6, 0, 0]} maxBarSize={18} isAnimationActive={false}>
+              {data.map((row) => (
+                <Cell key={row.hour} fill={row[key] === rawPeak ? "url(#hq-peak-stripe)" : colors.chartBar} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+function LowStockCard({ items }: { items: HqCatalogItem[] }) {
+  const router = useRouter();
+  const colors = useThemeColors();
+  const rows = useMemo(() => lowStockRows(items), [items]);
+  const total = rows.reduce((sum, row) => sum + Math.max(row.reorderLevel - row.onHand, 0), 0);
+  return (
+    <div className="flex h-full min-h-[260px] flex-col rounded-[28px] bg-pos-surface p-5 shadow-pos-sm">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <AlertTriangle size={16} className="text-pos-warning" />
+          <h3 className="text-[15px] font-semibold text-pos-ink">Low stock</h3>
+        </div>
+        <PillMenu align="left" trigger={<MenuPill icon={BarChart3} />}>
+          <MenuItem label="Low stock page" onClick={() => router.push("/setup/items/low-stock")} />
+          <MenuItem label="Stock balance" onClick={() => router.push("/reports/stock/balance")} />
+        </PillMenu>
+      </div>
+      {rows.length === 0 ? (
+        <p className="flex flex-1 items-center justify-center text-sm text-pos-ink-faint">
+          All items are above their reorder level.
+        </p>
+      ) : (
+        <>
+          <p className="mt-1 text-[12px] text-pos-ink-faint">
+            {rows.length} item{rows.length === 1 ? "" : "s"} at reorder level ·{" "}
+            <span className="font-medium text-pos-warning">{total} units to restock</span>
+          </p>
+          <ul className="mt-3 flex flex-1 flex-col justify-center divide-y divide-pos-border/50">
+            {rows.map((row) => (
+              <li key={row.id} className="flex items-center gap-3 py-2">
+                <span
+                  className="grid h-9 w-9 shrink-0 place-items-center rounded-xl"
+                  style={{ background: colors.surfaceMuted }}
+                >
+                  <Package size={15} className="text-pos-ink-muted" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[14px] font-medium text-pos-ink">{row.name}</p>
+                  <p className="truncate text-[11px] text-pos-ink-faint">
+                    {row.sku} · reorder at {row.reorderLevel}
+                  </p>
+                </div>
+                <span
+                  className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                    row.onHand === 0
+                      ? "bg-red-500/10 text-red-600 dark:text-red-400"
+                      : "bg-pos-warning/10 text-pos-warning"
+                  }`}
+                >
+                  {row.onHand === 0 ? "Out" : `${row.onHand} left`}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
+
+function RecentSalesFeed({ sales }: { sales: HqSale[] }) {
+  const router = useRouter();
+  const colors = useThemeColors();
+  const rows = useMemo(
+    () =>
+      [...sales]
+        .sort((a, b) => Date.parse(b.paidAt) - Date.parse(a.paidAt))
+        .slice(0, 7),
+    [sales],
+  );
+  function timeLabel(iso: string) {
+    const at = Date.parse(iso);
+    if (!Number.isFinite(at)) return "—";
+    return new Date(at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  }
+  function agoLabel(iso: string) {
+    const at = Date.parse(iso);
+    if (!Number.isFinite(at)) return "";
+    const mins = Math.max(0, Math.round((Date.now() - at) / 60000));
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.round(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    return `${Math.round(hours / 24)}d ago`;
+  }
+  return (
+    <div className="flex h-full min-h-[260px] flex-col rounded-[28px] bg-pos-surface p-5 shadow-pos-sm">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Receipt size={16} className="text-pos-primary" />
+          <h3 className="text-[15px] font-semibold text-pos-ink">Recent sales</h3>
+          <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-pos-success/10 px-2 py-0.5 text-[11px] font-medium text-pos-success">
+            <span className="size-1.5 rounded-full bg-pos-success" /> Live
+          </span>
+        </div>
+        <PillMenu align="left" trigger={<MenuPill icon={Menu} />}>
+          <MenuItem label="Invoice list" onClick={() => router.push("/reports/sales/invoice/list")} />
+        </PillMenu>
+      </div>
+      {rows.length === 0 ? (
+        <p className="flex flex-1 items-center justify-center text-sm text-pos-ink-faint">
+          Tickets will stream in here as they post.
+        </p>
+      ) : (
+        <ul className="mt-3 flex flex-1 flex-col justify-center divide-y divide-pos-border/50">
+          {rows.map((row) => (
+            <li key={row.ticketId} className="flex items-center gap-3 py-2">
+              <span
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-full"
+                style={{ background: colors.surfaceMuted }}
+              >
+                <TenderIcon id={asTenderId(row.tender)} size={18} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[14px] font-medium text-pos-ink">
+                  {row.cashierName || "Till"}
+                </p>
+                <p className="truncate text-[11px] text-pos-ink-faint">
+                  {timeLabel(row.paidAt)} · {row.loyaltyNumber ? "Loyalty" : row.tender}
+                </p>
+              </div>
+              <span className="shrink-0 text-[13px] font-semibold tabular-nums text-pos-ink">
+                {naira(row.totalMinor)}
+              </span>
+              <span className="w-14 shrink-0 text-right text-[11px] text-pos-ink-faint">
+                {agoLabel(row.paidAt)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function TopCustomersCard({ sales, from, to }: { sales: HqSale[]; from: Date; to: Date }) {
+  const router = useRouter();
+  const colors = useThemeColors();
+  const rows = useMemo(() => topCustomerRows(sales, from, to), [sales, from, to]);
+  const max = Math.max(...rows.map((row) => row.spend), 1);
+  return (
+    <div className="flex h-full min-h-[260px] flex-col rounded-[28px] bg-pos-surface p-5 shadow-pos-sm">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Users size={16} className="text-pos-primary" />
+          <h3 className="text-[15px] font-semibold text-pos-ink">Top customers</h3>
+        </div>
+        <PillMenu align="left" trigger={<MenuPill icon={BarChart3} />}>
+          <MenuItem label="All customers" onClick={() => router.push("/setup/customers/list")} />
+          <MenuItem
+            label="Loyalty programme"
+            onClick={() => router.push("/setup/customers/loyalty/program")}
+          />
+        </PillMenu>
+      </div>
+      {rows.length === 0 ? (
+        <p className="flex flex-1 items-center justify-center text-sm text-pos-ink-faint">
+          Repeat customers show here once names attach to tickets.
+        </p>
+      ) : (
+        <ul className="mt-4 flex flex-1 flex-col justify-center gap-2.5">
+          {rows.map((row, index) => (
+            <li key={row.name} className="flex items-center gap-3">
+              <Avatar name={row.name} size={28} index={index} />
+              <div className="flex min-w-0 flex-1 flex-col gap-1">
+                <div className="flex min-w-0 items-center justify-between gap-2">
+                  <span className="truncate text-[14px] font-medium text-pos-ink">{row.name}</span>
+                  <span className="shrink-0 text-[13px] font-semibold tabular-nums text-pos-ink">
+                    {compact(row.spend)}
+                  </span>
+                </div>
+                <div className="h-1.5 overflow-hidden rounded-full" style={{ background: colors.chartGrid }}>
+                  <div
+                    className="h-full rounded-full"
+                    style={{
+                      width: `${(row.spend / max) * 100}%`,
+                      background: index === 0 ? colors.chartSlice2 : colors.chartBarAccent,
+                    }}
+                  />
+                </div>
+              </div>
+              <span className="shrink-0 rounded-full bg-pos-surface-muted px-2 py-0.5 text-[11px] text-pos-ink-faint">
+                {row.tickets} trip{row.tickets === 1 ? "" : "s"}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export function HqDashboard() {
   const router = useRouter();
   const { session } = useAuth();
@@ -1633,6 +2097,8 @@ export function HqDashboard() {
         </div>
       </div>
 
+      <TodayStrip sales={sales} />
+
       <div className="flex h-12 w-full min-w-0 flex-nowrap items-center overflow-hidden rounded-full bg-pos-surface py-1 pl-2 pr-1 shadow-pos-sm">
         {cashierBar.length === 0 ? (
           <p className="flex-1 px-4 text-[13px] text-pos-ink-faint">
@@ -1831,6 +2297,17 @@ export function HqDashboard() {
           selected={selectedCashier}
           onSelect={setSelectedCashier}
         />
+      </div>
+
+      <div className="grid gap-3 xl:grid-cols-3">
+        <BestSellersCard sales={sales} from={report.from} to={report.to} />
+        <PeakHoursCard sales={sales} from={report.from} to={report.to} />
+        <LowStockCard items={catalog} />
+      </div>
+
+      <div className="grid gap-3 xl:grid-cols-2">
+        <RecentSalesFeed sales={sales} />
+        <TopCustomersCard sales={sales} from={report.from} to={report.to} />
       </div>
     </div>
   );

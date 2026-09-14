@@ -16,7 +16,7 @@ import { memoryStorage } from "multer";
 import { map, Observable } from "rxjs";
 import { CatalogService, type CatalogRow } from "../catalog/catalog.service";
 import { MAX_PRODUCT_IMAGE_BYTES } from "../catalog/cloudinary.service";
-import { ConsoleService, type DirectoryEvent, type PosEvent } from "./console.service";
+import { ConsoleService, type BillingEvent, type BillingPlan, type DirectoryEvent, type NoticesEvent, type PosEvent, type SessionLockEvent } from "./console.service";
 import { SetupService, type SettingsEvent } from "./setup.service";
 import type { ConsoleAccount, ConsoleGroup, GroupScope } from "./console.types";
 import type {
@@ -154,6 +154,16 @@ export class ConsoleController {
     return this.consoleService.markNoticeRead(id ?? "");
   }
 
+  @Sse("notifications/stream")
+  notificationsStream(): Observable<{ data: NoticesEvent }> {
+    return this.consoleService.noticesStream().pipe(map((data) => ({ data })));
+  }
+
+  @Sse("session/stream")
+  sessionStream(): Observable<{ data: SessionLockEvent }> {
+    return this.consoleService.sessionStream().pipe(map((data) => ({ data })));
+  }
+
   @Post("password")
   changePassword(
     @Headers("authorization") authorization?: string,
@@ -241,6 +251,77 @@ export class ConsoleController {
   @Sse("pos/stream")
   posStream(): Observable<{ data: PosEvent }> {
     return this.consoleService.posStream().pipe(map((data) => ({ data })));
+  }
+
+  @Get("billing")
+  billing() {
+    return this.consoleService.billingSnapshot();
+  }
+
+  @Get("billing/plans")
+  billingPlans() {
+    return this.consoleService.listPlans();
+  }
+
+  @Post("billing/plans")
+  async saveBillingPlan(
+    @Headers("authorization") authorization: string,
+    @Body() body: Partial<BillingPlan>,
+  ) {
+    await this.consoleService.requireProducer(bearer(authorization));
+    return this.consoleService.savePlan(body);
+  }
+
+  @Delete("billing/plans/:id")
+  async deleteBillingPlan(
+    @Headers("authorization") authorization: string,
+    @Param("id") id: string,
+  ) {
+    await this.consoleService.requireProducer(bearer(authorization));
+    return this.consoleService.deletePlan(id);
+  }
+
+  @Get("billing/subscriptions")
+  billingSubscriptions() {
+    return this.consoleService.listSubscriptions();
+  }
+
+  @Post("billing/subscriptions/assign")
+  async assignBillingSubscription(
+    @Headers("authorization") authorization: string,
+    @Body()
+    body: { companyId?: string; planId?: string; status?: string; autoRenew?: boolean },
+  ) {
+    await this.consoleService.requireProducer(bearer(authorization));
+    return this.consoleService.assignSubscription(
+      body.companyId ?? "",
+      body.planId ?? "",
+      { status: body.status, autoRenew: body.autoRenew },
+    );
+  }
+
+  @Get("billing/invoices")
+  billingInvoices() {
+    return this.consoleService.listInvoices();
+  }
+
+  @Post("billing/invoices/:id/pay")
+  markBillingInvoicePaid(
+    @Param("id") id: string,
+    @Body()
+    body: { reference?: string; provider?: string; amountMinor?: number },
+  ) {
+    return this.consoleService.markInvoicePaid(id, body);
+  }
+
+  @Get("billing/payments")
+  billingPayments() {
+    return this.consoleService.listPayments();
+  }
+
+  @Sse("billing/stream")
+  billingStream(): Observable<{ data: BillingEvent }> {
+    return this.consoleService.billingStream().pipe(map((data) => ({ data })));
   }
 
   @Post("tills")

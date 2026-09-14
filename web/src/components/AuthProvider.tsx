@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
-import type { ConsoleSession } from "../lib/access";
+import type { ConsoleSession, SessionLockEvent, SessionLockState } from "../lib/access";
 import {
   changePassword,
   fetchConsoleSession,
@@ -41,6 +41,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [live, setLive] = useState(false);
   const tokenRef = useRef<string | null>(null);
+  const sessionRef = useRef<ConsoleSession | null>(null);
+  const lockedRef = useRef<SessionLockState | null>(null);
+
+  sessionRef.current = session;
+  lockedRef.current = session?.locked ?? null;
 
   useEffect(() => {
     tokenRef.current = session?.token ?? null;
@@ -66,6 +71,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch (error) {
         if (!cancelled) {
           if (error instanceof NetworkError) {
+            setSessionState(stored);
+            setLive(false);
+          } else if (stored?.locked) {
             setSessionState(stored);
             setLive(false);
           } else {
@@ -102,6 +110,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             current.name === next.name &&
             current.groupName === next.groupName &&
             current.scope === next.scope &&
+            (current.locked?.reason ?? null) === (next.locked?.reason ?? null) &&
+            (current.locked?.message ?? null) === (next.locked?.message ?? null) &&
             JSON.stringify(current.departments) === JSON.stringify(next.departments) &&
             JSON.stringify(current.privileges) === JSON.stringify(next.privileges);
           return same ? current : next;
@@ -112,6 +122,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setLive(false);
           return;
         }
+        if (lockedRef.current) return;
         writeSession(null);
         setSessionState(null);
         setLive(false);
@@ -125,6 +136,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       window.clearInterval(timer);
       window.removeEventListener("focus", onFocus);
     };
+  }, [session?.token]);
+
+  useEffect(() => {
+    if (!session?.token) return;
+    const source = new EventSource("/api/console/session/stream");
+    source.onmessage = (event) => {
+      let payload: SessionLockEvent | null = null;
+      try {
+        payload = JSON.parse(event.data) as SessionLockEvent;
+      } catch {
+        return;
+      }
+      const current = sessionRef.current;
+      if (!current) return;
+
+      if (payload.type === "lock") {
+        const affectsMe =
+          payload.reason === "subscription_expired"
+            ? current.scope !== "producer"
+            : (payload.reason === "account_deactivated" ||
+                payload.reason === "account_deleted") &&
+              payload.accountId === current.id;
+        if (!affectsMe) return;
+        const next = { ...current, locked: { reason: payload.reason, message: payload.message } };
+        writeSession(next);
+        setSessionState(next);
+        return;
+      }
+
+      if (payload.type === "unlock") {
+        const affectsMe =
+          payload.reason === "subscription_renewed"
+            ? current.scope !== "producer"
+            : payload.reason === "account_reactivated" && payload.accountId === current.id;
+        if (!affectsMe || !current.locked) return;
+        const next = { ...current, locked: null };
+        writeSession(next);
+        setSessionState(next);
+      }
+    };
+    source.onerror = () => undefined;
+    return () => source.close();
   }, [session?.token]);
 
   const value = useMemo<AuthContextValue>(

@@ -7,6 +7,7 @@ import { useOrgLocale } from "../lib/org-locale";
 import { ConsoleHeader } from "./ConsoleHeader";
 import { useAuth } from "./AuthProvider";
 import { AiHelpModal } from "./help/AiHelpModal";
+import { LockedScreen } from "./LockedScreen";
 import { Sidebar } from "./Sidebar";
 import { ConsoleChromeSkeleton } from "./Skeleton";
 
@@ -63,6 +64,10 @@ export function ConsoleShell({ children }: { children: React.ReactNode }) {
 
   if (loading || !session) {
     return <ConsoleChromeSkeleton />;
+  }
+
+  if (session.locked) {
+    return <LockedScreen locked={session.locked} />;
   }
 
   const scope = sessionScope(session);

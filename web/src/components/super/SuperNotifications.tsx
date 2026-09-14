@@ -16,13 +16,35 @@ export function SuperNotifications() {
 
   useEffect(() => {
     if (!session?.token) return;
+    let cancelled = false;
+    const source = new EventSource("/api/console/notifications/stream");
+    source.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data) as { items?: HqNotice[]; unread?: number };
+        if (cancelled) return;
+        if (Array.isArray(payload.items)) {
+          setItems(payload.items);
+          setUnread(payload.unread ?? 0);
+          setReady(true);
+        }
+      } catch {
+        // ignore malformed frames
+      }
+    };
     listNotifications(session.token)
       .then((data) => {
+        if (cancelled) return;
         setItems(data.items);
         setUnread(data.unread);
       })
       .catch(() => undefined)
-      .finally(() => setReady(true));
+      .finally(() => {
+        if (!cancelled) setReady(true);
+      });
+    return () => {
+      cancelled = true;
+      source.close();
+    };
   }, [session?.token]);
 
   if (!ready) return <ManagerSkeleton variant="list" />;

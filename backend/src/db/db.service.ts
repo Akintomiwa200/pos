@@ -190,6 +190,54 @@ export class DbService implements OnModuleInit {
       resolved boolean not null default false,
       created_at timestamptz not null default now()
     )`);
+    await this.query(`create table if not exists hq_plans (
+      id text primary key,
+      code text not null unique,
+      name text not null,
+      tagline text not null default '',
+      price_minor integer not null default 0,
+      till_cap integer not null default -1,
+      period text not null default 'yearly',
+      popular boolean not null default false,
+      features jsonb not null default '[]'::jsonb,
+      active boolean not null default true,
+      sort integer not null default 0,
+      created_at timestamptz not null default now()
+    )`);
+    await this.query(`create table if not exists hq_subscriptions (
+      id text primary key,
+      company_id text not null,
+      company_name text not null,
+      plan_id text not null references hq_plans(id),
+      status text not null default 'active',
+      auto_renew boolean not null default false,
+      started_at timestamptz not null default now(),
+      renews_at timestamptz,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    )`);
+    await this.query(`create index if not exists hq_subscriptions_company_idx on hq_subscriptions (company_id)`);
+    await this.query(`create table if not exists hq_invoices (
+      id text primary key,
+      invoice_no text not null,
+      company_id text not null,
+      company_name text not null,
+      plan_id text,
+      plan_name text,
+      till_id text,
+      till_name text,
+      kind text not null default 'subscription',
+      label text not null default '',
+      amount_minor integer not null default 0,
+      currency text not null default 'NGN',
+      status text not null default 'pending',
+      reference text,
+      provider text,
+      issued_at timestamptz not null default now(),
+      due_at timestamptz,
+      paid_at timestamptz,
+      created_at timestamptz not null default now()
+    )`);
   }
 
   private async seed() {
@@ -225,8 +273,108 @@ export class DbService implements OnModuleInit {
         ],
       );
     }
+    await this.seedPlans();
     this.logger.log("Ensured default HQ groups");
     await this.restrictProducerOwners();
+  }
+
+  private async seedPlans() {
+    const plans: Array<{
+      id: string;
+      code: string;
+      name: string;
+      tagline: string;
+      priceMinor: number;
+      tillCap: number;
+      popular: boolean;
+      sort: number;
+      features: string[];
+    }> = [
+      {
+        id: "plan-free",
+        code: "free",
+        name: "Free",
+        tagline: "Try the platform on one till",
+        priceMinor: 0,
+        tillCap: 1,
+        popular: false,
+        sort: 1,
+        features: ["1 till licence", "1 store", "Catalogue + inventory", "Community support"],
+      },
+      {
+        id: "plan-starter",
+        code: "starter",
+        name: "Starter",
+        tagline: "For a single growing shop",
+        priceMinor: 25_000_000,
+        tillCap: 5,
+        popular: false,
+        sort: 2,
+        features: ["5 till licences", "3 branches", "Sales & stock reports", "Email support"],
+      },
+      {
+        id: "plan-growth",
+        code: "growth",
+        name: "Growth",
+        tagline: "Multi-branch retail and hospitality",
+        priceMinor: 120_000_000,
+        tillCap: 25,
+        popular: true,
+        sort: 3,
+        features: [
+          "25 till licences",
+          "Unlimited branches",
+          "Full report suite",
+          "Priority support",
+        ],
+      },
+      {
+        id: "plan-enterprise",
+        code: "enterprise",
+        name: "Enterprise",
+        tagline: "Scale without the ceiling",
+        priceMinor: 0,
+        tillCap: -1,
+        popular: false,
+        sort: 4,
+        features: [
+          "Unlimited tills",
+          "Dedicated manager",
+          "Custom integrations",
+          "SLA support",
+        ],
+      },
+    ];
+    for (const plan of plans) {
+      await this.query(
+        `insert into hq_plans
+           (id, code, name, tagline, price_minor, till_cap, period, popular, features, active, sort)
+         values ($1, $2, $3, $4, $5, $6, 'yearly', $7, $8::jsonb, true, $9)
+         on conflict (id) do update set
+           code = excluded.code,
+           name = excluded.name,
+           tagline = excluded.tagline,
+           price_minor = excluded.price_minor,
+           till_cap = excluded.till_cap,
+           period = excluded.period,
+           popular = excluded.popular,
+           features = excluded.features,
+           active = true,
+           sort = excluded.sort`,
+        [
+          plan.id,
+          plan.code,
+          plan.name,
+          plan.tagline,
+          plan.priceMinor,
+          plan.tillCap,
+          plan.popular,
+          JSON.stringify(plan.features),
+          plan.sort,
+        ],
+      );
+    }
+    this.logger.log(`Seeded ${plans.length} default subscription plans`);
   }
 
   private producerOwnerEmails(): string[] {

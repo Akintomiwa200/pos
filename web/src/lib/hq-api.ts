@@ -3,6 +3,7 @@ import {
   type ConsoleAccount,
   type ConsoleGroup,
   type ConsoleSession,
+  type SessionLockState,
 } from "./access";
 import { NetworkError, resolveUserMessage } from "./errors";
 import { isDefaultGroupId } from "./hq-seed";
@@ -126,8 +127,16 @@ export async function getSecurityOverview(): Promise<SecurityOverview> {
   return api<SecurityOverview>("/api/console/security/overview");
 }
 
-function asSession(data: { token: string; user: Omit<ConsoleSession, "token"> }): ConsoleSession {
-  const session: ConsoleSession = { token: data.token, ...data.user };
+function asSession(data: {
+  token: string;
+  user: Omit<ConsoleSession, "token">;
+  locked?: SessionLockState | null;
+}): ConsoleSession & { locked?: SessionLockState | null } {
+  const session: ConsoleSession & { locked?: SessionLockState | null } = {
+    token: data.token,
+    ...data.user,
+    locked: data.locked ?? null,
+  };
   writeSession(session);
   return session;
 }
@@ -141,11 +150,15 @@ export function writeSession(session: ConsoleSession | null) {
   else writeLocal(SESSION_KEY, session);
 }
 
-export async function loginConsole(email: string, password: string): Promise<ConsoleSession> {
-  const data = await api<{ token: string; user: Omit<ConsoleSession, "token"> }>(
-    "/api/console/login",
-    { method: "POST", body: JSON.stringify({ email, password }) },
-  );
+export async function loginConsole(
+  email: string,
+  password: string,
+): Promise<ConsoleSession & { locked?: SessionLockState | null }> {
+  const data = await api<{
+    token: string;
+    user: Omit<ConsoleSession, "token">;
+    locked?: SessionLockState | null;
+  }>("/api/console/login", { method: "POST", body: JSON.stringify({ email, password }) });
   return asSession(data);
 }
 
@@ -154,11 +167,12 @@ export async function registerConsole(input: {
   email: string;
   username: string;
   password: string;
-}): Promise<ConsoleSession> {
-  const data = await api<{ token: string; user: Omit<ConsoleSession, "token"> }>(
-    "/api/console/register",
-    { method: "POST", body: JSON.stringify(input) },
-  );
+}): Promise<ConsoleSession & { locked?: SessionLockState | null }> {
+  const data = await api<{
+    token: string;
+    user: Omit<ConsoleSession, "token">;
+    locked?: SessionLockState | null;
+  }>("/api/console/register", { method: "POST", body: JSON.stringify(input) });
   return asSession(data);
 }
 
@@ -182,11 +196,12 @@ export type CompanySignupInput = {
 
 export async function registerCompanyConsole(
   input: CompanySignupInput,
-): Promise<ConsoleSession> {
-  const data = await api<{ token: string; user: Omit<ConsoleSession, "token"> }>(
-    "/api/console/register-company",
-    { method: "POST", body: JSON.stringify(input) },
-  );
+): Promise<ConsoleSession & { locked?: SessionLockState | null }> {
+  const data = await api<{
+    token: string;
+    user: Omit<ConsoleSession, "token">;
+    locked?: SessionLockState | null;
+  }>("/api/console/register-company", { method: "POST", body: JSON.stringify(input) });
   return asSession(data);
 }
 
@@ -212,11 +227,12 @@ export async function googleAuthConsole(input: {
   credential: string;
   intent: "login" | "signup";
   company?: CompanySignupInput["company"];
-}): Promise<ConsoleSession> {
-  const data = await api<{ token: string; user: Omit<ConsoleSession, "token"> }>(
-    "/api/console/auth/google",
-    { method: "POST", body: JSON.stringify(input) },
-  );
+}): Promise<ConsoleSession & { locked?: SessionLockState | null }> {
+  const data = await api<{
+    token: string;
+    user: Omit<ConsoleSession, "token">;
+    locked?: SessionLockState | null;
+  }>("/api/console/auth/google", { method: "POST", body: JSON.stringify(input) });
   return asSession(data);
 }
 
@@ -237,11 +253,14 @@ export async function resetPassword(token: string, password: string) {
   });
 }
 
-export async function fetchConsoleSession(token: string): Promise<ConsoleSession> {
-  const data = await api<{ token: string; user: Omit<ConsoleSession, "token"> }>(
-    "/api/console/me",
-    { headers: authHeaders(token) },
-  );
+export async function fetchConsoleSession(
+  token: string,
+): Promise<ConsoleSession & { locked?: SessionLockState | null }> {
+  const data = await api<{
+    token: string;
+    user: Omit<ConsoleSession, "token">;
+    locked?: SessionLockState | null;
+  }>("/api/console/me", { headers: authHeaders(token) });
   return asSession(data);
 }
 

@@ -5,6 +5,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  OnModuleDestroy,
   OnModuleInit,
   UnauthorizedException,
 } from "@nestjs/common";
@@ -117,18 +118,122 @@ export type PosEvent = {
   at: string;
 };
 
+export type BillingPlan = {
+  id: string;
+  code: string;
+  name: string;
+  tagline: string;
+  priceMinor: number;
+  tillCap: number;
+  period: string;
+  popular: boolean;
+  features: string[];
+  active: boolean;
+  sort: number;
+};
+
+export type BillingSubscription = {
+  id: string;
+  companyId: string;
+  companyName: string;
+  planId: string;
+  planCode: string;
+  planName: string;
+  planTillCap: number;
+  planPriceMinor: number;
+  planPopular: boolean;
+  status: string;
+  autoRenew: boolean;
+  startedAt: string;
+  renewsAt: string | null;
+};
+
+export type BillingInvoice = {
+  id: string;
+  invoiceNo: string;
+  companyId: string;
+  companyName: string;
+  planId: string | null;
+  planName: string | null;
+  tillId: string | null;
+  tillName: string | null;
+  kind: "subscription" | "till_licence";
+  label: string;
+  amountMinor: number;
+  currency: string;
+  status: "pending" | "paid" | "overdue" | "void";
+  reference: string | null;
+  provider: string | null;
+  issuedAt: string;
+  dueAt: string | null;
+  paidAt: string | null;
+};
+
+export type BillingPayment = {
+  id: string;
+  tillId: string | null;
+  tillName: string;
+  reference: string;
+  provider: string;
+  amountMinor: number;
+  currency: string;
+  status: string;
+  paidAt: string;
+  expiresAt: string | null;
+};
+
+export type BillingEvent = {
+  type: "billing";
+  plans: BillingPlan[];
+  subscriptions: BillingSubscription[];
+  invoices: BillingInvoice[];
+  payments: BillingPayment[];
+  company: HqCompany;
+  at: string;
+};
+
+export type NoticesEvent = {
+  items: HqNotice[];
+  unread: number;
+  at: string;
+};
+
+export type SessionLockReason =
+  | "account_deactivated"
+  | "account_deleted"
+  | "account_reactivated"
+  | "subscription_expired"
+  | "subscription_renewed";
+
+export type SessionLockEvent = {
+  type: "lock" | "unlock";
+  reason: SessionLockReason;
+  accountId?: string;
+  message: string;
+  at: string;
+};
+
 @Injectable()
-export class ConsoleService implements OnModuleInit {
+export class ConsoleService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ConsoleService.name);
   private readonly directoryEvents = new Subject<DirectoryEvent>();
   private readonly posEvents = new Subject<PosEvent>();
+  private readonly billingEvents = new Subject<BillingEvent>();
+  private readonly noticesEvents = new Subject<NoticesEvent>();
+  private readonly sessionEvents = new Subject<SessionLockEvent>();
+  private noticePublishing = false;
+  private subscriptionLocked: boolean | null = null;
+  private subscriptionTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     private readonly db: DbService,
     private readonly setup: SetupService,
     private readonly email: EmailService,
   ) {
-    this.setup.orgChanges.subscribe(() => this.publishPos());
+    this.setup.orgChanges.subscribe(() => {
+      this.publishPos();
+      this.publishBilling();
+    });
   }
 
   async onModuleInit() {
@@ -137,6 +242,20 @@ export class ConsoleService implements OnModuleInit {
         `ensureSuperAdmin failed: ${err instanceof Error ? err.message : String(err)}`,
       ),
     );
+    void this.ensureDefaultSubscription().catch((err) =>
+      this.logger.error(
+        `ensureDefaultSubscription failed: ${err instanceof Error ? err.message : String(err)}`,
+      ),
+    );
+    this.subscriptionTimer = setInterval(
+      () => void this.evaluateSubscriptionLock().catch(() => undefined),
+      60_000,
+    );
+    void this.evaluateSubscriptionLock().catch(() => undefined);
+  }
+
+  async onModuleDestroy() {
+    if (this.subscriptionTimer) clearInterval(this.subscriptionTimer);
   }
 
   private mapGroup(row: {
@@ -423,8 +542,8 @@ export class ConsoleService implements OnModuleInit {
     };
   }
 
-  me(token: string) {
-    return this.sessionPayload(token.trim());
+  async me(token: string) {
+    return this.attachSessionLock(await this.sessionPayload(token.trim()));
   }
 
   async logout(token: string) {
@@ -457,7 +576,7 @@ export class ConsoleService implements OnModuleInit {
       token,
       account.id,
     ]);
-    return {
+    return this.attachSessionLock({
       token,
       user: {
         ...publicAccount(account),
@@ -466,7 +585,7 @@ export class ConsoleService implements OnModuleInit {
         departments: group.departments,
         privileges: group.privileges,
       },
-    };
+    });
   }
 
   async register(input: {
@@ -517,7 +636,7 @@ export class ConsoleService implements OnModuleInit {
     };
   }
 
-  private async requireProducer(token: string) {
+  async requireProducer(token: string) {
     const session = await this.me(token);
     if (session.user.scope !== "producer") {
       throw new ForbiddenException("Only Super Admin can use this desk");
@@ -1061,6 +1180,26 @@ export class ConsoleService implements OnModuleInit {
         authProvider === "google" || authProvider === "both" ? authProvider : "password",
     };
 
+    if (existing && existing.active !== next.active) {
+      if (next.active === false) {
+        this.sessionEvents.next({
+          type: "lock",
+          reason: "account_deactivated",
+          accountId: next.id,
+          message: `Your HQ account (${next.email}) was disabled.`,
+          at: new Date().toISOString(),
+        });
+      } else {
+        this.sessionEvents.next({
+          type: "unlock",
+          reason: "account_reactivated",
+          accountId: next.id,
+          message: "Your HQ account is enabled again.",
+          at: new Date().toISOString(),
+        });
+      }
+    }
+
     if (!existing) {
       const producer = group.scope === "producer";
       await this.pushNotice({
@@ -1109,6 +1248,13 @@ export class ConsoleService implements OnModuleInit {
       throw new BadRequestException("Keep at least one administrator account");
     }
     await this.db.query(`delete from hq_accounts where id = $1`, [id]);
+    this.sessionEvents.next({
+      type: "lock",
+      reason: "account_deleted",
+      accountId: id,
+      message: "Your HQ account was removed.",
+      at: new Date().toISOString(),
+    });
     this.publishDirectory();
     await this.recordAudit({ action: "account.deleted", target: target.email });
     await this.recordSecurityEvent({
@@ -1339,6 +1485,585 @@ export class ConsoleService implements OnModuleInit {
     };
   }
 
+  // ---------- billing ----------
+
+  private mapPlan(row: {
+    id: string;
+    code: string;
+    name: string;
+    tagline: string;
+    price_minor: number;
+    till_cap: number;
+    period: string;
+    popular: boolean;
+    features: unknown;
+    active: boolean;
+    sort: number;
+  }): BillingPlan {
+    return {
+      id: row.id,
+      code: row.code,
+      name: row.name,
+      tagline: row.tagline,
+      priceMinor: Number(row.price_minor ?? 0),
+      tillCap: Number(row.till_cap ?? -1),
+      period: row.period,
+      popular: row.popular,
+      features: (row.features ?? []) as string[],
+      active: row.active,
+      sort: Number(row.sort ?? 0),
+    };
+  }
+
+  async listPlans(): Promise<BillingPlan[]> {
+    const result = await this.db.query(
+      `select id, code, name, tagline, price_minor, till_cap, period, popular, features, active, sort
+       from hq_plans order by sort, price_minor, created_at`,
+    );
+    return result.rows.map((row) => this.mapPlan(row as never));
+  }
+
+  async savePlan(input: Partial<BillingPlan>): Promise<BillingPlan> {
+    const name = input.name?.trim();
+    const code = input.code?.trim().toLowerCase();
+    if (!name || !code) throw new BadRequestException("Plan name and code are required");
+    const id = input.id || `plan-${code}`;
+    const priceMinor =
+      typeof input.priceMinor === "number" && input.priceMinor > 0
+        ? Math.round(input.priceMinor)
+        : 0;
+    const tillCap =
+      typeof input.tillCap === "number" && input.tillCap >= 0 ? Math.round(input.tillCap) : -1;
+    const features = Array.isArray(input.features)
+      ? input.features.map((row) => String(row).trim()).filter(Boolean)
+      : [];
+    const existing = await this.db.query(`select id from hq_plans where id = $1`, [id]);
+    const sort =
+      typeof input.sort === "number"
+        ? Math.round(input.sort)
+        : (existing.rowCount ? undefined : (await this.listPlans()).length + 1) ?? 1;
+    await this.db.query(
+      `insert into hq_plans
+         (id, code, name, tagline, price_minor, till_cap, period, popular, features, active, sort)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11)
+       on conflict (id) do update
+       set code = excluded.code,
+           name = excluded.name,
+           tagline = excluded.tagline,
+           price_minor = excluded.price_minor,
+           till_cap = excluded.till_cap,
+           period = excluded.period,
+           popular = excluded.popular,
+           features = excluded.features,
+           active = excluded.active,
+           sort = excluded.sort`,
+      [
+        id,
+        code,
+        name,
+        input.tagline ?? "",
+        priceMinor,
+        tillCap,
+        input.period || "yearly",
+        Boolean(input.popular),
+        JSON.stringify(features),
+        input.active !== false,
+        sort,
+      ],
+    );
+    this.publishBilling();
+    return (await this.listPlans()).find((row) => row.id === id)!;
+  }
+
+  async deletePlan(id: string) {
+    const used = await this.db.query(
+      `select 1 from hq_subscriptions where plan_id = $1 limit 1`,
+      [id],
+    );
+    if (used.rowCount) {
+      throw new BadRequestException(
+        "This plan is in use by an active subscription and cannot be deleted",
+      );
+    }
+    const result = await this.db.query(`delete from hq_plans where id = $1`, [id]);
+    if (!result.rowCount) throw new NotFoundException("Plan not found");
+    this.publishBilling();
+    return { ok: true as const };
+  }
+
+  async listSubscriptions(): Promise<BillingSubscription[]> {
+    const result = await this.db.query(
+      `select s.id, s.company_id, s.company_name, s.plan_id,
+              coalesce(ph.code, '') as plan_code, coalesce(ph.name, '') as plan_name,
+              coalesce(ph.till_cap, -1) as plan_till_cap, coalesce(ph.price_minor, 0) as plan_price_minor,
+              coalesce(ph.popular, false) as plan_popular,
+              s.status, s.auto_renew, s.started_at, s.renews_at
+       from hq_subscriptions s
+       left join hq_plans ph on ph.id = s.plan_id
+       order by s.created_at desc`,
+    );
+    return result.rows.map((row) => ({
+      id: row.id,
+      companyId: row.company_id,
+      companyName: row.company_name,
+      planId: row.plan_id,
+      planCode: row.plan_code,
+      planName: row.plan_name,
+      planTillCap: Number(row.plan_till_cap ?? -1),
+      planPriceMinor: Number(row.plan_price_minor ?? 0),
+      planPopular: Boolean(row.plan_popular),
+      status: row.status,
+      autoRenew: Boolean(row.auto_renew),
+      startedAt: isoOrNull(row.started_at)!,
+      renewsAt: isoOrNull(row.renews_at),
+    }));
+  }
+
+  async listInvoices(): Promise<BillingInvoice[]> {
+    const result = await this.db.query(
+      `select id, invoice_no, company_id, company_name, plan_id, plan_name, till_id, till_name,
+              kind, label, amount_minor, currency, status, reference, provider,
+              issued_at, due_at, paid_at
+       from hq_invoices order by issued_at desc`,
+    );
+    return result.rows.map((row) => ({
+      id: row.id,
+      invoiceNo: row.invoice_no,
+      companyId: row.company_id,
+      companyName: row.company_name,
+      planId: row.plan_id ?? null,
+      planName: row.plan_name ?? null,
+      tillId: row.till_id ?? null,
+      tillName: row.till_name ?? null,
+      kind: row.kind === "till_licence" ? ("till_licence" as const) : ("subscription" as const),
+      label: row.label,
+      amountMinor: Number(row.amount_minor ?? 0),
+      currency: row.currency,
+      status: row.status,
+      reference: row.reference ?? null,
+      provider: row.provider ?? null,
+      issuedAt: isoOrNull(row.issued_at)!,
+      dueAt: isoOrNull(row.due_at),
+      paidAt: isoOrNull(row.paid_at),
+    }));
+  }
+
+  async listPayments(): Promise<BillingPayment[]> {
+    const [tillRows, invoiceRows] = await Promise.all([
+      this.db.query<{
+        id: string;
+        till_id: string | null;
+        till_name: string;
+        reference: string;
+        provider: string;
+        amount_minor: number;
+        currency: string;
+        status: string;
+        paid_at: Date;
+        expires_at: Date | null;
+      }>(
+        `select id, till_id, till_name, reference, provider, amount_minor, currency, status, paid_at, expires_at
+         from hq_till_payments order by paid_at desc`,
+      ),
+      this.db.query<{
+        id: string;
+        till_id: string | null;
+        plan_name: string | null;
+        label: string;
+        reference: string | null;
+        provider: string | null;
+        amount_minor: number;
+        currency: string;
+        paid_at: Date | null;
+        issued_at: Date;
+      }>(
+        `select id, till_id, plan_name, label, reference, provider, amount_minor, currency, paid_at, issued_at
+         from hq_invoices where status = 'paid' order by issued_at desc`,
+      ),
+    ]);
+    const payments: BillingPayment[] = [];
+    for (const row of tillRows.rows) {
+      payments.push({
+        id: row.id,
+        tillId: row.till_id,
+        tillName: row.till_name,
+        reference: row.reference,
+        provider: row.provider,
+        amountMinor: Number(row.amount_minor ?? 0),
+        currency: row.currency,
+        status: row.status,
+        paidAt: isoOrNull(row.paid_at)!,
+        expiresAt: isoOrNull(row.expires_at),
+      });
+    }
+    for (const row of invoiceRows.rows) {
+      payments.push({
+        id: `inv-${row.id}`,
+        tillId: row.till_id,
+        tillName: row.plan_name ? `${row.plan_name} plan` : row.label || "Subscription",
+        reference: row.reference ?? row.id,
+        provider: row.provider ?? "credit",
+        amountMinor: Number(row.amount_minor ?? 0),
+        currency: row.currency,
+        status: "paid",
+        paidAt: isoOrNull(row.paid_at ?? row.issued_at)!,
+        expiresAt: null,
+      });
+    }
+    return payments.sort(
+      (a, b) => Date.parse(b.paidAt || a.expiresAt || "0") - Date.parse(a.paidAt || b.expiresAt || "0"),
+    );
+  }
+
+  private async nextInvoiceNo(): Promise<string> {
+    const year = new Date().getFullYear();
+    const result = await this.db.query<{ invoice_no: string }>(
+      `select invoice_no from hq_invoices order by created_at desc limit 1`,
+    );
+    let next = 1;
+    const last = result.rows[0]?.invoice_no;
+    const match = last ? /-(\d+)$/.exec(last) : null;
+    if (match) next = Number(match[1]) + 1;
+    return `INV-${year}-${String(next).padStart(5, "0")}`;
+  }
+
+  private async issueInvoice(input: {
+    companyId?: string;
+    companyName?: string;
+    planId?: string | null;
+    planName?: string | null;
+    tillId?: string | null;
+    tillName?: string | null;
+    kind: "subscription" | "till_licence";
+    label: string;
+    amountMinor: number;
+    currency?: string;
+    status?: string;
+    reference?: string | null;
+    provider?: string | null;
+  }): Promise<BillingInvoice> {
+    const company = input.companyId ? undefined : this.setup.getCompany();
+    const companyId = input.companyId || company?.id || "";
+    const companyName = input.companyName || company?.name || "Company";
+    const invoiceNo = await this.nextInvoiceNo();
+    const now = new Date();
+    const due = new Date(now.getTime() + 14 * 86_400_000);
+    const paidAt =
+      input.status === "paid"
+        ? now.toISOString()
+        : input.amountMinor <= 0
+          ? now.toISOString()
+          : null;
+    const id = `inv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    await this.db.query(
+      `insert into hq_invoices
+         (id, invoice_no, company_id, company_name, plan_id, plan_name, till_id, till_name,
+          kind, label, amount_minor, currency, status, reference, provider, issued_at, due_at, paid_at)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
+      [
+        id,
+        invoiceNo,
+        companyId,
+        companyName,
+        input.planId ?? null,
+        input.planName ?? null,
+        input.tillId ?? null,
+        input.tillName ?? null,
+        input.kind,
+        input.label,
+        Math.round(input.amountMinor),
+        input.currency || "NGN",
+        paidAt ? "paid" : input.status || "pending",
+        input.reference ?? null,
+        input.provider ?? null,
+        now.toISOString(),
+        due.toISOString(),
+        paidAt,
+      ],
+    );
+    return {
+      id,
+      invoiceNo,
+      companyId,
+      companyName,
+      planId: input.planId ?? null,
+      planName: input.planName ?? null,
+      tillId: input.tillId ?? null,
+      tillName: input.tillName ?? null,
+      kind: input.kind,
+      label: input.label,
+      amountMinor: Math.round(input.amountMinor),
+      currency: input.currency || "NGN",
+      status: paidAt ? "paid" : (input.status as BillingInvoice["status"]) ?? "pending",
+      reference: input.reference ?? null,
+      provider: input.provider ?? null,
+      issuedAt: now.toISOString(),
+      dueAt: due.toISOString(),
+      paidAt,
+    };
+  }
+
+  async markInvoicePaid(
+    id: string,
+    input: { reference?: string; provider?: string; amountMinor?: number },
+  ) {
+    const result = await this.db.query<{
+      id: string;
+      invoice_no: string;
+      company_id: string;
+      company_name: string;
+      till_id: string | null;
+      till_name: string;
+      kind: string;
+      label: string;
+      amount_minor: number;
+      currency: string;
+      status: string;
+    }>(
+      `select id, invoice_no, company_id, company_name, till_id, till_name, kind, label,
+              amount_minor, currency, status
+       from hq_invoices where id = $1 limit 1`,
+      [id],
+    );
+    const row = result.rows[0];
+    if (!row) throw new NotFoundException("Invoice not found");
+    if (row.status === "paid") {
+      this.publishBilling();
+      return (await this.listInvoices()).find((value) => value.id === id)!;
+    }
+    if (row.amount_minor <= 0) {
+      throw new BadRequestException("This zero-value invoice is already settled");
+    }
+    const provider = input.provider?.trim() || "transfer";
+    const reference = input.reference?.trim() || `SET-${row.invoice_no}-${Date.now()}`;
+    await this.db.query(
+      `update hq_invoices set status = 'paid', paid_at = now(), provider = $2, reference = $3 where id = $1`,
+      [id, provider, reference],
+    );
+    await this.pushNotice({
+      key: `invoice.paid:${id}:${Date.now()}`,
+      type: "invoice.paid",
+      title: `Invoice ${row.invoice_no} paid`,
+      body: `${row.company_name} settled ${row.label || row.invoice_no} via ${provider}.`,
+      href: "/admin/billing/invoices",
+    });
+    await this.recordAudit({
+      action: "invoice.paid",
+      target: row.invoice_no,
+      detail: provider,
+    });
+    this.publishBilling();
+    return (await this.listInvoices()).find((value) => value.id === id)!;
+  }
+
+  async assignSubscription(
+    companyId: string,
+    planId: string,
+    opts: { status?: string; autoRenew?: boolean } = {},
+  ) {
+    const plans = await this.listPlans();
+    const plan = plans.find((row) => row.id === planId || row.code === planId);
+    if (!plan) throw new NotFoundException("Plan not found");
+    const company = this.setup.getCompany();
+    const targetCompanyId = companyId.trim() || company.id;
+    const companyName = company.name;
+    const existing = await this.db.query<{ id: string }>(
+      `select id from hq_subscriptions where company_id = $1 limit 1`,
+      [targetCompanyId],
+    );
+    const id = existing.rows[0]?.id ?? `sub-${Date.now()}`;
+    const renewsAt =
+      plan.tillCap > 0
+        ? addOneYear().toISOString()
+        : plan.tillCap === -1
+          ? addOneYear().toISOString()
+          : null;
+    const status = opts.status || "active";
+    await this.db.query(
+      `insert into hq_subscriptions
+         (id, company_id, company_name, plan_id, status, auto_renew, started_at, renews_at)
+       values ($1, $2, $3, $4, $5, $6, now(), $7)
+       on conflict (id) do update
+       set plan_id = excluded.plan_id,
+           company_name = excluded.company_name,
+           status = excluded.status,
+           auto_renew = excluded.auto_renew,
+           renews_at = excluded.renews_at,
+           updated_at = now()`,
+      [id, targetCompanyId, companyName, plan.id, status, Boolean(opts.autoRenew), renewsAt],
+    );
+    const open = await this.db.query(
+      `select 1 from hq_invoices where company_id = $1 and kind = 'subscription' and plan_id = $2 and status = 'pending' limit 1`,
+      [targetCompanyId, plan.id],
+    );
+    if (!open.rowCount) {
+      const price =
+        plan.priceMinor > 0 ? plan.priceMinor : 0;
+      await this.issueInvoice({
+        companyId: targetCompanyId,
+        companyName,
+        planId: plan.id,
+        planName: plan.name,
+        kind: "subscription",
+        label: `${plan.name} subscription`,
+        amountMinor: price,
+        status: price > 0 ? "pending" : "paid",
+      });
+    }
+    await this.pushNotice({
+      key: `plan.assigned:${targetCompanyId}:${plan.id}`,
+      type: "plan.assigned",
+      title: `${plan.name} assigned to ${companyName}`,
+      body: `The subscription is now live. Manage it under Billing → Subscriptions.`,
+      href: "/admin/billing/subscriptions",
+    });
+    await this.recordAudit({ action: "plan.assigned", target: companyName, detail: plan.name });
+    this.publishBilling();
+    return (await this.listSubscriptions()).find((row) => row.companyId === targetCompanyId)!;
+  }
+
+  private async ensureDefaultSubscription() {
+    const company = this.setup.getCompany();
+    if (!company?.id) return;
+    const existing = await this.db.query(
+      `select id from hq_subscriptions where company_id = $1 limit 1`,
+      [company.id],
+    );
+    if (existing.rowCount) return;
+    const tills = await this.listRawTills();
+    const plans = await this.listPlans();
+    const active = plans.filter((row) => row.active);
+    const fit =
+      active.find((row) => row.tillCap !== -1 && tills.length <= row.tillCap) ??
+      active.find((row) => row.tillCap === -1) ??
+      active[0];
+    if (!fit) return;
+    await this.assignSubscription(company.id, fit.id, { status: "active" });
+    this.logger.log(`Assigned default plan "${fit.name}" to ${company.name}`);
+  }
+
+  async billingSnapshot(): Promise<BillingEvent> {
+    const [plans, subscriptions, invoices, payments] = await Promise.all([
+      this.listPlans(),
+      this.listSubscriptions(),
+      this.listInvoices(),
+      this.listPayments(),
+    ]);
+    return {
+      type: "billing",
+      plans,
+      subscriptions,
+      invoices,
+      payments,
+      company: this.setup.getCompany(),
+      at: new Date().toISOString(),
+    };
+  }
+
+  private publishBilling() {
+    void this.billingSnapshot()
+      .then((event) => this.billingEvents.next(event))
+      .catch(() => undefined);
+    void this.evaluateSubscriptionLock().catch(() => undefined);
+  }
+
+  billingStream(): Observable<BillingEvent> {
+    return new Observable((subscriber) => {
+      void this.billingSnapshot()
+        .then((event) => subscriber.next(event))
+        .catch(() => undefined);
+      const sub = this.billingEvents.subscribe(subscriber);
+      return () => sub.unsubscribe();
+    });
+  }
+
+  // ---------- session locks (real-time HQ page locking) ----------
+
+  /** True when the company free trial / subscription has run out. */
+  private async subscriptionLockState(): Promise<{ expired: boolean; message?: string }> {
+    const company = this.setup.getCompany();
+    const subscriptions = await this.listSubscriptions();
+    const subscription =
+      subscriptions.find((row) => row.companyId === company.id) ?? subscriptions[0];
+    if (!subscription) return { expired: false };
+    const expiredByStatus = subscription.status === "expired";
+    const renewsPast =
+      Boolean(subscription.renewsAt) && isSubscriptionExpired(subscription.renewsAt);
+    if (!expiredByStatus && !renewsPast) return { expired: false };
+    const endedAt = subscription.renewsAt ?? subscription.startedAt;
+    const date = endedAt
+      ? new Date(endedAt).toLocaleDateString("en-NG")
+      : "";
+    const planLabel = subscription.planName || "subscription";
+    const message =
+      subscription.planPriceMinor <= 0
+        ? `The ${planLabel} free trial ended on ${date}. Renew your plan to unlock the HQ pages.`
+        : `The ${planLabel} subscription ended on ${date}. Renew your plan to unlock the HQ pages.`;
+    return { expired: true, message };
+  }
+
+  /** Emits lock/unlock over the session stream when the subscription state flips. */
+  async evaluateSubscriptionLock(): Promise<{ expired: boolean; message?: string }> {
+    const state = await this.subscriptionLockState();
+    if (state.expired && this.subscriptionLocked !== true) {
+      this.subscriptionLocked = true;
+      this.sessionEvents.next({
+        type: "lock",
+        reason: "subscription_expired",
+        message: state.message ?? "Your subscription has ended.",
+        at: new Date().toISOString(),
+      });
+    } else if (!state.expired && this.subscriptionLocked === true) {
+      this.subscriptionLocked = false;
+      this.sessionEvents.next({
+        type: "unlock",
+        reason: "subscription_renewed",
+        message: "Your subscription is active again.",
+        at: new Date().toISOString(),
+      });
+    } else if (this.subscriptionLocked === null) {
+      this.subscriptionLocked = state.expired;
+    }
+    return state;
+  }
+
+  sessionStream(): Observable<SessionLockEvent> {
+    return new Observable((subscriber) => {
+      void this.evaluateSubscriptionLock()
+        .then((state) => {
+          if (state.expired) {
+            subscriber.next({
+              type: "lock",
+              reason: "subscription_expired",
+              message: state.message ?? "Your subscription has ended.",
+              at: new Date().toISOString(),
+            });
+          }
+        })
+        .catch(() => undefined);
+      const sub = this.sessionEvents.subscribe(subscriber);
+      return () => sub.unsubscribe();
+    });
+  }
+
+  /** Attach a lock state to sessions of tenant accounts whose subscription ran out. */
+  private async attachSessionLock<T extends { user: { scope?: string } }>(
+    payload: T,
+  ): Promise<T & { locked?: { reason: "subscription_expired"; message: string } }> {
+    if (payload.user.scope === "producer") return payload;
+    const state = await this.subscriptionLockState().catch<{ expired: boolean; message?: string }>(
+      () => ({ expired: false }),
+    );
+    if (!state.expired) return payload;
+    return {
+      ...payload,
+      locked: {
+        reason: "subscription_expired",
+        message: state.message ?? "Your subscription has ended.",
+      },
+    };
+  }
+
   // ---------- notices ----------
 
   private async pushNotice(
@@ -1373,6 +2098,7 @@ export class ConsoleService implements OnModuleInit {
          select id from hq_notices order by created_at desc offset 100
        )`,
     );
+    this.publishNotices();
   }
 
   private async ensureDerived(
@@ -1453,6 +2179,7 @@ export class ConsoleService implements OnModuleInit {
         await this.db.query(`delete from hq_notices where id = $1`, [row.id]);
       }
     }
+    this.publishNotices();
   }
 
   async listNotifications() {
@@ -1478,13 +2205,38 @@ export class ConsoleService implements OnModuleInit {
     if (!row.read_at) {
       await this.db.query(`update hq_notices set read_at = now() where id = $1`, [id]);
       row.read_at = new Date();
+      this.publishNotices();
     }
     return this.mapNotice(row);
   }
 
   async markAllNoticesRead() {
     await this.db.query(`update hq_notices set read_at = now() where read_at is null`);
+    this.publishNotices();
     return { ok: true as const };
+  }
+
+  private publishNotices() {
+    if (this.noticePublishing) return;
+    this.noticePublishing = true;
+    void this.listNotifications()
+      .then((data) =>
+        this.noticesEvents.next({ ...data, at: new Date().toISOString() }),
+      )
+      .catch(() => undefined)
+      .finally(() => {
+        this.noticePublishing = false;
+      });
+  }
+
+  noticesStream(): Observable<NoticesEvent> {
+    return new Observable((subscriber) => {
+      void this.listNotifications()
+        .then((data) => subscriber.next({ ...data, at: new Date().toISOString() }))
+        .catch(() => undefined);
+      const sub = this.noticesEvents.subscribe(subscriber);
+      return () => sub.unsubscribe();
+    });
   }
 
   async notifySale(sale: { ticketId: string; cashierName?: string; totalMinor?: number }) {
@@ -1899,6 +2651,9 @@ export class ConsoleService implements OnModuleInit {
     if (!hex) throw new BadRequestException("This device has no hardware hex");
     const till = await this.getTillByCode(normalized);
     if (!till || !till.active) throw new UnauthorizedException("Invalid till code");
+    const hadLicence = Boolean(
+      till.subscriptionExpiresAt && !isSubscriptionExpired(till.subscriptionExpiresAt),
+    );
     const pairedAt = till.pairedAt ?? new Date().toISOString();
     const subscriptionExpiresAt = isSubscriptionExpired(till.subscriptionExpiresAt)
       ? addOneYear().toISOString()
@@ -1918,7 +2673,20 @@ export class ConsoleService implements OnModuleInit {
       body: `The till at ${till.branchName || "the branch"} is licensed until ${new Date(subscriptionExpiresAt!).toLocaleDateString("en-NG")}.`,
       href: "/setup/others/till",
     });
+    if (!hadLicence && subscriptionExpiresAt) {
+      await this.issueInvoice({
+        tillId: till.id,
+        tillName: till.name,
+        kind: "till_licence",
+        label: `${till.name} · first-year licence`,
+        amountMinor: 0,
+        status: "paid",
+        reference: `ACT-${till.id}-${Date.now()}`,
+        provider: "credit",
+      });
+    }
     this.publishPos();
+    this.publishBilling();
     return (await this.getRawTill(till.id))!;
   }
 
@@ -1998,7 +2766,18 @@ export class ConsoleService implements OnModuleInit {
       body: `Subscription now runs until ${new Date(subscriptionExpiresAt).toLocaleDateString("en-NG")}.`,
       href: "/setup/others/till",
     });
+    await this.issueInvoice({
+      tillId: till.id,
+      tillName: till.name,
+      kind: "till_licence",
+      label: `${till.name} · licence renewal`,
+      amountMinor: 0,
+      status: "paid",
+      reference: `RENEW-${till.id}-${Date.now()}`,
+      provider: "credit",
+    });
     this.publishPos();
+    this.publishBilling();
     return (await this.getRawTill(id))!;
   }
 
@@ -2057,6 +2836,16 @@ export class ConsoleService implements OnModuleInit {
       currency: (input.currency?.trim().toUpperCase() || "NGN").slice(0, 3) || "NGN",
       expiresAt: subscriptionExpiresAt,
     });
+    await this.issueInvoice({
+      tillId: till.id,
+      tillName: till.name,
+      kind: "till_licence",
+      label: `${till.name} · licence renewal`,
+      amountMinor,
+      status: "paid",
+      reference,
+      provider,
+    });
     await this.pushNotice({
       key: `till.paid:${till.id}:${reference}`,
       type: "till.renewed",
@@ -2065,6 +2854,7 @@ export class ConsoleService implements OnModuleInit {
       href: "/setup/others/till",
     });
     this.publishPos();
+    this.publishBilling();
     return (await this.getRawTill(id))!;
   }
 

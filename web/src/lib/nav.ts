@@ -174,6 +174,11 @@ const BILLING_NAV: NavNode[] = [
     label: "Till Licences",
     href: "/setup/billing/licences",
   },
+  {
+    id: "billing-invoices",
+    label: "Invoices",
+    href: "/setup/billing/invoices",
+  },
 ];
 
 const ACCOUNTING_BOOKS_NAV: NavNode[] = [

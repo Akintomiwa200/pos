@@ -10,6 +10,7 @@ import {
   Clock,
   Copy,
   CreditCard,
+  FileText,
   Landmark,
   Laptop,
   Loader2,
@@ -32,6 +33,7 @@ import {
 import { listGateways, type HqCompany, type HqGateway } from "@/lib/hq-setup";
 import { formatMinor } from "@/lib/org-locale";
 import { useLivePos } from "@/lib/live-pos";
+import { useLiveBilling } from "@/lib/billing";
 import { ManagerSkeleton } from "../Skeleton";
 import { DataTable, PrimaryButton, SetupHeader } from "./SetupChrome";
 import { useOrgLinks } from "@/lib/org-links";
@@ -677,6 +679,7 @@ export function SubscriptionManager({
   variant?: "subscriptions" | "licences";
 }) {
   const { tills, ready, company } = useLivePos();
+  const { subscriptions } = useLiveBilling();
   const links = useOrgLinks();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [renewId, setRenewId] = useState<string | null>(null);
@@ -730,6 +733,7 @@ export function SubscriptionManager({
   if (!ready) return <ManagerSkeleton variant="list" />;
 
   const isLicences = variant === "licences";
+  const sub = subscriptions[0] ?? null;
   const selectedTill = (tills ?? []).find((till) => till.id === selectedId) ?? null;
   const renewingTill = (tills ?? []).find((till) => till.id === renewId) ?? null;
 
@@ -771,6 +775,12 @@ export function SubscriptionManager({
           action={
             <div className="flex items-center gap-2">
               <Link
+                href="/setup/billing/invoices"
+                className="rounded-xl border border-pos-border px-4 py-2.5 text-sm text-pos-ink hover:bg-pos-surface-muted"
+              >
+                Invoices
+              </Link>
+              <Link
                 href="/setup/billing/licences"
                 className="rounded-xl border border-pos-border px-4 py-2.5 text-sm text-pos-ink hover:bg-pos-surface-muted"
               >
@@ -793,15 +803,45 @@ export function SubscriptionManager({
                 Current plan
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-2">
-                <h2 className="text-lg font-semibold text-pos-ink">{primaryProduct}</h2>
-                <span className="rounded-full bg-pos-primary-soft px-2.5 py-1 text-[11px] font-medium text-pos-primary">
-                  {stats.total} till{stats.total === 1 ? "" : "s"}
-                </span>
+                <h2 className="text-lg font-semibold text-pos-ink">
+                  {sub?.planName ?? primaryProduct}
+                </h2>
+                {sub ? (
+                  <span className="rounded-full bg-pos-primary-soft px-2.5 py-1 text-[11px] font-medium text-pos-primary">
+                    {sub.planTillCap === -1
+                      ? "Unlimited"
+                      : `${sub.planTillCap} till${sub.planTillCap === 1 ? "" : "s"} allowed`}
+                  </span>
+                ) : (
+                  <span className="rounded-full bg-pos-warning/10 px-2.5 py-1 text-[11px] font-medium text-pos-warning">
+                    No plan assigned
+                  </span>
+                )}
               </div>
               <p className="mt-1 max-w-xl text-sm text-pos-ink-muted">
-                Every till runs on this product. A licence activates when the till code is entered
-                on the device, and renews for another year from its current expiry.
+                {sub
+                  ? `${sub.planName} runs at ${sub.planPriceMinor > 0 ? formatMinor(sub.planPriceMinor) : sub.planTillCap === -1 ? "a custom rate" : "no charge"} per year — every till under it carries its own licence.`
+                  : `Every till runs on this product. A licence activates when the till code is entered
+                on the device, and renews for another year from its current expiry.`}
               </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {sub ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-pos-primary-soft px-2.5 py-1 text-[12px] font-medium text-pos-primary">
+                    <ShieldCheck size={13} /> {sub.status}
+                    {sub.renewsAt ? ` · renews ${formatDate(sub.renewsAt)}` : ""}
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-pos-warning/10 px-2.5 py-1 text-[12px] font-medium text-pos-warning">
+                    <ShieldCheck size={13} /> Ask the platform team to assign your plan
+                  </span>
+                )}
+                <Link
+                  href="/setup/billing/invoices"
+                  className="inline-flex items-center gap-1.5 rounded-full bg-pos-surface-muted px-2.5 py-1 text-[12px] font-medium text-pos-ink transition hover:text-pos-primary"
+                >
+                  <FileText size={13} /> View invoices
+                </Link>
+              </div>
             </div>
             <div className="flex items-center gap-3">
               <span className="grid size-11 place-items-center rounded-full bg-pos-primary-soft text-pos-primary">

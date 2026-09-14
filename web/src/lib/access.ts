@@ -14,6 +14,23 @@ import { PRODUCER_NAV, producerAccessTree } from "./producer-nav";
 
 export type GroupScope = "tenant" | "producer";
 
+export type SessionLockReason =
+  | "account_deactivated"
+  | "account_deleted"
+  | "account_reactivated"
+  | "subscription_expired"
+  | "subscription_renewed";
+
+export type SessionLockState = { reason: SessionLockReason; message: string };
+
+export type SessionLockEvent = {
+  type: "lock" | "unlock";
+  reason: SessionLockReason;
+  accountId?: string;
+  message: string;
+  at: string;
+};
+
 export type ConsoleGroup = {
   id: string;
   name: string;
@@ -43,6 +60,8 @@ export type ConsoleSession = {
   scope?: GroupScope;
   departments: Array<DepartmentName | "*">;
   privileges: string[];
+  /** Set while the account or company subscription is locked (pages blocked). */
+  locked?: SessionLockState | null;
 };
 
 export function groupScope(group: { scope?: GroupScope } | null | undefined): GroupScope {

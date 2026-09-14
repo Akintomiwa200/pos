@@ -160,7 +160,7 @@ export type HqOrgSettings = {
     | "outfit"
     | "manrope"
     | "space-grotesk";
-  uiAccent: "violet" | "teal" | "blue" | "amber" | "rose";
+  uiAccent: "macaron" | "teal" | "blue" | "amber" | "rose";
   uiDensity: "comfortable" | "compact";
   uiReduceMotion: boolean;
 };
@@ -274,7 +274,7 @@ export const SEED_SETTINGS: HqOrgSettings = {
   sessionTimeoutMinutes: 0,
   uiTheme: "system",
   uiFont: "inter",
-  uiAccent: "violet",
+  uiAccent: "macaron",
   uiDensity: "comfortable",
   uiReduceMotion: false,
 };

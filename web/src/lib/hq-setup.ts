@@ -152,7 +152,7 @@ export type HqOrgSettings = {
     | "outfit"
     | "manrope"
     | "space-grotesk";
-  uiAccent: "violet" | "teal" | "blue" | "amber" | "rose";
+  uiAccent: "macaron" | "teal" | "blue" | "amber" | "rose";
   uiDensity: "comfortable" | "compact";
   uiReduceMotion: boolean;
 };

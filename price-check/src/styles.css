@@ -110,7 +110,7 @@ input {
   gap: 6px;
   border: 0;
   border-radius: 999px;
-  background: #6d4aff;
+  background: #ec4899;
   color: #fff;
   font-weight: 600;
   padding: 10px 14px;
@@ -147,7 +147,7 @@ input {
 
 .pc-cat {
   margin: 0;
-  color: #6d4aff;
+  color: #ec4899;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -187,7 +187,7 @@ input {
 
 @keyframes priceflash {
   0% {
-    color: #6d4aff;
+    color: #ec4899;
     transform: scale(1.04);
   }
   100% {
@@ -303,7 +303,7 @@ input {
   width: 100%;
   border: 0;
   border-radius: 14px;
-  background: #6d4aff;
+  background: #ec4899;
   color: #fff;
   font-weight: 700;
   padding: 14px;

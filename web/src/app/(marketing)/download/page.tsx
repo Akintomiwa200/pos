@@ -44,7 +44,7 @@ export default function DownloadPage() {
           >
             <h2 className="font-semibold">{item.title}</h2>
             <p className="mt-2 flex-1 text-sm text-neutral-500">{item.copy}</p>
-            <Link href={item.href} className="mt-5 text-sm font-semibold text-[#6d4aff]">
+            <Link href={item.href} className="mt-5 text-sm font-semibold text-[#ec4899]">
               {item.cta}
             </Link>
           </div>

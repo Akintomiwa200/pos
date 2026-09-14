@@ -12,14 +12,14 @@ function AboutHeroOrb({ className = "" }: { className?: string }) {
     >
       <defs>
         <linearGradient id="about-orb-top" x1="30%" y1="15%" x2="75%" y2="90%">
-          <stop offset="0%" stopColor="#b8a6ff" />
-          <stop offset="45%" stopColor="#8b74ff" />
-          <stop offset="100%" stopColor="#6d4aff" />
+          <stop offset="0%" stopColor="#f9a8d4" />
+          <stop offset="45%" stopColor="#f472b6" />
+          <stop offset="100%" stopColor="#ec4899" />
         </linearGradient>
         <linearGradient id="about-orb-bot" x1="25%" y1="10%" x2="80%" y2="95%">
-          <stop offset="0%" stopColor="#8b74ff" />
-          <stop offset="50%" stopColor="#6d4aff" />
-          <stop offset="100%" stopColor="#4c2fd9" />
+          <stop offset="0%" stopColor="#f472b6" />
+          <stop offset="50%" stopColor="#ec4899" />
+          <stop offset="100%" stopColor="#be185d" />
         </linearGradient>
         <clipPath id="about-orb-top-clip">
           <rect x="0" y="0" width="200" height="100" />

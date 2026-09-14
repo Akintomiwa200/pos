@@ -39,14 +39,14 @@ export default function PricingPage() {
             key={plan.name}
             className="flex flex-col rounded-2xl bg-white p-6 shadow-[0_8px_30px_rgba(28,28,30,0.06)]"
           >
-            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#6d4aff]">
+            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#ec4899]">
               {plan.name}
             </p>
             <p className="mt-3 text-3xl font-semibold tracking-tight">{plan.price}</p>
             <p className="mt-3 flex-1 text-sm text-neutral-500">{plan.copy}</p>
             <Link
               href={plan.href}
-              className="mt-6 rounded-xl bg-[#6d4aff] px-4 py-2.5 text-center text-sm font-semibold text-white"
+              className="mt-6 rounded-xl bg-[#ec4899] px-4 py-2.5 text-center text-sm font-semibold text-white"
             >
               {plan.cta}
             </Link>

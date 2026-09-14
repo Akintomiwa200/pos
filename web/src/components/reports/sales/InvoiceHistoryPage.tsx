@@ -13,7 +13,7 @@ function timeOf(iso: string) {
 const TENDER_DOT: Record<string, string> = {
   cash: "bg-emerald-500",
   transfer: "bg-sky-500",
-  card: "bg-violet-500",
+  card: "bg-pink-500",
 };
 
 function dotColor(tender: string) {

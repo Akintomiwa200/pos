@@ -350,7 +350,7 @@ function PodiumCard({
         <StatPill
           icon={Gem}
           value={entry.gems}
-          tone={featured ? "text-violet-200" : "text-pos-primary"}
+          tone={featured ? "text-pink-200" : "text-pos-primary"}
           featured={featured}
           compact={!featured}
         />

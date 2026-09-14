@@ -15,7 +15,7 @@ function timeOf(iso: string) {
 const TENDER_TONE: Record<string, string> = {
   cash: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300",
   transfer: "bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300",
-  card: "bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300",
+  card: "bg-pink-50 text-pink-700 dark:bg-pink-950/40 dark:text-pink-300",
 };
 
 function tenderChip(tender: string) {

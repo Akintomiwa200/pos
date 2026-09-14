@@ -13,9 +13,9 @@
   --pos-ink: #1c1c1e;
   --pos-ink-muted: #6b7280;
   --pos-ink-faint: #9ca3af;
-  --pos-primary: #6d4aff;
-  --pos-primary-soft: #f4f0ff;
-  --pos-primary-muted: #ddd6fe;
+  --pos-primary: #ec4899;
+  --pos-primary-soft: #fdf2f8;
+  --pos-primary-muted: #f9a8d4;
   --pos-sidebar-muted: #9ca3af;
   --pos-success: #16a34a;
   --pos-success-soft: #ecfdf3;
@@ -26,41 +26,41 @@
   --pos-chart-bar-accent: #d8d8df;
   --pos-chart-grid: #f0f0f3;
   --pos-chart-line: #b8b8c2;
-  --pos-chart-line-soft: #d4cce8;
+  --pos-chart-line-soft: #fbcfe8;
   --pos-chart-slice-2: #c4c4cc;
   --pos-chart-slice-3: #dcdce2;
   --pos-chart-slice-4: #ececf0;
   --pos-avatar-1: #64748b;
   --pos-avatar-2: #475569;
-  --pos-avatar-3: #6d4aff;
+  --pos-avatar-3: #ec4899;
   --pos-avatar-4: #94a3b8;
   --pos-avatar-5: #78716c;
   --pos-shadow-sm: 0 1px 2px rgb(28 28 30 / 0.04);
   --pos-shadow-md: 0 8px 30px rgb(28 28 30 / 0.06);
-  --pos-shadow-primary: 0 4px 14px rgb(109 74 255 / 0.24);
+  --pos-shadow-primary: 0 4px 14px rgb(236 72 153 / 0.24);
   --pos-scrollbar: rgb(28 28 30 / 0.14);
-  --pos-scrollbar-hover: rgb(109 74 255 / 0.32);
+  --pos-scrollbar-hover: rgb(236 72 153 / 0.32);
   --pos-marketing-hero: linear-gradient(
     180deg,
-    #5538e0 0%,
-    #6d4aff 42%,
-    #c4b5fd 78%,
+    #be185d 0%,
+    #ec4899 42%,
+    #fbcfe8 78%,
     var(--pos-bg) 100%
   );
   --pos-marketing-hero-stack: linear-gradient(
     180deg,
-    #5538e0 0%,
-    #6d4aff 22%,
-    #8b74f0 42%,
-    #c4b5fd 58%,
-    #ddd6fe 72%,
+    #be185d 0%,
+    #ec4899 22%,
+    #f472b6 42%,
+    #fbcfe8 58%,
+    #f9a8d4 72%,
     var(--pos-primary-soft) 88%,
     var(--pos-bg) 100%
   );
   --pos-marketing-soft: linear-gradient(
     180deg,
-    #c4b5fd 0%,
-    #ddd6fe 32%,
+    #fbcfe8 0%,
+    #f9a8d4 32%,
     var(--pos-primary-soft) 62%,
     var(--pos-bg) 100%
   );
@@ -83,9 +83,9 @@
   --pos-ink: #f3f4f6;
   --pos-ink-muted: #a1a8b3;
   --pos-ink-faint: #7b8494;
-  --pos-primary: #8b7cff;
-  --pos-primary-soft: #2a2540;
-  --pos-primary-muted: #3d3560;
+  --pos-primary: #f472b6;
+  --pos-primary-soft: #3b0f24;
+  --pos-primary-muted: #9d174d;
   --pos-sidebar-muted: #7b8494;
   --pos-success: #4ade80;
   --pos-success-soft: #14281d;
@@ -96,39 +96,39 @@
   --pos-chart-bar-accent: #363945;
   --pos-chart-grid: #22252e;
   --pos-chart-line: #6b7280;
-  --pos-chart-line-soft: #4b4563;
+  --pos-chart-line-soft: #5a3148;
   --pos-chart-slice-2: #4b5563;
   --pos-chart-slice-3: #374151;
   --pos-chart-slice-4: #2a2d38;
   --pos-avatar-1: #64748b;
   --pos-avatar-2: #475569;
-  --pos-avatar-3: #8b7cff;
+  --pos-avatar-3: #f472b6;
   --pos-avatar-4: #94a3b8;
   --pos-avatar-5: #78716c;
   --pos-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.35);
   --pos-shadow-md: 0 8px 30px rgb(0 0 0 / 0.35);
-  --pos-shadow-primary: 0 4px 14px rgb(139 124 255 / 0.22);
+  --pos-shadow-primary: 0 4px 14px rgb(244 114 182 / 0.22);
   --pos-scrollbar: rgb(243 244 246 / 0.14);
-  --pos-scrollbar-hover: rgb(139 124 255 / 0.42);
+  --pos-scrollbar-hover: rgb(244 114 182 / 0.42);
   --pos-marketing-hero: linear-gradient(
     180deg,
-    #2a2540 0%,
-    #3d3560 38%,
+    #3b0f24 0%,
+    #9d174d 38%,
     #22252e 72%,
     var(--pos-bg) 100%
   );
   --pos-marketing-hero-stack: linear-gradient(
     180deg,
-    #2a2540 0%,
-    #3d3560 28%,
-    #2a2540 52%,
+    #3b0f24 0%,
+    #9d174d 28%,
+    #3b0f24 52%,
     #22252e 72%,
     var(--pos-bg) 100%
   );
   --pos-marketing-soft: linear-gradient(
     180deg,
-    #3d3560 0%,
-    #2a2540 32%,
+    #9d174d 0%,
+    #3b0f24 32%,
     var(--pos-bg) 62%,
     var(--pos-bg) 100%
   );

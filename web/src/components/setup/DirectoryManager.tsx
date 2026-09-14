@@ -59,7 +59,7 @@ const TONE_CLASSES: Record<string, string> = {
   orange: "bg-orange-50 text-orange-700",
   stone: "bg-stone-50 text-stone-600",
   rose: "bg-rose-50 text-rose-700",
-  violet: "bg-violet-50 text-violet-700",
+  pink: "bg-pink-50 text-pink-700",
   accent: "bg-pos-primary/10 text-pos-primary",
 };
 
@@ -75,7 +75,7 @@ const VALUE_TONES: Record<string, string> = {
   cash: "emerald",
   card: "indigo",
   transfer: "sky",
-  ussd: "violet",
+  ussd: "pink",
   mobile: "rose",
   cheque: "stone",
   percent: "emerald",

@@ -44,7 +44,7 @@ button {
 .nav-logo {
   width: 34px;
   height: 34px;
-  color: #6d4aff;
+  color: #ec4899;
   margin-bottom: 28px;
   flex-shrink: 0;
 }
@@ -74,12 +74,12 @@ button {
 }
 
 .nav-btn:hover {
-  color: #6d4aff;
+  color: #ec4899;
 }
 
 .nav-btn.active {
   background: transparent;
-  color: #6d4aff;
+  color: #ec4899;
 }
 
 .nav-power-ring {
@@ -269,7 +269,7 @@ button {
 
 .order-table {
   margin: 4px 0 12px;
-  color: #6d4aff;
+  color: #ec4899;
   font-size: 13px;
   font-weight: 600;
 }
@@ -312,8 +312,8 @@ button {
   width: 52px;
   height: 52px;
   border-radius: 50%;
-  background: #f4f0ff;
-  color: #6d4aff;
+  background: #fdf2f8;
+  color: #ec4899;
   display: grid;
   place-items: center;
   margin-bottom: 14px;
@@ -379,7 +379,7 @@ button {
 }
 
 .line-del:hover {
-  color: #6d4aff;
+  color: #ec4899;
 }
 
 .line-name {
@@ -416,7 +416,7 @@ button {
   height: 22px;
   border: 0;
   border-radius: 50%;
-  background: #6d4aff;
+  background: #ec4899;
   color: #fff;
   cursor: pointer;
   display: grid;
@@ -474,7 +474,7 @@ button {
   margin-top: 14px;
   border: 0;
   border-radius: 14px;
-  background: #6d4aff;
+  background: #ec4899;
   color: #fff;
   font-size: 15px;
   font-weight: 600;
@@ -506,8 +506,8 @@ button {
 }
 
 .header .nav-btn.filter-on {
-  background: #f4f0ff;
-  color: #6d4aff;
+  background: #fdf2f8;
+  color: #ec4899;
 }
 
 .filter-count {
@@ -518,7 +518,7 @@ button {
   height: 16px;
   padding: 0 4px;
   border-radius: 999px;
-  background: #6d4aff;
+  background: #ec4899;
   color: #fff;
   font-size: 10px;
   font-weight: 700;
@@ -583,7 +583,7 @@ button {
 .filter-text-btn {
   border: 0;
   background: transparent;
-  color: #6d4aff;
+  color: #ec4899;
   font: inherit;
   font-size: 13px;
   font-weight: 600;
@@ -606,8 +606,8 @@ button {
   border: 0;
   border-radius: 999px;
   padding: 7px 10px 7px 12px;
-  background: #f4f0ff;
-  color: #6d4aff;
+  background: #fdf2f8;
+  color: #ec4899;
   font: inherit;
   font-size: 12px;
   font-weight: 600;
@@ -655,7 +655,7 @@ button {
 }
 
 .search:focus-within {
-  border-color: #6d4aff;
+  border-color: #ec4899;
 }
 
 .search input {
@@ -685,7 +685,7 @@ button {
 
 .catalog-notice {
   margin: -4px 0 14px;
-  color: #6d4aff;
+  color: #ec4899;
   font-size: 13px;
   font-weight: 600;
 }
@@ -739,8 +739,8 @@ button {
   width: 64px;
   height: 64px;
   border-radius: 50%;
-  background: #f4f0ff;
-  color: #6d4aff;
+  background: #fdf2f8;
+  color: #ec4899;
   display: grid;
   place-items: center;
   margin-bottom: 18px;
@@ -767,7 +767,7 @@ button {
   border: 0;
   border-radius: 999px;
   padding: 12px 22px;
-  background: #6d4aff;
+  background: #ec4899;
   color: #fff;
   font: inherit;
   font-size: 14px;
@@ -827,7 +827,7 @@ button {
   aspect-ratio: 4 / 5;
   min-height: 260px;
   background: #ede9fe;
-  color: #7c3aed;
+  color: #db2777;
   font-size: 28px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -979,8 +979,8 @@ button {
 }
 
 .method-icon.card {
-  color: #6d4aff;
-  background: #f4f0ff;
+  color: #ec4899;
+  background: #fdf2f8;
 }
 
 .method-icon.split {
@@ -1445,7 +1445,7 @@ button {
 
 .line-price-edit:focus {
   outline: none;
-  border-bottom-color: #7c3aed;
+  border-bottom-color: #db2777;
 }
 
 .pay-account {
@@ -1857,7 +1857,7 @@ button {
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background: #6d4aff;
+  background: #ec4899;
   color: #fff;
   display: grid;
   place-items: center;
@@ -1906,7 +1906,7 @@ button {
 
 .login-card input:focus {
   outline: none;
-  border-color: #6d4aff;
+  border-color: #ec4899;
 }
 
 .till-code-input {
@@ -1938,7 +1938,7 @@ button {
 }
 
 .pin-dots span.on {
-  background: #6d4aff;
+  background: #ec4899;
 }
 
 .pin-error {
@@ -1978,8 +1978,8 @@ button {
 }
 
 .pin-slots span.on {
-  border-color: #6d4aff;
-  background: #f4f0ff;
+  border-color: #ec4899;
+  background: #fdf2f8;
 }
 
 .pin-modal .pin-pad {
@@ -2018,7 +2018,7 @@ button {
 }
 
 .pin-pad button.ok {
-  background: #6d4aff;
+  background: #ec4899;
   color: #fff;
 }
 
@@ -2050,15 +2050,15 @@ button {
   height: 56px;
   margin: 0 auto 12px;
   border-radius: 50%;
-  background: #f4f0ff;
-  color: #6d4aff;
+  background: #fdf2f8;
+  color: #ec4899;
   display: grid;
   place-items: center;
 }
 
 .shift-modal-kicker {
   margin: 0 0 14px;
-  color: #6d4aff;
+  color: #ec4899;
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -2158,7 +2158,7 @@ button {
 
 .loyalty-field input:focus {
   outline: none;
-  border-color: #6d4aff;
+  border-color: #ec4899;
 }
 
 .loyalty-modal .pin-error {
@@ -2386,7 +2386,7 @@ button {
 }
 
 .room-guest-input:focus {
-  border-color: #6d4aff;
+  border-color: #ec4899;
 }
 
 .ticket-board {

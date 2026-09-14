@@ -255,7 +255,7 @@ export function MarketingPanel({
   );
 }
 
-/** Home-style purple CTA band — shared across marketing pages. */
+/** Home-style pink CTA band — shared across marketing pages. */
 export function MarketingCtaBand({
   kicker = "Sales POS for retail and hospitality",
   title = "Ready to run the till without sharing a PC?",

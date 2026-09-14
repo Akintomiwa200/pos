@@ -100,7 +100,7 @@ const SETTINGS_DEFAULTS: HqOrgSettings = {
   sessionTimeoutMinutes: 0,
   uiTheme: "system",
   uiFont: "inter",
-  uiAccent: "violet",
+  uiAccent: "macaron",
   uiDensity: "comfortable",
   uiReduceMotion: false,
 };

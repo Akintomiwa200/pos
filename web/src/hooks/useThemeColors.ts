@@ -66,8 +66,8 @@ export function useThemeColors() {
   const [colors, setColors] = useState<ThemeColors>(() =>
     typeof window === "undefined"
       ? {
-          primary: "#6d4aff",
-          primarySoft: "#f4f0ff",
+          primary: "#ec4899",
+          primarySoft: "#fdf2f8",
           ink: "#1c1c1e",
           inkFaint: "#9ca3af",
           inkMuted: "#6b7280",
@@ -81,11 +81,11 @@ export function useThemeColors() {
           chartBarAccent: "#d8d8df",
           chartGrid: "#f0f0f3",
           chartLine: "#b8b8c2",
-          chartLineSoft: "#d4cce8",
+          chartLineSoft: "#fbcfe8",
           chartSlice2: "#c4c4cc",
           chartSlice3: "#dcdce2",
           chartSlice4: "#ececf0",
-          avatar: ["#64748b", "#475569", "#6d4aff", "#94a3b8", "#78716c"],
+          avatar: ["#64748b", "#475569", "#ec4899", "#94a3b8", "#78716c"],
         }
       : readThemeColors(),
   );

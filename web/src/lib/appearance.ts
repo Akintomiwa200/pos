@@ -10,7 +10,7 @@ export type UiFont =
   | "manrope"
   | "space-grotesk";
 export type UiAccent =
-  | "violet"
+  | "macaron"
   | "teal"
   | "blue"
   | "rose"
@@ -29,7 +29,7 @@ export type AppearancePrefs = {
 
 export const DEFAULT_APPEARANCE: AppearancePrefs = {
   font: "inter",
-  accent: "violet",
+  accent: "macaron",
   density: "comfortable",
   reduceMotion: false,
 };
@@ -66,7 +66,7 @@ export const FONT_OPTIONS: {
 ];
 
 export const ACCENT_OPTIONS: { id: UiAccent; label: string; color: string }[] = [
-  { id: "violet", label: "Violet", color: "#6d4aff" },
+  { id: "macaron", label: "Macaron", color: "#ec4899" },
   { id: "teal", label: "Teal", color: "#0f766e" },
   { id: "blue", label: "Blue", color: "#2563eb" },
   { id: "amber", label: "Amber", color: "#d97706" },
@@ -77,20 +77,20 @@ const ACCENT_VARS: Record<
   UiAccent,
   { light: Record<string, string>; dark: Record<string, string> }
 > = {
-  violet: {
+  macaron: {
     light: {
-      "--pos-primary": "#6d4aff",
-      "--pos-primary-soft": "#f4f0ff",
-      "--pos-primary-muted": "#ddd6fe",
-      "--pos-shadow-primary": "0 4px 14px rgb(109 74 255 / 0.24)",
-      "--pos-scrollbar-hover": "rgb(109 74 255 / 0.32)",
+      "--pos-primary": "#ec4899",
+      "--pos-primary-soft": "#fdf2f8",
+      "--pos-primary-muted": "#f9a8d4",
+      "--pos-shadow-primary": "0 4px 14px rgb(236 72 153 / 0.24)",
+      "--pos-scrollbar-hover": "rgb(236 72 153 / 0.32)",
     },
     dark: {
-      "--pos-primary": "#8b7cff",
-      "--pos-primary-soft": "#2a2540",
-      "--pos-primary-muted": "#3d3560",
-      "--pos-shadow-primary": "0 4px 14px rgb(139 124 255 / 0.22)",
-      "--pos-scrollbar-hover": "rgb(139 124 255 / 0.42)",
+      "--pos-primary": "#f472b6",
+      "--pos-primary-soft": "#3b0f24",
+      "--pos-primary-muted": "#9d174d",
+      "--pos-shadow-primary": "0 4px 14px rgb(244 114 182 / 0.22)",
+      "--pos-scrollbar-hover": "rgb(244 114 182 / 0.42)",
     },
   },
   teal: {

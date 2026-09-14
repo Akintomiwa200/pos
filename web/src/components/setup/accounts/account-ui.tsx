@@ -73,7 +73,7 @@ export function ProfileBanner({ children }: { children?: ReactNode }) {
       className="relative overflow-hidden"
       style={{
         background:
-          "linear-gradient(135deg, #7dd3fc 0%, #a5b4fc 42%, #c4b5fd 72%, #ddd6fe 100%)",
+          "linear-gradient(135deg, #fda4af 0%, #f9a8d4 42%, #f472b6 72%, #ec4899 100%)",
       }}
     >
       {children}

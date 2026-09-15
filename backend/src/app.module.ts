@@ -24,6 +24,12 @@ import { ChatModule } from './chat/chat.module';
 import { EmailModule } from './email/email.module';
 import { CrmModule } from './crm/crm.module';
 
+import { ProductionModule } from './production/production.module';
+
+import { LedgerModule } from './ledger/ledger.module';
+
+import { PoliciesModule } from './policies/policies.module';
+
 @Module({
   imports: [
     DbModule,
@@ -48,6 +54,9 @@ import { CrmModule } from './crm/crm.module';
     CustomersModule,
     ChatModule,
     CrmModule,
+    ProductionModule,
+    LedgerModule,
+    PoliciesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

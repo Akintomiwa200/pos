@@ -1,6 +1,7 @@
 import { DepartmentPage } from "@/components/DepartmentPage";
 import { BalanceSheetPage } from "@/components/reports/accounting/BalanceSheetPage";
 import { CashBookPage } from "@/components/reports/accounting/CashBookPage";
+import { CashflowStatementPage } from "@/components/reports/accounting/CashflowStatementPage";
 import { ChartOfAccountsPage } from "@/components/reports/accounting/ChartOfAccountsPage";
 import { JournalPage } from "@/components/reports/accounting/JournalPage";
 import { ProfitLossPage } from "@/components/reports/accounting/ProfitLossPage";
@@ -20,6 +21,7 @@ export default async function AccountingReportPage({
   if (key === "profit-loss") return <ProfitLossPage />;
   if (key === "balance-sheet") return <BalanceSheetPage />;
   if (key === "cash-book") return <CashBookPage />;
+  if (key === "cashflow") return <CashflowStatementPage />;
 
   return (
     <DepartmentPage

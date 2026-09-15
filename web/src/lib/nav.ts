@@ -12,12 +12,15 @@ import {
   FileSpreadsheet,
   FileText,
   Flag,
+  FlaskConical,
+  BarChart3,
   HelpCircle,
   History,
   IdCard,
   Landmark,
   LayoutDashboard,
   LifeBuoy,
+  MapPin,
   Megaphone,
   MessageSquare,
   MonitorSmartphone,
@@ -116,7 +119,13 @@ const PRODUCTS_NAV: NavNode[] = [
 const STOCK_REPORT_NAV: NavNode[] = [
   { id: "stock-balance", label: "Balance", href: "/reports/stock/balance" },
   { id: "stock-sheet", label: "Sheet", href: "/reports/stock/sheet" },
+  { id: "stock-on-hand", label: "On Hand", href: "/reports/stock/on-hand" },
+  { id: "stock-low", label: "Low Inventory", href: "/reports/stock/low" },
+  { id: "stock-replenishment", label: "Replenishment", href: "/reports/stock/replenishment" },
+  { id: "stock-performance", label: "Performance", href: "/reports/stock/performance" },
+  { id: "stock-analysis", label: "Analysis", href: "/reports/stock/analysis" },
   { id: "stock-movement", label: "Movement", href: "/reports/stock/movement" },
+  { id: "stock-awaiting-pickup", label: "Awaiting Pickup", href: "/reports/stock/awaiting-pickup" },
   { id: "stock-bin-card", label: "Bin Card", href: "/reports/stock/bin-card" },
   { id: "stock-expiry", label: "Expiry", href: "/reports/stock/expiry" },
   { id: "stock-count", label: "Count", href: "/reports/stock/count" },
@@ -218,6 +227,11 @@ const ACCOUNTING_STATEMENTS_NAV: NavNode[] = [
     label: "Balance Sheet",
     href: "/reports/accounting/balance-sheet",
   },
+  {
+    id: "accounting-cashflow",
+    label: "Cashflow Statement",
+    href: "/reports/accounting/cashflow",
+  },
 ];
 
 const ORDERS_NAV: NavNode[] = [
@@ -241,6 +255,123 @@ const ORDERS_NAV: NavNode[] = [
       { id: "purchase-order-received", label: "Received", href: "/orders/received" },
       { id: "purchase-order-cancelled", label: "Cancelled", href: "/orders/cancelled" },
     ],
+  },
+];
+
+/** Report pages wired into the report centre — POS, Money, Customers, Outlets, Production. */
+const REPORT_HUB_NAV: NavNode[] = [
+  { id: "reports-pos-reconciliation", label: "POS Reconciliation & Exceptions", href: "/reports/pos/reconciliation" },
+  { id: "reports-pos-promotions", label: "Promotions Performance & Cost", href: "/reports/pos/promotions" },
+  { id: "reports-pos-discount-cards", label: "Discount Card Cost", href: "/reports/pos/discount-cards" },
+  { id: "reports-pos-discount-exceptions", label: "Discount Exceptions", href: "/reports/pos/discount-exceptions" },
+  { id: "reports-pos-gift-cards", label: "Gift Cards", href: "/reports/pos/gift-cards" },
+  { id: "reports-pos-loyalty-accrued", label: "Loyalty Accrued", href: "/reports/pos/loyalty-accrued" },
+  { id: "reports-pos-loyalty-redeemed", label: "Loyalty Redeemed", href: "/reports/pos/loyalty-redeemed" },
+  { id: "reports-money-cash-forecast", label: "Cash Forecast", href: "/reports/money/cash-forecast" },
+  { id: "reports-money-receivables-aging", label: "Receivables Aging", href: "/reports/money/receivables-aging" },
+  { id: "reports-money-payables-aging", label: "Payables Aging", href: "/reports/money/payables-aging" },
+  { id: "reports-money-customer-advances", label: "Customer Advances", href: "/reports/money/customer-advances" },
+  { id: "reports-money-fixed-assets", label: "Fixed Asset Rollforward", href: "/reports/money/fixed-assets" },
+  { id: "reports-money-prepaid", label: "Prepaid Schedule", href: "/reports/money/prepaid" },
+  { id: "reports-customers-top", label: "Top Customers", href: "/reports/customers/top" },
+  { id: "reports-customers-dormant", label: "Dormant Customers", href: "/reports/customers/dormant" },
+  { id: "reports-customers-credit-control", label: "Credit Control", href: "/reports/customers/credit-control" },
+  { id: "reports-outlets-branches", label: "Branch Summary", href: "/reports/outlets/branches" },
+  { id: "reports-outlets-stores", label: "Store Performance", href: "/reports/outlets/stores" },
+  { id: "reports-outlets-sales", label: "Sales by Outlet", href: "/reports/outlets/sales" },
+  { id: "reports-outlets-trend", label: "Store Sales Trend", href: "/reports/outlets/trend" },
+  { id: "reports-outlets-staff", label: "Staff by Outlet", href: "/reports/outlets/staff" },
+  { id: "reports-outlets-targets", label: "Targets vs Actual", href: "/reports/outlets/targets" },
+  { id: "reports-outlets-comparison", label: "Outlet Comparison", href: "/reports/outlets/comparison" },
+  { id: "reports-outlets-returns", label: "Returns by Outlet", href: "/reports/outlets/returns" },
+  { id: "reports-outlets-payments", label: "Payments by Outlet", href: "/reports/outlets/payments" },
+  { id: "reports-outlets-stock", label: "Stock by Outlet", href: "/reports/outlets/stock" },
+  { id: "reports-outlets-transfers", label: "Store Transfers", href: "/reports/outlets/transfers" },
+  { id: "reports-outlets-storefronts", label: "Storefronts", href: "/reports/outlets/storefronts" },
+  { id: "reports-production-overview", label: "Production Overview", href: "/reports/production/overview" },
+  { id: "reports-production-orders", label: "Production Orders", href: "/reports/production/orders" },
+  { id: "reports-production-insights", label: "Production Insights", href: "/reports/production/insights" },
+  { id: "reports-production-analysis", label: "Production Analysis", href: "/reports/production/analysis" },
+  { id: "reports-production-cost-report", label: "Cost Report", href: "/reports/production/cost-report" },
+  { id: "reports-production-batch-costs", label: "Batch Costs", href: "/reports/production/batch-costs" },
+  { id: "reports-production-deviations", label: "Deviations", href: "/reports/production/deviations" },
+  { id: "reports-production-waste", label: "Waste", href: "/reports/production/waste" },
+  { id: "reports-production-efficiency", label: "Efficiency", href: "/reports/production/efficiency" },
+  { id: "reports-production-line-performance", label: "Line Performance", href: "/reports/production/line-performance" },
+  { id: "reports-production-recipes", label: "Recipes", href: "/reports/production/recipes" },
+  { id: "reports-production-quality", label: "Quality", href: "/reports/production/quality" },
+  { id: "reports-production-inventory-usage", label: "Inventory Usage", href: "/reports/production/inventory-usage" },
+  { id: "reports-production-schedule", label: "Schedule", href: "/reports/production/schedule" },
+  { id: "reports-production-downtime", label: "Downtime", href: "/reports/production/downtime" },
+  { id: "reports-production-staff", label: "Production Staff", href: "/reports/production/staff" },
+];
+
+/** Point of Sale reports — live under the Point of Sales nav group. */
+const POS_REPORTS_NAV: NavNode[] = REPORT_HUB_NAV.slice(0, 7);
+
+/** Money reports — live under the Account nav group. */
+const MONEY_REPORTS_NAV: NavNode[] = REPORT_HUB_NAV.slice(7, 13);
+
+/** Customer reports — live under the Customer nav group. */
+const CUSTOMER_REPORTS_NAV: NavNode[] = REPORT_HUB_NAV.slice(13, 16);
+
+/** Outlet reports — live under the Outlets & Locations nav group. */
+const OUTLET_REPORTS_NAV: NavNode[] = REPORT_HUB_NAV.slice(16, 28);
+
+/** Production reports — live under the Production nav group. */
+const PRODUCTION_REPORTS_NAV: NavNode[] = REPORT_HUB_NAV.slice(28);
+
+/** Additional sales reports from the former report centre — live under the Sales nav group. */
+const SALES_REPORTS_NAV: NavNode[] = [
+  { id: "sales-report-type", label: "By Type", href: "/reports/sales/type" },
+  { id: "sales-report-channel", label: "By Channel", href: "/reports/sales/channel" },
+  {
+    id: "sales-report-staff-performance",
+    label: "Staff Performance",
+    href: "/reports/sales/staff-performance",
+  },
+  { id: "sales-report-staff-targets", label: "Staff Targets", href: "/reports/sales/staff-targets" },
+  { id: "sales-report-customer", label: "By Customer", href: "/reports/sales/customer" },
+  {
+    id: "sales-report-customer-group",
+    label: "By Customer Group",
+    href: "/reports/sales/customer-group",
+  },
+  { id: "sales-report-other-income", label: "Other Income", href: "/reports/sales/other-income" },
+  { id: "sales-report-inventory", label: "Sales Inventory", href: "/reports/sales/inventory" },
+];
+
+/** Expense reports from the former report centre — live under the Account nav group. */
+const EXPENSE_REPORTS_NAV: NavNode[] = [
+  { id: "expense-report-overview", label: "Expense Overview", href: "/reports/expenses/overview" },
+  {
+    id: "expense-report-matrix",
+    label: "Expense Performance Overview",
+    href: "/reports/expenses/matrix",
+  },
+  {
+    id: "expense-report-requests",
+    label: "Requests & Advances",
+    href: "/reports/expenses/requests",
+  },
+];
+
+/** Purchase reports from the former report centre — live under the Purchase nav group. */
+const PURCHASE_REPORTS_NAV: NavNode[] = [
+  {
+    id: "purchase-report-inventory",
+    label: "Purchase Inventory",
+    href: "/reports/purchases/inventory",
+  },
+  {
+    id: "purchase-report-breakdown",
+    label: "Purchase Breakdown",
+    href: "/reports/purchases/breakdown",
+  },
+  {
+    id: "purchase-report-suppliers",
+    label: "Supplier Performance",
+    href: "/reports/purchases/suppliers",
   },
 ];
 
@@ -275,6 +406,13 @@ const CUSTOMER_NAV: NavNode[] = [
       { id: "customer-report-balance", label: "Balance", href: "/reports/balance/customer" },
       { id: "customer-report-ledger", label: "Ledger", href: "/reports/ledger/customer" },
       { id: "customer-report-trail", label: "Trail", href: "/reports/trail/customer" },
+      { id: "customer-report-top", label: "Top Customers", href: "/reports/customers/top" },
+      { id: "customer-report-dormant", label: "Dormant Customers", href: "/reports/customers/dormant" },
+      {
+        id: "customer-report-credit-control",
+        label: "Credit Control",
+        href: "/reports/customers/credit-control",
+      },
     ],
   },
 ];
@@ -390,6 +528,11 @@ export const ACCESS_NAV: NavSection[] = [
               },
             ],
           },
+          {
+            id: "sales-reports",
+            label: "More Reports",
+            children: SALES_REPORTS_NAV,
+          },
         ],
       },
       {
@@ -399,6 +542,11 @@ export const ACCESS_NAV: NavSection[] = [
         children: [
           { id: "others-till", label: "Till", href: "/setup/others/till" },
           { id: "others-store", label: "Store", href: "/setup/others/store" },
+          {
+            id: "reports-pos",
+            label: "Point of Sale Reports",
+            children: POS_REPORTS_NAV,
+          },
         ],
       },
       {
@@ -449,13 +597,43 @@ export const ACCESS_NAV: NavSection[] = [
         id: "expense-account",
         label: "Expense Account",
         icon: Calculator,
-        href: "/setup/expense-account",
+        children: [
+          { id: "expense-account-link", label: "Expense Accounts", href: "/setup/expense-account" },
+          ...EXPENSE_REPORTS_NAV,
+        ],
       },
       {
         id: "billing",
         label: "Billing",
         icon: FileText,
         children: BILLING_NAV,
+      },
+      {
+        id: "production",
+        label: "Production",
+        icon: FlaskConical,
+        children: [
+          { id: "production-desk", label: "Production Desk", href: "/production" },
+          ...PRODUCTION_REPORTS_NAV,
+        ],
+      },
+      {
+        id: "money-desk",
+        label: "Money",
+        icon: Calculator,
+        children: [
+          { id: "money-desk-link", label: "Accounting Desk", href: "/money" },
+          ...MONEY_REPORTS_NAV,
+        ],
+      },
+      {
+        id: "outlets-desk",
+        label: "Outlets & Locations",
+        icon: Store,
+        children: [
+          { id: "outlets-desk-link", label: "Outlets Desk", href: "/outlets" },
+          ...OUTLET_REPORTS_NAV,
+        ],
       },
     ],
   },
@@ -514,6 +692,11 @@ export const ACCESS_NAV: NavSection[] = [
                 href: "/transactions/purchase/return/summary",
               },
             ],
+          },
+          {
+            id: "purchase-reports",
+            label: "Purchase Reports",
+            children: PURCHASE_REPORTS_NAV,
           },
         ],
       },
@@ -647,6 +830,12 @@ export const NAV: NavSection[] = [
     items: [
       { id: "others-till", label: "Till", icon: MonitorSmartphone, href: "/setup/others/till" },
       { id: "others-store", label: "Store", icon: Store, href: "/setup/others/store" },
+      {
+        id: "reports-pos",
+        label: "Point of Sale Reports",
+        icon: BarChart3,
+        children: POS_REPORTS_NAV,
+      },
     ],
   },
   {
@@ -673,6 +862,11 @@ export const NAV: NavSection[] = [
             id: "sales-gp-group",
             label: "Employee Sales",
             href: "/reports/sales/gross-profit/by-group",
+          },
+          {
+            id: "sales-reports",
+            label: "More Sales Reports",
+            children: SALES_REPORTS_NAV,
           },
         ],
       },
@@ -752,16 +946,58 @@ export const NAV: NavSection[] = [
         children: TAX_REPORT_NAV,
       },
       {
+        id: "money-desk",
+        label: "Money",
+        icon: Landmark,
+        children: [
+          { id: "money-desk-link", label: "Accounting Desk", href: "/money" },
+          ...MONEY_REPORTS_NAV,
+        ],
+      },
+      {
         id: "expense-account",
-        label: "Expense Accounts",
+        label: "Expenses",
         icon: Calculator,
-        href: "/setup/expense-account",
+        children: [
+          { id: "expense-account-link", label: "Expense Accounts", href: "/setup/expense-account" },
+          ...EXPENSE_REPORTS_NAV,
+        ],
       },
       {
         id: "billing",
         label: "Billing",
         icon: Wallet,
         children: BILLING_NAV,
+      },
+    ],
+  },
+  {
+    heading: "Production",
+    department: "Report",
+    items: [
+      {
+        id: "production",
+        label: "Production",
+        icon: FlaskConical,
+        children: [
+          { id: "production-desk", label: "Production Desk", href: "/production" },
+          ...PRODUCTION_REPORTS_NAV,
+        ],
+      },
+    ],
+  },
+  {
+    heading: "Outlets & Locations",
+    department: "Report",
+    items: [
+      {
+        id: "outlets-desk",
+        label: "Outlets & Locations",
+        icon: MapPin,
+        children: [
+          { id: "outlets-desk-link", label: "Outlets Desk", href: "/outlets" },
+          ...OUTLET_REPORTS_NAV,
+        ],
       },
     ],
   },

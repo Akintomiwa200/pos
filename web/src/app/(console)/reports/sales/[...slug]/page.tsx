@@ -7,7 +7,15 @@ import { InvoiceHistoryPage } from "@/components/reports/sales/InvoiceHistoryPag
 import { InvoiceListPage } from "@/components/reports/sales/InvoiceListPage";
 import { InvoiceSummaryPage } from "@/components/reports/sales/InvoiceSummaryPage";
 import { SalesAnalyticsPage } from "@/components/reports/sales/SalesAnalyticsPage";
+import { SalesByChannelPage } from "@/components/reports/sales/SalesByChannelPage";
+import { SalesByCustomerGroupPage } from "@/components/reports/sales/SalesByCustomerGroupPage";
+import { SalesByCustomerPage } from "@/components/reports/sales/SalesByCustomerPage";
+import { SalesByTypePage } from "@/components/reports/sales/SalesByTypePage";
+import { SalesInventoryPage } from "@/components/reports/sales/SalesInventoryPage";
 import { ShiftReportPage } from "@/components/reports/sales/ShiftReportPage";
+import { StaffPerformancePage } from "@/components/reports/sales/StaffPerformancePage";
+import { StaffTargetsPage } from "@/components/reports/sales/StaffTargetsPage";
+import { OtherIncomePage } from "@/components/reports/sales/OtherIncomePage";
 import {
   DocManager,
   SALES_QUOTE_CONFIG,
@@ -34,6 +42,14 @@ export default async function SalesReportPage({
   if (key === "invoice/balance") return <InvoiceBalancePage />;
   if (key === "invoice/history") return <InvoiceHistoryPage />;
   if (key === "invoice/shift") return <ShiftReportPage />;
+  if (key === "type") return <SalesByTypePage />;
+  if (key === "channel") return <SalesByChannelPage />;
+  if (key === "customer") return <SalesByCustomerPage />;
+  if (key === "customer-group") return <SalesByCustomerGroupPage />;
+  if (key === "staff-performance") return <StaffPerformancePage />;
+  if (key === "staff-targets") return <StaffTargetsPage />;
+  if (key === "other-income") return <OtherIncomePage />;
+  if (key === "inventory") return <SalesInventoryPage />;
 
   const gp = GP_VARIANTS[key];
   if (gp === "by-item") return <ItemSalesPage />;

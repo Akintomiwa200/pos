@@ -36,7 +36,7 @@ export type JournalEntry = {
   at: string;
   ref: string;
   memo: string;
-  source: "sale" | "purchase" | "expense" | "opening";
+  source: "sale" | "purchase" | "expense" | "opening" | "manual";
   lines: JournalLine[];
 };
 

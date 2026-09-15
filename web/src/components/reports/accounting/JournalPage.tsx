@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { BookOpen, FileSpreadsheet, Receipt, ShoppingCart } from "lucide-react";
+import { BookOpen, FileSpreadsheet, PencilLine, Receipt, ShoppingCart } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { loadAccountingBooks, type AccountingBooks, type JournalEntry } from "@/lib/hq-accounting";
 import { naira, prettyDay } from "@/lib/hq-ops";
+import { listJournalEntries, type LedgerJournalEntry } from "@/lib/hq-ledger";
 import { ManagerSkeleton } from "../../Skeleton";
 
 const SOURCE_STYLE: Record<JournalEntry["source"], { label: string; icon: typeof Receipt; class: string }> = {
@@ -27,6 +28,11 @@ const SOURCE_STYLE: Record<JournalEntry["source"], { label: string; icon: typeof
     label: "Opening",
     icon: BookOpen,
     class: "bg-pos-primary-soft text-pos-primary",
+  },
+  manual: {
+    label: "Manual",
+    icon: PencilLine,
+    class: "bg-violet-50 text-violet-600 dark:bg-violet-950/40 dark:text-violet-300",
   },
 };
 
@@ -98,32 +104,55 @@ function EntryCard({ entry }: { entry: JournalEntry }) {
   );
 }
 
+function toJournalEntry(row: LedgerJournalEntry): JournalEntry {
+  const lines = row.lines.map((line) => ({
+    accountCode: line.accountName,
+    accountName: line.accountName,
+    debitMinor: line.debitMinor,
+    creditMinor: line.creditMinor,
+  }));
+  return {
+    id: row.id,
+    at: row.date,
+    ref: row.number,
+    memo: row.memo,
+    source: "manual" as const,
+    lines,
+  };
+}
+
 export function JournalPage() {
   const [books, setBooks] = useState<AccountingBooks | null>(null);
+  const [manual, setManual] = useState<JournalEntry[] | null>(null);
   const [source, setSource] = useState<"all" | JournalEntry["source"]>("all");
 
   useEffect(() => {
-    loadAccountingBooks()
-      .then(setBooks)
-      .catch((err) => {
-        toast.error(err, "Could not load accounting books");
+    Promise.all([loadAccountingBooks().catch(() => null), listJournalEntries().catch(() => [])])
+      .then(([b, m]) => {
+        setBooks(b);
+        setManual(m.map(toJournalEntry));
+      })
+      .catch(() => {
         setBooks(null);
+        setManual([]);
       });
   }, []);
 
   const entries = useMemo(() => {
-    if (!books) return [];
-    return source === "all" ? books.journals : books.journals.filter((entry) => entry.source === source);
-  }, [books, source]);
+    if (!books || !manual) return [];
+    const all = [...books.journals, ...manual].sort((a, b) => b.at.localeCompare(a.at));
+    return source === "all" ? all : all.filter((entry) => entry.source === source);
+  }, [books, manual, source]);
 
-  if (!books) return <ManagerSkeleton variant="list" />;
+  if (!books || !manual) return <ManagerSkeleton variant="list" />;
 
   const counts = {
-    all: books.journals.length,
+    all: books.journals.length + manual.length,
     sale: books.journals.filter((entry) => entry.source === "sale").length,
     purchase: books.journals.filter((entry) => entry.source === "purchase").length,
     expense: books.journals.filter((entry) => entry.source === "expense").length,
     opening: books.journals.filter((entry) => entry.source === "opening").length,
+    manual: manual.length,
   };
 
   return (
@@ -134,12 +163,13 @@ export function JournalPage() {
         </p>
         <h1 className="mt-1 text-2xl font-semibold tracking-tight text-pos-ink">Journal</h1>
         <p className="mt-1.5 text-sm text-pos-ink-muted">
-          Auto-posted entries from POS sales, purchase invoices, and expenses.
+          Auto-posted entries from POS sales, purchase invoices, and expenses, plus manual entries from the Accounting
+          desk.
         </p>
       </header>
 
       <div className="mb-5 flex flex-wrap items-center gap-2">
-        {(["all", "sale", "purchase", "expense", "opening"] as const).map((key) => {
+        {(["all", "sale", "purchase", "expense", "opening", "manual"] as const).map((key) => {
           const active = source === key;
           const meta = key === "all" ? null : SOURCE_STYLE[key];
           return (
@@ -175,7 +205,7 @@ export function JournalPage() {
       )}
 
       <p className="mt-4 text-xs text-pos-ink-faint">
-        The journal derives from live sales, purchases, and expenses — every entry is a real transaction.
+        The journal derives from live sales, purchases, and expenses plus manual entries posted on the Accounting desk.
       </p>
     </div>
   );

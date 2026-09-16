@@ -1,30 +1,26 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { PackageCheck, Truck } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { naira, prettyDay } from "@/lib/hq-ops";
-import { listPurchaseOrders, receiveOrder, type TradeDoc } from "@/lib/hq-orders";
+import { useLiveOrders } from "@/lib/live-orders";
+import { receiveOrder } from "@/lib/hq-orders";
 import { ManagerSkeleton } from "../Skeleton";
+import { LiveBadge } from "../LiveBadge";
 
 export function OrderReceivingPage() {
-  const [orders, setOrders] = useState<TradeDoc[]>([]);
-  const [ready, setReady] = useState(false);
+  const { docs, live, ready, setDocs } = useLiveOrders("purchase-order");
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  useEffect(() => {
-    listPurchaseOrders()
-      .then((rows) => {
-        setOrders(
-          rows
-            .filter((r) => ["approved", "open", "partial"].includes(r.status))
-            .sort((a, b) => b.expectedAt?.localeCompare(a.expectedAt ?? "") ?? 0),
-        );
-        setReady(true);
-      })
-      .catch(() => setReady(true));
-  }, []);
+  const orders = useMemo(
+    () =>
+      docs
+        .filter((r) => ["approved", "open", "partial"].includes(r.status))
+        .sort((a, b) => b.expectedAt?.localeCompare(a.expectedAt ?? "") ?? 0),
+    [docs],
+  );
 
   const fullyExpected = useMemo(() => orders.filter((r) => r.status !== "partial").length, [orders]);
   const partial = useMemo(() => orders.filter((r) => r.status === "partial").length, [orders]);
@@ -34,8 +30,11 @@ export function OrderReceivingPage() {
   return (
     <div className="pb-8">
       <header className="mb-6">
-        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-pos-primary">Analytics · Orders</p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-pos-ink">Receiving</h1>
+        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-pos-primary">Purchases · Orders</p>
+        <h1 className="mt-1 flex items-center gap-3 text-2xl font-semibold tracking-tight text-pos-ink">
+          Receiving
+          <LiveBadge live={live} />
+        </h1>
         <p className="mt-1.5 text-sm text-pos-ink-muted">
           Purchase orders awaiting delivery — expect a shipment, mark all lines in, or record partial receiving.
         </p>
@@ -123,7 +122,7 @@ export function OrderReceivingPage() {
                       try {
                         await receiveOrder(row.id, { full: true });
                         toast.success(`${row.number} fully received.`);
-                        setOrders((prev) => prev.filter((r) => r.id !== row.id));
+                        setDocs((prev) => prev.filter((r) => r.id !== row.id));
                       } catch (err) {
                         toast.error(err, "Could not receive.");
                       } finally {

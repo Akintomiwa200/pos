@@ -91,6 +91,7 @@ export type MovementInput = {
   quantity?: number;
   from?: string;
   to?: string;
+  at?: string;
   countedOnHand?: number;
   reason?: string;
   staff?: string;
@@ -98,6 +99,29 @@ export type MovementInput = {
 
 export function recordMovement(input: MovementInput): Promise<StockMovement> {
   return api<StockMovement>("/api/inventory/movements", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export type MovementBatchInput = {
+  type: "transfer" | "adjustment" | "count";
+  from?: string;
+  to?: string;
+  reason?: string;
+  staff?: string;
+  at?: string;
+  lines: Array<{
+    itemId: string;
+    quantity: number;
+    countedOnHand?: number;
+    reason?: string;
+    at?: string;
+  }>;
+};
+
+export function recordMovements(input: MovementBatchInput): Promise<StockMovement[]> {
+  return api<StockMovement[]>("/api/inventory/movements/batch", {
     method: "POST",
     body: JSON.stringify(input),
   });

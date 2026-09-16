@@ -1,37 +1,35 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
 import { CircleOff, RotateCcw } from "lucide-react";
 import { naira, prettyDay } from "@/lib/hq-ops";
-import { listPurchaseOrders, type TradeDoc } from "@/lib/hq-orders";
+import { useLiveOrders } from "@/lib/live-orders";
 import { ManagerSkeleton } from "../Skeleton";
+import { LiveBadge } from "../LiveBadge";
 
 export function OrderCancelledPage() {
-  const [orders, setOrders] = useState<TradeDoc[]>([]);
-  const [ready, setReady] = useState(false);
+  const { docs, live, ready } = useLiveOrders("purchase-order");
 
-  useEffect(() => {
-    listPurchaseOrders()
-      .then((rows) => {
-        setOrders(rows.filter((r) => ["cancelled", "rejected"].includes(r.status)));
-        setReady(true);
-      })
-      .catch(() => setReady(true));
-  }, []);
+  const cancelled = useMemo(
+    () => docs.filter((r) => r.status === "cancelled").sort((a, b) => b.at.localeCompare(a.at)),
+    [docs],
+  );
+  const rejected = useMemo(
+    () => docs.filter((r) => r.status === "rejected").sort((a, b) => b.at.localeCompare(a.at)),
+    [docs],
+  );
 
   if (!ready) return <ManagerSkeleton variant="table" />;
-
-  const cancelled = orders
-    .filter((r) => r.status === "cancelled")
-    .sort((a, b) => b.at.localeCompare(a.at));
-  const rejected = orders.filter((r) => r.status === "rejected").sort((a, b) => b.at.localeCompare(a.at));
 
   return (
     <div className="pb-8">
       <header className="mb-6">
-        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-pos-primary">Analytics · Orders</p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-pos-ink">Cancelled & rejected</h1>
+        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-pos-primary">Purchases · Orders</p>
+        <h1 className="mt-1 flex items-center gap-3 text-2xl font-semibold tracking-tight text-pos-ink">
+          Cancelled & rejected
+          <LiveBadge live={live} />
+        </h1>
         <p className="mt-1.5 text-sm text-pos-ink-muted">
           Orders that never reached the vendor — withdrawn by the creator or returned by the approver for revision.
         </p>

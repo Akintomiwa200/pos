@@ -1,5 +1,6 @@
-import { Body, Controller, Get, Post, Query } from "@nestjs/common";
-import { InventoryService } from "./inventory.service";
+import { Body, Controller, Get, Post, Query, Sse } from "@nestjs/common";
+import { Observable, map } from "rxjs";
+import { InventoryService, type InventoryEvent } from "./inventory.service";
 import type { StockMovement } from "./inventory.store";
 
 @Controller("inventory")
@@ -13,6 +14,11 @@ export class InventoryController {
       return rows.filter((row) => row.onHand <= row.reorderPoint);
     }
     return rows;
+  }
+
+  @Sse("stream")
+  stream(): Observable<{ data: InventoryEvent }> {
+    return this.inventory.stream().pipe(map((data) => ({ data })));
   }
 
   @Get("movements")
@@ -39,5 +45,27 @@ export class InventoryController {
     },
   ) {
     return this.inventory.record(body ?? {});
+  }
+
+  @Post("movements/batch")
+  recordBatch(
+    @Body()
+    body: {
+      type?: string;
+      from?: string;
+      to?: string;
+      reason?: string;
+      staff?: string;
+      at?: string;
+      lines?: Array<{
+        itemId?: string;
+        quantity?: number;
+        countedOnHand?: number;
+        reason?: string;
+        at?: string;
+      }>;
+    },
+  ) {
+    return this.inventory.recordBatch(body ?? {});
   }
 }

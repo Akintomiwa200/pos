@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
 import { ArrowLeft, CheckCircle2, Edit3, Eye, PackageCheck, Send, XCircle } from "lucide-react";
-import { toast } from "@/lib/toast";
 import { naira, prettyDay } from "@/lib/hq-ops";
-import { ORDER_STATUS_LABEL, getOrder, type DocStatus, type TradeDoc } from "@/lib/hq-orders";
+import { useLiveOrder } from "@/lib/live-orders";
+import { ORDER_STATUS_LABEL, type DocStatus } from "@/lib/hq-orders";
 import { ManagerSkeleton } from "../Skeleton";
+import { LiveBadge } from "../LiveBadge";
 
 const STATUS_TINT: Record<string, string> = {
   draft: "bg-pos-surface-muted text-pos-ink-muted",
@@ -42,20 +42,7 @@ type TimelineEvent = {
 };
 
 export function OrderDetailPage({ orderId }: { orderId: string }) {
-  const [doc, setDoc] = useState<TradeDoc | null>(null);
-
-  useEffect(() => {
-    let mounted = true;
-    getOrder(orderId)
-      .then((row) => mounted && setDoc(row))
-      .catch((err) => {
-        if (!mounted) return;
-        toast.error(err, "Could not load order.");
-      });
-    return () => {
-      mounted = false;
-    };
-  }, [orderId]);
+  const { doc, live } = useLiveOrder(orderId, "purchase-order");
 
   if (!doc) return <ManagerSkeleton variant="table" />;
 
@@ -86,7 +73,10 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-pos-primary">Order detail</p>
-            <h1 className="mt-1 text-2xl font-semibold tracking-tight text-pos-ink">{doc.number}</h1>
+            <h1 className="mt-1 flex items-center gap-3 text-2xl font-semibold tracking-tight text-pos-ink">
+              {doc.number}
+              <LiveBadge live={live} />
+            </h1>
             <p className={`mt-1.5 text-sm font-medium ${STATUS_TINT[doc.status]?.split(" ")[1] ?? ""}`}>
               {STATUS_ICON[doc.status]} {ORDER_STATUS_LABEL[doc.status]}
             </p>

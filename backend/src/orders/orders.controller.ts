@@ -1,5 +1,6 @@
-import { Body, Controller, Delete, Get, Param, Post, Query } from "@nestjs/common";
-import { OrdersService } from "./orders.service";
+import { Body, Controller, Delete, Get, Param, Post, Query, Sse } from "@nestjs/common";
+import { Observable, map } from "rxjs";
+import { OrdersService, type OrdersEvent } from "./orders.service";
 import type { TradeDoc } from "./orders.types";
 
 @Controller("orders")
@@ -14,6 +15,11 @@ export class OrdersController {
   @Get()
   list(@Query("kind") kind?: string) {
     return this.orders.list(kind);
+  }
+
+  @Sse("stream")
+  stream(): Observable<{ data: OrdersEvent }> {
+    return this.orders.stream().pipe(map((data) => ({ data })));
   }
 
   @Get(":id")

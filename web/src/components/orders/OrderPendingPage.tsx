@@ -5,32 +5,24 @@ import { useEffect, useMemo, useState } from "react";
 import { Check, Eye, X } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { naira, prettyDay } from "@/lib/hq-ops";
-import { approveOrder, listPurchaseOrders, rejectOrder, type TradeDoc } from "@/lib/hq-orders";
+import { useLiveOrders } from "@/lib/live-orders";
+import { approveOrder, rejectOrder } from "@/lib/hq-orders";
 import { ManagerSkeleton } from "../Skeleton";
+import { LiveBadge } from "../LiveBadge";
 
 export function OrderPendingPage() {
-  const [orders, setOrders] = useState<TradeDoc[]>([]);
-  const [ready, setReady] = useState(false);
+  const { docs, live, ready, setDocs } = useLiveOrders("purchase-order");
   const [selected, setSelected] = useState("");
   const [reason, setReason] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const pending = useMemo(
     () =>
-      orders
+      docs
         .filter((row) => row.status === "pending_approval")
         .sort((a, b) => b.at.localeCompare(a.at)),
-    [orders],
+    [docs],
   );
-
-  useEffect(() => {
-    listPurchaseOrders()
-      .then((rows) => {
-        setOrders(rows);
-        setReady(true);
-      })
-      .catch(() => setReady(true));
-  }, []);
 
   const activeOrder = useMemo(() => pending.find((row) => row.id === selected) ?? null, [pending, selected]);
 
@@ -43,8 +35,11 @@ export function OrderPendingPage() {
   return (
     <div className="pb-8">
       <header className="mb-6">
-        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-pos-primary">Analytics · Orders</p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-pos-ink">Pending approval</h1>
+        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-pos-primary">Purchases · Orders</p>
+        <h1 className="mt-1 flex items-center gap-3 text-2xl font-semibold tracking-tight text-pos-ink">
+          Pending approval
+          <LiveBadge live={live} />
+        </h1>
         <p className="mt-1.5 text-sm text-pos-ink-muted">
           Orders submitted by staff, awaiting your approval or rejection. Pick one on the left to review.
         </p>
@@ -177,7 +172,7 @@ export function OrderPendingPage() {
                       try {
                         await approveOrder(activeOrder.id, "Approver");
                         toast.success("Order approved.");
-                        setOrders((prev) => prev.filter((r) => r.id !== activeOrder.id));
+                        setDocs((prev) => prev.filter((r) => r.id !== activeOrder.id));
                         setSelected("");
                       } catch (err) {
                         toast.error(err, "Could not approve.");
@@ -199,7 +194,7 @@ export function OrderPendingPage() {
                         await rejectOrder(activeOrder.id, reason || "Needs revision", "Approver");
                         toast.success("Order rejected.");
                         setReason("");
-                        setOrders((prev) => prev.filter((r) => r.id !== activeOrder.id));
+                        setDocs((prev) => prev.filter((r) => r.id !== activeOrder.id));
                         setSelected("");
                       } catch (err) {
                         toast.error(err, "Could not reject.");

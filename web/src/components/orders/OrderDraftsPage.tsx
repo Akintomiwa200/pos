@@ -1,34 +1,30 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { FilePlus, Send } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { naira, prettyDay } from "@/lib/hq-ops";
-import { listPurchaseOrders, submitOrder, type TradeDoc } from "@/lib/hq-orders";
+import { useLiveOrders } from "@/lib/live-orders";
+import { submitOrder } from "@/lib/hq-orders";
 import { ManagerSkeleton } from "../Skeleton";
+import { LiveBadge } from "../LiveBadge";
 
 export function OrderDraftsPage() {
-  const [orders, setOrders] = useState<TradeDoc[]>([]);
-  const [ready, setReady] = useState(false);
+  const { docs, live, ready, setDocs } = useLiveOrders("purchase-order");
+  const orders = useMemo(() => docs.filter((r) => r.status === "draft"), [docs]);
   const [busyId, setBusyId] = useState<string | null>(null);
-
-  useEffect(() => {
-    listPurchaseOrders()
-      .then((rows) => {
-        setOrders(rows.filter((r) => r.status === "draft"));
-        setReady(true);
-      })
-      .catch(() => setReady(true));
-  }, []);
 
   if (!ready) return <ManagerSkeleton variant="table" />;
 
   return (
     <div className="pb-8">
       <header className="mb-6">
-        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-pos-primary">Analytics · Orders</p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-pos-ink">Draft orders</h1>
+        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-pos-primary">Purchases · Orders</p>
+        <h1 className="mt-1 flex items-center gap-3 text-2xl font-semibold tracking-tight text-pos-ink">
+          Draft orders
+          <LiveBadge live={live} />
+        </h1>
         <p className="mt-1.5 text-sm text-pos-ink-muted">
           Orders still being prepared. Review the lines, then submit for manager approval.
         </p>
@@ -94,7 +90,7 @@ export function OrderDraftsPage() {
                         try {
                           await submitOrder(row.id);
                           toast.success("Submitted for approval.");
-                          setOrders((prev) => prev.filter((r) => r.id !== row.id));
+                          setDocs((prev) => prev.filter((r) => r.id !== row.id));
                         } catch (err) {
                           toast.error(err, "Could not submit.");
                         } finally {

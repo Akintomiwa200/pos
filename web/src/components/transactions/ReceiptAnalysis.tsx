@@ -15,11 +15,20 @@ import {
 export function ReceiptAnalysis() {
   const [sales, setSales] = useState<HqSale[] | null>(null);
 
-  useEffect(() => {
-    Promise.all([listSales(), listCatalog()])
-      .then(([rows]) => setSales(rows))
-      .catch(() => setSales([]));
+  const reload = useMemo(() => async () => {
+    try {
+      const [rows] = await Promise.all([listSales(), listCatalog()]);
+      setSales(rows);
+    } catch {
+      setSales([]);
+    }
   }, []);
+
+  useEffect(() => {
+    reload();
+    const timer = window.setInterval(reload, 15_000);
+    return () => window.clearInterval(timer);
+  }, [reload]);
 
   const aggregate = useMemo(() => (sales ? aggregateSales(sales) : null), [sales]);
 
@@ -29,7 +38,18 @@ export function ReceiptAnalysis() {
     <div>
       <PageHeader
         kicker="Transaction · Receipt"
-        title="Analysis"
+        title={
+          <span className="flex items-center gap-3">
+            Analysis
+            <span className="flex items-center gap-1.5 rounded-full bg-pos-success-soft px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-pos-success">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-pos-success opacity-75"></span>
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-pos-success"></span>
+              </span>
+              Live
+            </span>
+          </span>
+        }
         copy="When people pay and who rings the sales — the shape of a trading day."
       />
       <div className="mb-4 grid gap-3 sm:grid-cols-3">

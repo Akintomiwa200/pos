@@ -2,39 +2,31 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, CheckCircle2, PackageCheck } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { naira, prettyDay } from "@/lib/hq-ops";
-import { getOrder, ORDER_STATUS_LABEL, receiveOrder, type TradeDoc } from "@/lib/hq-orders";
+import { useLiveOrder } from "@/lib/live-orders";
+import { ORDER_STATUS_LABEL, receiveOrder } from "@/lib/hq-orders";
 import { ManagerSkeleton } from "../Skeleton";
+import { LiveBadge } from "../LiveBadge";
 
 export function OrderReceivePage({ orderId }: { orderId: string }) {
   const router = useRouter();
-  const [doc, setDoc] = useState<TradeDoc | null>(null);
+  const { doc, live } = useLiveOrder(orderId, "purchase-order");
   const [edits, setEdits] = useState<Record<number, number>>({});
   const [busy, setBusy] = useState(false);
+  const initialized = useRef(false);
 
   useEffect(() => {
-    let mounted = true;
-    getOrder(orderId)
-      .then((row) => {
-        if (!mounted) return;
-        setDoc(row);
-        const initial: Record<number, number> = {};
-        row.lines.forEach((line, i) => {
-          initial[i] = line.receivedQty ?? 0;
-        });
-        setEdits(initial);
-      })
-      .catch((err) => {
-        if (!mounted) return;
-        toast.error(err, "Could not load order.");
-      });
-    return () => {
-      mounted = false;
-    };
-  }, [orderId]);
+    if (!doc || initialized.current) return;
+    initialized.current = true;
+    const initial: Record<number, number> = {};
+    doc.lines.forEach((line, i) => {
+      initial[i] = line.receivedQty ?? 0;
+    });
+    setEdits(initial);
+  }, [doc]);
 
   if (!doc) return <ManagerSkeleton variant="table" />;
 
@@ -45,7 +37,7 @@ export function OrderReceivePage({ orderId }: { orderId: string }) {
   async function save(partial: boolean) {
     const lines = doc!.lines.map((line, index) => ({
       index,
-      receivedQty: Math.min(line.quantity, Math.max(0, Math.round(edits[index] ?? 0))),
+      receivedQty: Math.min(line.quantity, Math.max(0, Math.round(edits[index] ?? line.receivedQty ?? 0))),
     }));
     setBusy(true);
     try {
@@ -59,7 +51,7 @@ export function OrderReceivePage({ orderId }: { orderId: string }) {
     }
   }
 
-  const allDone = doc.lines.every((line, i) => (edits[i] ?? 0) >= line.quantity);
+  const allDone = doc.lines.every((line, i) => (edits[i] ?? line.receivedQty ?? 0) >= line.quantity);
 
   return (
     <div className="pb-8">
@@ -71,8 +63,11 @@ export function OrderReceivePage({ orderId }: { orderId: string }) {
           <ArrowLeft size={15} />
           Back to order
         </Link>
-        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-pos-primary">Order receiving</p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-pos-ink">{doc.number}</h1>
+        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-pos-primary">Purchases · Orders</p>
+        <h1 className="mt-1 flex items-center gap-3 text-2xl font-semibold tracking-tight text-pos-ink">
+          {doc.number}
+          <LiveBadge live={live} />
+        </h1>
         <p className="mt-1.5 text-sm text-pos-ink-muted">
           Record goods received per line — enter the total units received so far for each item.
         </p>

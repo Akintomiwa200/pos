@@ -839,6 +839,96 @@ export const NAV: NavSection[] = [
     ],
   },
   {
+    heading: "Purchases",
+    department: "Report",
+    items: [
+      {
+        id: "purchases-desk",
+        label: "Reorder Desk",
+        icon: Package,
+        href: "/procurement",
+      },
+      {
+        id: "purchase-order",
+        label: "Orders",
+        icon: ShoppingCart,
+        children: ORDERS_NAV,
+      },
+      {
+        id: "purchase-invoice",
+        label: "Invoices",
+        icon: FileText,
+        children: [
+          {
+            id: "purchase-invoice-list",
+            label: "List",
+            href: "/transactions/purchase/invoice/list",
+          },
+          {
+            id: "purchase-invoice-summary",
+            label: "Summary",
+            href: "/transactions/purchase/invoice/summary",
+          },
+          {
+            id: "purchase-invoice-book",
+            label: "Book",
+            href: "/transactions/purchase/invoice/book",
+          },
+          {
+            id: "purchase-invoice-history",
+            label: "History",
+            href: "/transactions/purchase/invoice/history",
+          },
+        ],
+      },
+      {
+        id: "purchase-return",
+        label: "Returns",
+        icon: RotateCcw,
+        children: [
+          {
+            id: "purchase-return-list",
+            label: "List",
+            href: "/transactions/purchase/return/list",
+          },
+          {
+            id: "purchase-return-summary",
+            label: "Summary",
+            href: "/transactions/purchase/return/summary",
+          },
+        ],
+      },
+      {
+        id: "stock-txn",
+        label: "Transfers",
+        icon: ArrowLeftRight,
+        children: [
+          {
+            id: "stock-txn-transfer",
+            label: "Inventory Transfer",
+            href: "/transactions/stock/inventory-transfer",
+          },
+          {
+            id: "stock-txn-adjustment",
+            label: "Inventory Adjustment",
+            href: "/transactions/stock/inventory-adjustment",
+          },
+          {
+            id: "reports-outlets-transfers",
+            label: "Store Transfers",
+            href: "/reports/outlets/transfers",
+          },
+        ],
+      },
+      {
+        id: "purchase-reports",
+        label: "Purchase Reports",
+        icon: BarChart3,
+        children: PURCHASE_REPORTS_NAV,
+      },
+    ],
+  },
+  {
     heading: "Analytics",
     department: "Report",
     items: [
@@ -875,12 +965,6 @@ export const NAV: NavSection[] = [
         label: "Leaderboards",
         icon: Flag,
         href: "/reports/sales/gross-profit/by-subgroup",
-      },
-      {
-        id: "purchase-order",
-        label: "Orders",
-        icon: ShoppingCart,
-        children: ORDERS_NAV,
       },
       {
         id: "sales-return-list",

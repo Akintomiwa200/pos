@@ -92,23 +92,29 @@ export function PaymentsPage() {
   const [range, setRange] = useState<"month" | "week">("month");
   const [statFilter, setStatFilter] = useState("all");
 
+  const reload = useMemo(() => async () => {
+    try {
+      const [payments, expenseRows, returnRows] = await Promise.all([
+        paymentFeed(),
+        listExpenses().catch(() => [] as HqExpense[]),
+        listDocs("sales-return").catch(() => [] as TradeDoc[]),
+      ]);
+      setFeed(payments);
+      setExpenses(expenseRows);
+      setRefunds(returnRows);
+    } catch (err) {
+      toast.error(String(err), "Could not load transactions");
+      if (!feed) setFeed({ transactions: [], settlements: [] });
+    } finally {
+      setReady(true);
+    }
+  }, [feed]);
+
   useEffect(() => {
-    Promise.all([
-      paymentFeed(),
-      listExpenses().catch(() => [] as HqExpense[]),
-      listDocs("sales-return").catch(() => [] as TradeDoc[]),
-    ])
-      .then(([payments, expenseRows, returnRows]) => {
-        setFeed(payments);
-        setExpenses(expenseRows);
-        setRefunds(returnRows);
-      })
-      .catch((err) => {
-        toast.error(err, "Could not load transactions");
-        setFeed({ transactions: [], settlements: [] });
-      })
-      .finally(() => setReady(true));
-  }, []);
+    reload();
+    const timer = window.setInterval(reload, 15_000);
+    return () => window.clearInterval(timer);
+  }, [reload]);
 
   const incomeMinor = useMemo(
     () => (feed?.transactions ?? []).reduce((sum, row) => sum + row.totalMinor, 0),
@@ -299,8 +305,15 @@ export function PaymentsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-[clamp(1.75rem,3.5vw,2.35rem)] font-medium leading-none tracking-tight text-pos-ink">
+        <h1 className="flex items-center gap-3 text-[clamp(1.75rem,3.5vw,2.35rem)] font-medium leading-none tracking-tight text-pos-ink">
           Transaction
+          <span className="flex items-center gap-1.5 rounded-full bg-pos-success-soft px-2.5 py-1 text-xs font-bold uppercase tracking-wider text-pos-success">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-pos-success opacity-75"></span>
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-pos-success"></span>
+            </span>
+            Live
+          </span>
         </h1>
         <p className="mt-2 text-sm text-pos-ink-muted">
           Payments, spend, and refunds across tills — live from HQ.

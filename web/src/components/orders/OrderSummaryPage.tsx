@@ -1,22 +1,45 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
 import { BarChart3 } from "lucide-react";
 import { naira } from "@/lib/hq-ops";
-import { getOrderSummary, ORDER_STATUS_LABEL, type DocStatus, type OrderSummary } from "@/lib/hq-orders";
+import { useLiveOrders } from "@/lib/live-orders";
+import { ORDER_STATUS_LABEL, type DocStatus, type OrderSummary } from "@/lib/hq-orders";
 import { ManagerSkeleton } from "../Skeleton";
+import { LiveBadge } from "../LiveBadge";
+
+function deriveSummary(docs: { status: string; totalMinor: number; party: string }[]): OrderSummary {
+  const byStatus: Record<string, { count: number; totalMinor: number }> = {};
+  const vendors = new Map<string, { count: number; totalMinor: number }>();
+  for (const row of docs) {
+    const bucket = byStatus[row.status] ?? { count: 0, totalMinor: 0 };
+    bucket.count += 1;
+    bucket.totalMinor += row.totalMinor;
+    byStatus[row.status] = bucket;
+    const vendor = vendors.get(row.party || "Unknown") ?? { count: 0, totalMinor: 0 };
+    vendor.count += 1;
+    vendor.totalMinor += row.totalMinor;
+    vendors.set(row.party || "Unknown", vendor);
+  }
+  return {
+    count: docs.length,
+    totalMinor: docs.reduce((sum, row) => sum + row.totalMinor, 0),
+    pendingApproval: docs.filter((row) => row.status === "pending_approval").length,
+    awaitingReceive: docs.filter((row) => ["approved", "open", "partial"].includes(row.status)).length,
+    byStatus,
+    topVendors: [...vendors.entries()]
+      .map(([party, stats]) => ({ party, ...stats }))
+      .sort((a, b) => b.totalMinor - a.totalMinor)
+      .slice(0, 8),
+  };
+}
 
 export function OrderSummaryPage() {
-  const [summary, setSummary] = useState<OrderSummary | null>(null);
+  const { docs, live, ready } = useLiveOrders("purchase-order");
+  const summary = useMemo(() => deriveSummary(docs), [docs]);
 
-  useEffect(() => {
-    getOrderSummary()
-      .then(setSummary)
-      .catch(() => setSummary(null));
-  }, []);
-
-  if (!summary) return <ManagerSkeleton variant="table" />;
+  if (!ready) return <ManagerSkeleton variant="table" />;
 
   const maxValue = Math.max(1, ...Object.values(summary.byStatus).map((s) => s.totalMinor));
   const statusRows = Object.entries(summary.byStatus).sort((a, b) => b[1].totalMinor - a[1].totalMinor);
@@ -24,8 +47,11 @@ export function OrderSummaryPage() {
   return (
     <div className="pb-8">
       <header className="mb-6">
-        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-pos-primary">Analytics · Orders</p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-pos-ink">Order summary</h1>
+        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-pos-primary">Purchases · Orders</p>
+        <h1 className="mt-1 flex items-center gap-3 text-2xl font-semibold tracking-tight text-pos-ink">
+          Order summary
+          <LiveBadge live={live} />
+        </h1>
         <p className="mt-1.5 text-sm text-pos-ink-muted">
           The pipeline at a glance — value committed by order status and the vendors you order from most.
         </p>

@@ -16,37 +16,42 @@ export type AccountImpact = {
 
 export const SOURCE_STYLE: Record<
   JournalEntry["source"],
-  { label: string; icon: LucideIcon; chip: string; dot: string }
+  { label: string; icon: LucideIcon; chip: string; dot: string; soft: string }
 > = {
   sale: {
     label: "Sale",
     icon: Receipt,
     chip: "bg-pos-success-soft text-pos-success",
     dot: "bg-pos-success",
+    soft: "bg-pos-success-soft text-pos-success",
   },
   purchase: {
     label: "Purchase",
     icon: ShoppingCart,
     chip: "bg-sky-50 text-sky-600 dark:bg-sky-950/40 dark:text-sky-300",
     dot: "bg-sky-500",
+    soft: "bg-sky-50 text-sky-600 dark:bg-sky-950/40 dark:text-sky-300",
   },
   expense: {
     label: "Expense",
     icon: FileSpreadsheet,
     chip: "bg-amber-50 text-pos-warning dark:bg-amber-950/40 dark:text-amber-300",
     dot: "bg-pos-warning",
+    soft: "bg-amber-50 text-pos-warning dark:bg-amber-950/40 dark:text-amber-300",
   },
   opening: {
     label: "Opening",
     icon: BookOpen,
     chip: "bg-pos-primary-soft text-pos-primary",
     dot: "bg-pos-primary",
+    soft: "bg-pos-primary-soft text-pos-primary",
   },
   manual: {
     label: "Manual",
     icon: PencilLine,
     chip: "bg-violet-50 text-violet-600 dark:bg-violet-950/40 dark:text-violet-300",
     dot: "bg-violet-500",
+    soft: "bg-violet-50 text-violet-600 dark:bg-violet-950/40 dark:text-violet-300",
   },
 };
 
@@ -61,6 +66,10 @@ export const PERIODS: Array<{ key: PeriodKey; label: string }> = [
 ];
 
 /* ---------------- totals + filtering ---------------- */
+
+export function allEntries(books: { journals: JournalEntry[] }, manual: JournalEntry[]) {
+  return [...books.journals, ...manual].sort((a, b) => b.at.localeCompare(a.at));
+}
 
 export function entryTotals(entry: JournalEntry) {
   let debitMinor = 0;

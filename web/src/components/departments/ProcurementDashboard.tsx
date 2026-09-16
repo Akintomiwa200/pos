@@ -1,25 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
-import { toast } from "sonner";
 import { ShoppingCart } from "lucide-react";
-import { naira, listStockLevels, type StockLevel } from "@/lib/hq-ops";
+import { naira } from "@/lib/hq-ops";
+import { useLiveInventory } from "@/lib/live-inventory";
 import { ManagerSkeleton } from "../Skeleton";
+import { LiveBadge } from "../LiveBadge";
 import { EmptyRow, PageHeader, StatCard, TableShell } from "../console/Chrome";
 
 export function ProcurementDashboard() {
-  const [levels, setLevels] = useState<StockLevel[] | null>(null);
+  const { levels, live, ready } = useLiveInventory();
   const [search, setSearch] = useState("");
-
-  useEffect(() => {
-    listStockLevels()
-      .then(setLevels)
-      .catch((err) => {
-        toast.error(err instanceof Error ? err.message : "Could not load stock");
-        setLevels([]);
-      });
-  }, []);
 
   const low = useMemo(() => {
     if (!levels) return [];
@@ -33,19 +25,24 @@ export function ProcurementDashboard() {
       );
   }, [levels, search]);
 
-  if (!levels) return <ManagerSkeleton variant="table" />;
+  if (!ready) return <ManagerSkeleton variant="table" />;
 
   const reorderValueMinor = low.reduce((sum, row) => sum + Math.max(row.reorderPoint * 2 - row.onHand, 0) * (row.valueMinor / Math.max(row.onHand, 1)), 0);
 
   return (
     <div>
       <PageHeader
-        kicker="Procurement"
-        title="Reorder Desk"
+        kicker="Purchases · Procurement"
+        title={
+          <span className="flex items-center gap-3">
+            Reorder Desk
+            <LiveBadge live={live} />
+          </span>
+        }
         copy="Items at or below their reorder point — raise purchase orders before the shelf runs dry."
         action={
           <Link
-            href="/transactions/purchase/order/list"
+            href="/orders/new"
             className="flex items-center gap-2 rounded-xl bg-pos-primary px-4 py-2.5 text-sm font-semibold text-white"
           >
             <ShoppingCart size={15} /> New purchase order

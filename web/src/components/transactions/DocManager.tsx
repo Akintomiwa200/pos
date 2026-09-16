@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "@/lib/toast";
 import { Plus, Trash2 } from "lucide-react";
 import { listCatalog, type HqCatalogItem } from "@/lib/hq-api";
+import { useLiveOrders } from "@/lib/live-orders";
 import {
   deleteDoc,
   listDocs,
@@ -15,6 +16,7 @@ import {
 import { naira, prettyDay, dayKey } from "@/lib/hq-ops";
 import { ManagerSkeleton } from "../Skeleton";
 import { SlideOver } from "../SlideOver";
+import { LiveBadge } from "../LiveBadge";
 import {
   DataTable,
   Field,
@@ -59,7 +61,7 @@ export function DocManager({
   config: DocManagerConfig;
   mode?: "list" | "summary" | "book" | "history";
 }) {
-  const [docs, setDocs] = useState<TradeDoc[] | null>(null);
+  const { docs, live, ready, setDocs } = useLiveOrders(config.kind);
   const [catalog, setCatalog] = useState<HqCatalogItem[]>([]);
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
@@ -73,21 +75,30 @@ export function DocManager({
   const [notes, setNotes] = useState("");
   const [lines, setLines] = useState<LineDraft[]>([emptyLine()]);
 
-  async function load() {
-    const [rows, items] = await Promise.all([listDocs(config.kind), listCatalog()]);
-    setDocs(rows);
-    setCatalog(items);
-  }
+  useEffect(() => {
+    listCatalog()
+      .then(setCatalog)
+      .catch((err) => toast.error(String(err), "Could not load items"));
+  }, []);
+
+  const reload = useMemo(
+    () =>
+      async function reload() {
+        try {
+          const rows = await listDocs(config.kind);
+          setDocs(rows);
+        } catch (err) {
+          toast.error(String(err), "Could not load documents");
+        }
+      },
+    [config.kind, setDocs],
+  );
 
   useEffect(() => {
-    load().catch((err) => {
-      toast.error(err, "Could not load documents");
-      setDocs([]);
-    });
-  }, [config.kind]);
+    reload();
+  }, [reload]);
 
   const filtered = useMemo(() => {
-    if (!docs) return [];
     let rows = [...docs];
     if (mode === "history") {
       rows.sort((a, b) => b.at.localeCompare(a.at));
@@ -103,15 +114,15 @@ export function DocManager({
     return rows;
   }, [docs, search, mode]);
 
-  const totals = useMemo(() => {
-    if (!docs) return { count: 0, totalMinor: 0 };
-    return {
+  const totals = useMemo(
+    () => ({
       count: docs.length,
       totalMinor: docs.reduce((sum, doc) => sum + doc.totalMinor, 0),
-    };
-  }, [docs]);
+    }),
+    [docs],
+  );
 
-  if (!docs) return <ManagerSkeleton variant="table" />;
+  if (!ready) return <ManagerSkeleton variant="table" />;
 
   function openNew() {
     setDocId(undefined);
@@ -183,7 +194,7 @@ export function DocManager({
             unitPriceMinor: Math.round((parseFloat(line.unitPrice) || 0) * 100),
           })),
       });
-      await load();
+      await reload();
       setOpen(false);
       toast.success("Saved.");
     } catch (err) {
@@ -196,7 +207,7 @@ export function DocManager({
   async function remove(id: string) {
     try {
       await deleteDoc(id);
-      await load();
+      await reload();
       setOpen(false);
       toast.success("Deleted.");
     } catch (err) {
@@ -231,7 +242,16 @@ export function DocManager({
 
     return (
       <div>
-        <SetupHeader kicker={config.kicker} title={`${config.title} — Summary`} copy={config.copy} />
+        <SetupHeader
+          kicker={config.kicker}
+          title={
+            <span className="flex items-center gap-3">
+              {config.title} — Summary
+              <LiveBadge live={live} />
+            </span>
+          }
+          copy={config.copy}
+        />
         <div className="grid gap-6 xl:grid-cols-2">
           <DataTable columns={["Status", "Documents", "Value"]}>
             {byStatus.map((row) => (
@@ -292,11 +312,14 @@ export function DocManager({
       <SetupHeader
         kicker={config.kicker}
         title={
-          mode === "book"
-            ? `${config.title} — Book`
-            : mode === "history"
-              ? `${config.title} — History`
-              : config.title
+          <span className="flex items-center gap-3">
+            {mode === "book"
+              ? `${config.title} — Book`
+              : mode === "history"
+                ? `${config.title} — History`
+                : config.title}
+            <LiveBadge live={live} />
+          </span>
         }
         copy={
           mode === "book"

@@ -38,16 +38,19 @@ export function ExpensesManager({ summaryOnly = false }: { summaryOnly?: boolean
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  async function load() {
-    setRows(await listExpenses());
-  }
+  const reload = useMemo(() => async () => {
+    try {
+      setRows(await listExpenses());
+    } catch (err) {
+      toast.error(String(err), "Could not load expenses");
+    }
+  }, []);
 
   useEffect(() => {
-    load().catch((err) => {
-      toast.error(err, "Could not load expenses");
-      setRows([]);
-    });
-  }, []);
+    reload();
+    const timer = window.setInterval(reload, 15_000);
+    return () => window.clearInterval(timer);
+  }, [reload]);
 
   const stats = useMemo(() => {
     if (!rows) return null;
@@ -68,7 +71,18 @@ export function ExpensesManager({ summaryOnly = false }: { summaryOnly?: boolean
       <div>
         <SetupHeader
           kicker="Transaction · Expenses"
-          title="Summary"
+          title={
+            <span className="flex items-center gap-3">
+              Summary
+              <span className="flex items-center gap-1.5 rounded-full bg-pos-success-soft px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-pos-success">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-pos-success opacity-75"></span>
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-pos-success"></span>
+                </span>
+                Live
+              </span>
+            </span>
+          }
           copy="Where the money went — grouped by expense account and month."
         />
         <div className="grid gap-6 xl:grid-cols-2">
@@ -128,7 +142,18 @@ export function ExpensesManager({ summaryOnly = false }: { summaryOnly?: boolean
     <div>
       <SetupHeader
         kicker="Transaction · Expenses"
-        title="Expenses"
+        title={
+          <span className="flex items-center gap-3">
+            Expenses
+            <span className="flex items-center gap-1.5 rounded-full bg-pos-success-soft px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-pos-success">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-pos-success opacity-75"></span>
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-pos-success"></span>
+              </span>
+              Live
+            </span>
+          </span>
+        }
         copy={`Cash going out of the business. ${rows.length} entries · ${naira(stats.totalMinor)} total.`}
         action={
           <PrimaryButton
@@ -190,7 +215,7 @@ export function ExpensesManager({ summaryOnly = false }: { summaryOnly?: boolean
                 onClick={async () => {
                   try {
                     await deleteExpense(draft.id!);
-                    await load();
+                    await reload();
                     setOpen(false);
                     toast.success("Expense deleted.");
                   } catch (err) {
@@ -216,7 +241,7 @@ export function ExpensesManager({ summaryOnly = false }: { summaryOnly?: boolean
                     method: draft.method,
                     staff: draft.staff || undefined,
                   });
-                  await load();
+                  await reload();
                   setOpen(false);
                   toast.success("Expense saved.");
                 } catch (err) {

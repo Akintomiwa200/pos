@@ -1,5 +1,6 @@
 import { DepartmentPage } from "@/components/DepartmentPage";
-import { InventoryWorkflow } from "@/components/transactions/InventoryWorkflow";
+import { InventoryTransfer } from "@/components/transactions/InventoryTransfer";
+import { InventoryAdjustment } from "@/components/transactions/InventoryAdjustment";
 
 export default async function StockTransactionPage({
   params,
@@ -9,8 +10,8 @@ export default async function StockTransactionPage({
   const { slug = [] } = await params;
   const key = slug.join("/");
 
-  if (key === "inventory-transfer") return <InventoryWorkflow variant="transfer" />;
-  if (key === "inventory-adjustment") return <InventoryWorkflow variant="adjustment" />;
+  if (key === "inventory-transfer") return <InventoryTransfer />;
+  if (key === "inventory-adjustment") return <InventoryAdjustment />;
 
   return (
     <DepartmentPage

@@ -35,6 +35,8 @@ export type MovementInput = {
   quantity?: number;
   from?: string;
   to?: string;
+  /** Optional record date/time; defaults to now. */
+  at?: string;
   countedOnHand?: number;
   reason?: string;
   staff?: string;
@@ -125,9 +127,12 @@ export class InventoryStore {
       }
     }
 
+    const postedAt =
+      input.at && Number.isFinite(Date.parse(input.at)) ? new Date(input.at).toISOString() : new Date().toISOString();
+
     const movement: StockMovement = {
       id: `mv-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      at: new Date().toISOString(),
+      at: postedAt,
       type,
       itemId: item.id,
       itemName: item.name,

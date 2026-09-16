@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { ExternalLink, Search } from "lucide-react";
 import { naira, prettyDay } from "@/lib/hq-ops";
-import { ORDER_STATUS_LABEL, listPurchaseOrders, type DocStatus, type TradeDoc } from "@/lib/hq-orders";
+import { useLiveOrders } from "@/lib/live-orders";
+import { ORDER_STATUS_LABEL, type DocStatus } from "@/lib/hq-orders";
 import { ManagerSkeleton } from "../Skeleton";
+import { LiveBadge } from "../LiveBadge";
 
 const COLUMNS: Array<{ key: DocStatus; tint: string; dot: string }> = [
   { key: "draft", tint: "bg-pos-surface-muted/70", dot: "bg-pos-ink-faint" },
@@ -19,18 +21,8 @@ const COLUMNS: Array<{ key: DocStatus; tint: string; dot: string }> = [
 ];
 
 export function OrderListPage() {
-  const [orders, setOrders] = useState<TradeDoc[]>([]);
-  const [ready, setReady] = useState(false);
+  const { docs: orders, live, ready } = useLiveOrders("purchase-order");
   const [query, setQuery] = useState("");
-
-  useEffect(() => {
-    listPurchaseOrders()
-      .then((rows) => {
-        setOrders(rows);
-        setReady(true);
-      })
-      .catch(() => setReady(true));
-  }, []);
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -50,8 +42,11 @@ export function OrderListPage() {
   return (
     <div className="pb-8">
       <header className="mb-6">
-        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-pos-primary">Analytics · Orders</p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-pos-ink">Order pipeline</h1>
+        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-pos-primary">Purchases · Orders</p>
+        <h1 className="mt-1 flex items-center gap-3 text-2xl font-semibold tracking-tight text-pos-ink">
+          Order pipeline
+          <LiveBadge live={live} />
+        </h1>
         <p className="mt-1.5 text-sm text-pos-ink-muted">
           Every purchase order on one board, grouped by workflow stage. Search by number, vendor, or notes.
         </p>

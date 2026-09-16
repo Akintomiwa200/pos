@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { Observable, Subject } from "rxjs";
 import {
   ORDER_STATUSES,
   docTotal,
@@ -16,11 +17,18 @@ import {
   type TradeDoc,
 } from "./orders.types";
 
+export type OrdersEvent = {
+  type: "snapshot";
+  docs: TradeDoc[];
+  at: string;
+};
+
 @Injectable()
 export class OrdersService implements OnModuleInit {
   private docs: TradeDoc[] = [];
   private readonly dir = join(process.cwd(), "data");
   private readonly file = join(this.dir, "trade-docs.json");
+  private readonly events = new Subject<OrdersEvent>();
 
   async onModuleInit() {
     try {
@@ -39,6 +47,19 @@ export class OrdersService implements OnModuleInit {
   private async persist() {
     await mkdir(this.dir, { recursive: true });
     await writeFile(this.file, JSON.stringify(this.docs, null, 2), "utf8");
+  }
+
+  private publish() {
+    this.events.next({ type: "snapshot", docs: this.docs, at: new Date().toISOString() });
+  }
+
+  /** Server-sent events: a snapshot of every trade doc, pushed on each change. */
+  stream(): Observable<OrdersEvent> {
+    return new Observable((subscriber) => {
+      subscriber.next({ type: "snapshot", docs: this.docs, at: new Date().toISOString() });
+      const sub = this.events.subscribe(subscriber);
+      return () => sub.unsubscribe();
+    });
   }
 
   list(kind?: string): TradeDoc[] {
@@ -128,6 +149,7 @@ export class OrdersService implements OnModuleInit {
       ? this.docs.map((row) => (row.id === existing.id ? next : row))
       : [next, ...this.docs];
     await this.persist();
+    this.publish();
     return next;
   }
 
@@ -136,6 +158,7 @@ export class OrdersService implements OnModuleInit {
     this.docs = this.docs.filter((row) => row.id !== id);
     if (this.docs.length === before) throw new NotFoundException("Document not found");
     await this.persist();
+    this.publish();
   }
 
   private async mutate(id: string, fn: (doc: TradeDoc) => TradeDoc) {
@@ -143,6 +166,7 @@ export class OrdersService implements OnModuleInit {
     const next = fn(doc);
     this.docs = this.docs.map((row) => (row.id === id ? next : row));
     await this.persist();
+    this.publish();
     return next;
   }
 

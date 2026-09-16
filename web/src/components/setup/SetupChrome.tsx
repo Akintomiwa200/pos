@@ -10,7 +10,7 @@ export function SetupHeader({
   action,
 }: {
   kicker?: string;
-  title: string;
+  title: ReactNode;
   copy: string;
   action?: ReactNode;
 }) {

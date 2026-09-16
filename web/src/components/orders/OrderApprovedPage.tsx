@@ -1,30 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { CheckCircle2, Landmark, Send } from "lucide-react";
 import { naira, prettyDay } from "@/lib/hq-ops";
-import { listPurchaseOrders, type TradeDoc } from "@/lib/hq-orders";
+import { useLiveOrders } from "@/lib/live-orders";
 import { ManagerSkeleton } from "../Skeleton";
+import { LiveBadge } from "../LiveBadge";
 
 export function OrderApprovedPage() {
-  const [orders, setOrders] = useState<TradeDoc[]>([]);
-  const [ready, setReady] = useState(false);
-
-  useEffect(() => {
-    listPurchaseOrders()
-      .then((rows) => {
-        setOrders(rows.filter((r) => ["approved", "open"].includes(r.status)));
-        setReady(true);
-      })
-      .catch(() => setReady(true));
-  }, []);
+  const { docs, live, ready } = useLiveOrders("purchase-order");
 
   const approved = useMemo(() => {
-    const list = orders.filter((r) => r.status === "approved");
+    const list = docs.filter((r) => r.status === "approved");
     return list.sort((a, b) => (b.approvedAt ?? b.at).localeCompare(a.approvedAt ?? a.at));
-  }, [orders]);
-  const sent = useMemo(() => orders.filter((r) => r.status === "open").sort((a, b) => b.at.localeCompare(a.at)), [orders]);
+  }, [docs]);
+  const sent = useMemo(
+    () => docs.filter((r) => r.status === "open").sort((a, b) => b.at.localeCompare(a.at)),
+    [docs],
+  );
 
   if (!ready) return <ManagerSkeleton variant="table" />;
 
@@ -33,8 +27,11 @@ export function OrderApprovedPage() {
   return (
     <div className="pb-8">
       <header className="mb-6">
-        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-pos-primary">Analytics · Orders</p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-pos-ink">Approved & sent</h1>
+        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-pos-primary">Purchases · Orders</p>
+        <h1 className="mt-1 flex items-center gap-3 text-2xl font-semibold tracking-tight text-pos-ink">
+          Approved & sent
+          <LiveBadge live={live} />
+        </h1>
         <p className="mt-1.5 text-sm text-pos-ink-muted">
           Orders that cleared approval and have been released to the vendor — a running record of the green-lit work.
         </p>

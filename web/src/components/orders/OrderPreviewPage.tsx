@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
 import { Printer } from "lucide-react";
-import { toast } from "@/lib/toast";
 import { naira, prettyDay } from "@/lib/hq-ops";
-import { ORDER_STATUS_LABEL, getOrder, type DocStatus, type TradeDoc } from "@/lib/hq-orders";
+import { useLiveOrder } from "@/lib/live-orders";
+import { ORDER_STATUS_LABEL, type DocStatus } from "@/lib/hq-orders";
 import { ManagerSkeleton } from "../Skeleton";
+import { LiveBadge } from "../LiveBadge";
 
 const STATUS_HEAD: Record<string, string> = {
   draft: "text-pos-ink-muted",
@@ -21,20 +21,7 @@ const STATUS_HEAD: Record<string, string> = {
 };
 
 export function OrderPreviewPage({ orderId }: { orderId: string }) {
-  const [doc, setDoc] = useState<TradeDoc | null>(null);
-
-  useEffect(() => {
-    let mounted = true;
-    getOrder(orderId)
-      .then((row) => mounted && setDoc(row))
-      .catch((err) => {
-        if (!mounted) return;
-        toast.error(err, "Could not load order.");
-      });
-    return () => {
-      mounted = false;
-    };
-  }, [orderId]);
+  const { doc, live } = useLiveOrder(orderId, "purchase-order");
 
   if (!doc) return <ManagerSkeleton variant="table" />;
 
@@ -42,8 +29,11 @@ export function OrderPreviewPage({ orderId }: { orderId: string }) {
     <div className="pb-8">
       <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-pos-primary">Analytics · Orders</p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-pos-ink">{doc.number}</h1>
+          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-pos-primary">Purchases · Orders</p>
+          <h1 className="mt-1 flex items-center gap-3 text-2xl font-semibold tracking-tight text-pos-ink">
+            {doc.number}
+            <LiveBadge live={live} />
+          </h1>
           <p className={`mt-1.5 text-sm font-medium ${STATUS_HEAD[doc.status] ?? "text-pos-ink-muted"}`}>
             {ORDER_STATUS_LABEL[doc.status] ?? doc.status}
           </p>

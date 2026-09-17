@@ -28,6 +28,9 @@ export type CatalogRow = {
   barcode?: string;
   batchNumber?: string;
   brand?: string;
+  productCode?: string;
+  trackBatches?: boolean;
+  baseId?: string;
   costMinor?: number;
   priceMinor?: number;
   onHand?: number;
@@ -49,6 +52,8 @@ export type CatalogPatch = {
   image?: string;
   batchNumber?: string;
   brand?: string;
+  productCode?: string;
+  trackBatches?: boolean;
   subcategory?: string;
   unit?: string;
   unitLabel?: string;
@@ -157,6 +162,10 @@ export class CatalogService implements OnModuleInit {
       batchNumber:
         typeof patch.batchNumber === "string" ? patch.batchNumber : current.batchNumber,
       brand: typeof patch.brand === "string" ? patch.brand : current.brand,
+      productCode:
+        typeof patch.productCode === "string" ? patch.productCode : current.productCode,
+      trackBatches:
+        typeof patch.trackBatches === "boolean" ? patch.trackBatches : current.trackBatches,
       subcategory:
         typeof patch.subcategory === "string" ? patch.subcategory : current.subcategory,
       unit: typeof patch.unit === "string" ? patch.unit : current.unit,
@@ -297,6 +306,18 @@ export class CatalogService implements OnModuleInit {
           typeof row.packSize === "number" && Number.isFinite(row.packSize)
             ? Math.max(1, Math.round(row.packSize))
             : existing?.packSize ?? 1,
+        productCode:
+          row.productCode !== undefined
+            ? row.productCode.trim() || undefined
+            : existing?.productCode,
+        trackBatches:
+          row.trackBatches !== undefined
+            ? row.trackBatches === true
+            : existing?.trackBatches ?? false,
+        baseId:
+          row.baseId !== undefined
+            ? row.baseId.trim() || undefined
+            : existing?.baseId,
         description:
           row.description !== undefined
             ? row.description.trim() || undefined

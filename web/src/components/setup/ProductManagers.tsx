@@ -237,7 +237,7 @@ export function PriceListManager() {
     const sorted = [...items].sort((a, b) => a.name.localeCompare(b.name));
     if (!query) return sorted;
     return sorted.filter((row) =>
-      [row.name, row.sku, row.barcode, row.category].some((value) =>
+      [row.name, row.sku, row.productCode ?? "", row.barcode, row.category].some((value) =>
         value.toLowerCase().includes(query),
       ),
     );
@@ -545,6 +545,7 @@ export function ProductImportManager() {
         brand: row.brand || row.manufacturer || "",
         sku: row.sku,
         barcode: row.barcode,
+        productCode: row.productcode || row.productCode || "",
         batchNumber: row.batch || row.batchnumber || "",
         costMinor: Math.round((Number.isFinite(cost) ? cost : 0) * 100),
         priceMinor: Math.round((Number.isFinite(sell) ? sell : 0) * 100),

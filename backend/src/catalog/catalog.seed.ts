@@ -7,6 +7,9 @@ export type CatalogItem = {
   barcode: string;
   batchNumber?: string;
   brand?: string;
+  productCode?: string;
+  trackBatches?: boolean;
+  baseId?: string;
   costMinor: number;
   priceMinor: number;
   currency: "NGN";

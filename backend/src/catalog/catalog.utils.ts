@@ -20,6 +20,15 @@ export function generateSku(name: string, existingSkus: Set<string>) {
 }
 
 /** Internal-store barcode in 890xxxxxxxxx range (matches seed convention). */
+/** Auto product code derived from the (unique) SKU so it stays stable across re-imports. */
+export function generateProductCode(sku: string) {
+  const base = sku
+    .replace(/[^a-zA-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .toUpperCase();
+  return `PC-${base || "ITEM"}`.slice(0, 28);
+}
+
 export function generateBarcode(existingBarcodes: Set<string>) {
   let seed = 8901234560000;
   for (const code of existingBarcodes) {
@@ -51,15 +60,20 @@ export function normalizeCatalogItem(raw: Partial<CatalogItem> & Pick<CatalogIte
       ? Math.max(0, Math.round(raw.reorderLevel))
       : 0;
 
+  const sku = raw.sku?.trim() || slugFromName(raw.name) || raw.id;
+
   return {
     id: raw.id,
     name: raw.name.trim(),
     category: raw.category?.trim() || "General",
     subcategory: raw.subcategory?.trim() || undefined,
-    sku: raw.sku?.trim() || slugFromName(raw.name) || raw.id,
+    sku,
     barcode: raw.barcode?.trim() || "",
     batchNumber: raw.batchNumber?.trim() || undefined,
     brand: raw.brand?.trim() || undefined,
+    productCode: raw.productCode?.trim() || generateProductCode(sku),
+    trackBatches: raw.trackBatches === true,
+    baseId: raw.baseId?.trim() || undefined,
     costMinor,
     priceMinor,
     currency: "NGN",

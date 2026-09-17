@@ -24,7 +24,7 @@ import { listCatalog, uploadProductImage, type HqCatalogItem } from "@/lib/hq-ap
 import { importCatalogRows } from "@/lib/hq-setup";
 import { archiveProducts, deleteProducts, restoreProducts } from "@/lib/catalog-bulk";
 import { naira } from "@/lib/hq-ops";
-import { productImageSrc } from "@/lib/product-image";
+import { productImageFor } from "@/lib/product-image";
 import { toast } from "@/lib/toast";
 import { formatStock } from "@/lib/units";
 import { useLiveCatalog } from "@/lib/live-catalog";
@@ -41,6 +41,7 @@ const blank: ItemDraft = {
   subcategory: "",
   sku: "",
   barcode: "",
+  trackBatches: false,
   batchNumber: "",
   brand: "",
   cost: "",
@@ -68,6 +69,7 @@ function toDraft(item: HqCatalogItem): ItemDraft {
     subcategory: item.subcategory ?? "",
     sku: item.sku,
     barcode: item.barcode,
+    trackBatches: item.trackBatches === true,
     batchNumber: item.batchNumber ?? "",
     brand: item.brand ?? "",
     cost: nairaInputFromMinor(item.costMinor ?? 0),
@@ -144,8 +146,8 @@ export function ItemsManager() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<(typeof PAGE_SIZES)[number]>(10);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [menuId, setMenuId] = useState<string | null>(null);
-  const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
+  const { openId: menuId, anchor: menuAnchor, toggleMenu: toggleRowMenu, closeMenu: closeRowMenu } =
+    useRowMenu();
   const [draft, setDraft] = useState<ItemDraft>(blank);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [open, setOpen] = useState(false);
@@ -170,16 +172,16 @@ export function ItemsManager() {
     setPage(1);
   }, [search, statusFilter, categoryFilter, pageSize]);
 
-  function closeRowMenu() {
-    setMenuId(null);
-    setMenuAnchor(null);
-  }
-
   const categoryOptions = useMemo(() => {
     const names = new Set(rows.map((row) => row.category).filter(Boolean));
     for (const row of categories) names.add(row.name);
     return [...names].sort((a, b) => a.localeCompare(b));
   }, [rows, categories]);
+
+  const itemsById = useMemo(
+    () => new Map(rows.map((row) => [row.id, row] as const)),
+    [rows],
+  );
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -190,7 +192,7 @@ export function ItemsManager() {
       if (statusFilter === "low" && stockTone(row) !== "low") return false;
       if (statusFilter === "out" && stockTone(row) !== "out") return false;
       if (!query) return true;
-      return [row.name, row.sku, row.barcode, row.category, row.subcategory, row.batchNumber, row.brand]
+      return [row.name, row.sku, row.productCode, row.barcode, row.category, row.subcategory, row.batchNumber, row.brand]
         .filter(Boolean)
         .some((value) => value!.toLowerCase().includes(query));
     });
@@ -350,6 +352,7 @@ export function ItemsManager() {
           subcategory: draft.subcategory.trim() || "",
           sku: draft.sku.trim() || undefined,
           barcode: draft.barcode.trim() || undefined,
+          trackBatches: draft.trackBatches,
           batchNumber: draft.batchNumber.trim() || "",
           brand: draft.brand.trim() || "",
           costMinor,
@@ -656,7 +659,7 @@ export function ItemsManager() {
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
-                            src={productImageSrc(item.id, item.image)}
+                            src={productImageFor(item, item.baseId ? itemsById.get(item.baseId) : undefined)}
                             alt=""
                             className="h-10 w-10 shrink-0 rounded-lg object-cover shadow-pos-sm"
                           />
@@ -665,6 +668,7 @@ export function ItemsManager() {
                               {item.name}
                             </span>
                             <span className="mt-0.5 block truncate font-mono text-[12px] text-pos-ink-faint">
+                              {item.productCode ? `${item.productCode} · ` : ""}
                               {item.sku}
                             </span>
                           </span>
@@ -707,15 +711,13 @@ export function ItemsManager() {
                           aria-label={`Actions for ${item.name}`}
                           onClick={(event) => {
                             event.stopPropagation();
-                            setMenuAnchor(event.currentTarget);
-                            setMenuId((current) => (current === item.id ? null : item.id));
+                            toggleRowMenu(item.id, event.currentTarget);
                           }}
                         >
                           <MoreHorizontal size={18} />
                         </button>
                         {menuId === item.id && menuAnchor ? (
-                          createPortal(
-                            <RowMenu anchor={menuAnchor} onClose={closeRowMenu}>
+                          <RowMenu anchor={menuAnchor} onClose={closeRowMenu}>
                               <button
                                 type="button"
                                 className="block w-full px-3.5 py-2 text-left text-sm text-pos-ink hover:bg-pos-surface-muted"
@@ -761,9 +763,7 @@ export function ItemsManager() {
                               >
                                 Delete
                               </button>
-                            </RowMenu>,
-                            document.body,
-                          )
+                            </RowMenu>
                         ) : null}
                       </td>
                     </tr>

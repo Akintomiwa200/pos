@@ -28,6 +28,7 @@ export type ItemDraft = {
   subcategory: string;
   sku: string;
   barcode: string;
+  trackBatches: boolean;
   batchNumber: string;
   brand: string;
   cost: string;
@@ -423,17 +424,43 @@ export function ItemFormSheet({
                   </InputLabel>
                 </div>
               )}
-              <div className="mt-4">
-                <InputLabel label="Batch / lot number" hint="Track deliveries and expiry batches.">
+              {selectedUnitKind === "composite" ? null : (
+                <label className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-pos-border bg-pos-surface-muted px-3 py-2.5">
+                  <span className="text-sm font-medium text-pos-ink">
+                    Track batches &amp; expiry
+                    <span className="mt-0.5 block text-[12px] font-normal text-pos-ink-faint">
+                      Capture a batch and expiry date each time this product is received.
+                    </span>
+                  </span>
                   <input
-                    className={fieldClass}
-                    placeholder="e.g. LOT-2026-0312"
-                    value={draft.batchNumber}
+                    type="checkbox"
+                    className="accent-pos-primary"
+                    checked={draft.trackBatches}
                     disabled={busy}
-                    onChange={(event) => onChange({ batchNumber: event.target.value })}
+                    onChange={(event) =>
+                      onChange({
+                        trackBatches: event.target.checked,
+                        ...(event.target.checked
+                          ? {}
+                          : { batchNumber: "", expiresAt: "" }),
+                      })
+                    }
                   />
-                </InputLabel>
-              </div>
+                </label>
+              )}
+              {draft.trackBatches ? (
+                <div className="mt-4">
+                  <InputLabel label="Batch / lot number" hint="Track deliveries and expiry batches.">
+                    <input
+                      className={fieldClass}
+                      placeholder="e.g. LOT-2026-0312"
+                      value={draft.batchNumber}
+                      disabled={busy}
+                      onChange={(event) => onChange({ batchNumber: event.target.value })}
+                    />
+                  </InputLabel>
+                </div>
+              ) : null}
             </Section>
 
             <Section icon={<Wallet size={18} />} title="Pricing">
@@ -568,17 +595,19 @@ export function ItemFormSheet({
                     onChange={(event) => onChange({ reorderLevel: event.target.value })}
                   />
                 </InputLabel>
-                <div className="sm:col-span-2">
-                  <InputLabel label="Expiry date" hint="Optional — perishables and batch tracking.">
-                    <input
-                      type="date"
-                      className={fieldClass}
-                      value={draft.expiresAt}
-                      disabled={busy}
-                      onChange={(event) => onChange({ expiresAt: event.target.value })}
-                    />
-                  </InputLabel>
-                </div>
+                {draft.trackBatches ? (
+                  <div className="sm:col-span-2">
+                    <InputLabel label="Expiry date" hint="Optional — perishables and batch tracking.">
+                      <input
+                        type="date"
+                        className={fieldClass}
+                        value={draft.expiresAt}
+                        disabled={busy}
+                        onChange={(event) => onChange({ expiresAt: event.target.value })}
+                      />
+                    </InputLabel>
+                  </div>
+                ) : null}
               </div>
             </Section>
           </div>

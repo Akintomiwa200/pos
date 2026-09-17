@@ -7,12 +7,15 @@ import { nairaInputFromMinor, parseNairaInput, suggestPackBarcode } from "@/lib/
 import { listCatalog, type HqCatalogItem } from "@/lib/hq-api";
 import { importCatalogRows } from "@/lib/hq-setup";
 import { naira } from "@/lib/hq-ops";
-import { formatStock, inferUnitKind, unitKindLabel } from "@/lib/units";
+import { formatStock, formatUnitLabel, inferUnitKind, unitKindLabel } from "@/lib/units";
 import { unitCode, unitKindFromRecord, type TaxonomyRecord } from "@/lib/hq-taxonomy";
 import { useLiveCatalog } from "@/lib/live-catalog";
 import { useLiveDirectoryRows } from "@/lib/live-directory-rows";
+import { productImageSrc } from "@/lib/product-image";
+import { uploadProductImage } from "@/lib/hq-api";
 import { ManagerSkeleton } from "../Skeleton";
 import { SlideOver } from "../SlideOver";
+import { ProductImageField } from "./ProductImageField";
 import {
   DataTable,
   Field,
@@ -27,6 +30,7 @@ import {
 
 type PackDraft = {
   id?: string;
+  baseId?: string;
   name: string;
   category: string;
   unit: string;
@@ -37,6 +41,10 @@ type PackDraft = {
   price: string;
   onHand: string;
   active: boolean;
+  auto?: boolean;
+  autoHand?: boolean;
+  image?: string;
+  imageFile?: File | null;
 };
 
 const blank = (unit = "pack"): PackDraft => ({
@@ -50,6 +58,9 @@ const blank = (unit = "pack"): PackDraft => ({
   price: "",
   onHand: "0",
   active: true,
+  baseId: "",
+  image: "",
+  imageFile: null,
 });
 
 function isCompositeUnit(row: TaxonomyRecord) {
@@ -61,6 +72,25 @@ function isCompositeUnit(row: TaxonomyRecord) {
 function isPackProduct(item: HqCatalogItem, compositeCodes: Set<string>) {
   if (compositeCodes.has((item.unit || "").toLowerCase())) return true;
   return inferUnitKind(item.unit) === "composite";
+}
+
+function packStockLabel(row: HqCatalogItem, base?: HqCatalogItem | undefined) {
+  const size = Math.max(1, row.packSize || 1);
+  const label = formatUnitLabel(row.unit, row.unitLabel);
+  let packs: number;
+  let pieces: number;
+  let remainder: number;
+  if (base) {
+    pieces = Math.max(0, Math.round(base.onHand ?? 0));
+    packs = Math.floor(pieces / size);
+    remainder = pieces % size;
+  } else {
+    packs = Math.max(0, Math.round(row.onHand ?? 0));
+    pieces = packs * size;
+    remainder = 0;
+  }
+  const head = `${packs} ${label}${packs === 1 ? "" : "s"}`;
+  return remainder > 0 ? `${head} (${pieces} pcs · ${remainder} loose)` : `${head} (${pieces} pcs)`;
 }
 
 export function PacksManager() {
@@ -107,15 +137,43 @@ export function PacksManager() {
     [items, compositeCodes],
   );
 
+  const itemsById = useMemo(
+    () => new Map(items.map((item) => [item.id, item] as const)),
+    [items],
+  );
+
   const suggestions = useMemo(() => {
     const query = draft.name.trim().toLowerCase();
     const matches = baseOptions.filter((item) =>
-      [item.name, item.sku, item.barcode, item.category, item.brand ?? ""].some((value) =>
+      [item.name, item.sku, item.productCode ?? "", item.barcode, item.category, item.brand ?? ""].some((value) =>
         value.toLowerCase().includes(query),
       ),
     );
     return matches.slice(0, 30);
   }, [baseOptions, draft.name]);
+
+  const baseItem = useMemo(
+    () => items.find((row) => row.id === draft.baseId) ?? null,
+    [items, draft.baseId],
+  );
+
+  const packSizeNum = Math.max(2, Math.round(Number(draft.packSize) || 12));
+
+  function derivedPricing() {
+    if (!baseItem) return null;
+    return {
+      cost: nairaInputFromMinor((baseItem.costMinor ?? 0) * packSizeNum),
+      price: nairaInputFromMinor((baseItem.priceMinor ?? 0) * packSizeNum),
+    };
+  }
+
+  function derivedPacks() {
+    if (!baseItem) return null;
+    const pieces = Math.max(0, Math.round(baseItem.onHand ?? 0));
+    return { packs: Math.floor(pieces / packSizeNum), remainder: pieces % packSizeNum, pieces };
+  }
+
+  const packsInfo = derivedPacks();
 
   useEffect(() => {
     if (!suggestionsOpen) return;
@@ -135,7 +193,7 @@ export function PacksManager() {
     const sorted = [...packs].sort((a, b) => a.name.localeCompare(b.name));
     if (!query) return sorted;
     return sorted.filter((row) =>
-      [row.name, row.sku, row.barcode, row.category, row.unit, row.brand ?? ""].some((value) =>
+      [row.name, row.sku, row.productCode ?? "", row.barcode, row.category, row.unit, row.brand ?? ""].some((value) =>
         value.toLowerCase().includes(query),
       ),
     );
@@ -151,6 +209,7 @@ export function PacksManager() {
   function openEdit(item: HqCatalogItem) {
     setDraft({
       id: item.id,
+      baseId: item.baseId ?? "",
       name: item.name,
       category: item.category,
       unit: item.unit || "pack",
@@ -161,6 +220,10 @@ export function PacksManager() {
       price: nairaInputFromMinor(item.priceMinor),
       onHand: String(item.onHand),
       active: item.active !== false,
+      auto: Boolean(item.baseId),
+      autoHand: Boolean(item.baseId),
+      image: item.image ?? "",
+      imageFile: null,
     });
     setSuggestionsOpen(false);
     setOpen(true);
@@ -184,6 +247,12 @@ export function PacksManager() {
       barcode = suggestPackBarcode(items.map((row) => row.barcode));
     }
 
+    const sku =
+      draft.sku.trim().toLowerCase() ||
+      draft.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 24);
+    const itemId = draft.id ?? sku;
+    const image = draft.image || (baseItem ? baseItem.image : undefined) || undefined;
+
     setBusy(true);
     try {
       await importCatalogRows([
@@ -193,6 +262,7 @@ export function PacksManager() {
           category: draft.category.trim(),
           sku: draft.sku.trim() || undefined,
           barcode,
+          baseId: draft.baseId || undefined,
           costMinor: parseNairaInput(draft.cost),
           priceMinor: parseNairaInput(draft.price),
           onHand: Math.max(0, Math.round(parseFloat(draft.onHand) || 0)),
@@ -200,8 +270,13 @@ export function PacksManager() {
           unitLabel: unitRow?.name || unit,
           packSize,
           active: draft.active,
+          image,
         },
       ]);
+      if (draft.imageFile) {
+        const updated = await uploadProductImage(itemId, draft.imageFile);
+        setDraft((current) => ({ ...current, image: updated.image ?? "" }));
+      }
       setOpen(false);
       toast.success(
         draft.id
@@ -282,7 +357,13 @@ export function PacksManager() {
         <SetupStat label="Pack products" value={String(packs.length)} hint="Composite sell units" />
         <SetupStat
           label="Pieces represented"
-          value={String(packs.reduce((sum, row) => sum + row.onHand * Math.max(1, row.packSize || 1), 0))}
+          value={String(
+            packs.reduce((sum, row) => {
+              const base = row.baseId ? itemsById.get(row.baseId) : undefined;
+              if (base) return sum + Math.max(0, Math.round(base.onHand ?? 0));
+              return sum + row.onHand * Math.max(1, row.packSize || 1);
+            }, 0),
+          )}
           tone="accent"
         />
         <SetupStat label="Missing barcodes" value={String(missingBarcode.length)} />
@@ -319,6 +400,8 @@ export function PacksManager() {
             const size = Math.max(1, row.packSize || 1);
             const unitRow = packUnits.find((u) => unitCode(u) === row.unit);
             const label = row.unitLabel || unitRow?.name || row.unit;
+            const base = row.baseId ? itemsById.get(row.baseId) : undefined;
+            const imageSrc = productImageSrc(row.id, row.image || base?.image);
             return (
               <tr
                 key={row.id}
@@ -326,8 +409,27 @@ export function PacksManager() {
                 onClick={() => openEdit(row)}
               >
                 <td className="px-4 py-3">
-                  <p className="font-medium">{row.name}</p>
-                  <p className="text-[12px] text-pos-ink-faint">{row.category}</p>
+                  <div className="flex items-center gap-3">
+                    {imageSrc ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={imageSrc}
+                        alt=""
+                        className="h-9 w-9 shrink-0 rounded-lg bg-pos-surface-muted object-cover"
+                      />
+                    ) : (
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-pos-surface-muted text-[10px] uppercase tracking-wide text-pos-ink-faint">
+                        {row.name.slice(0, 2)}
+                      </span>
+                    )}
+                    <div className="min-w-0">
+                      <p className="truncate font-medium">{row.name}</p>
+                      <p className="text-[12px] text-pos-ink-faint">
+                        {row.category}
+                        {base ? ` · from ${base.name}` : ""}
+                      </p>
+                    </div>
+                  </div>
                 </td>
                 <td className="px-4 py-3 capitalize">{label}</td>
                 <td className="px-4 py-3 tabular-nums font-semibold">{size}</td>
@@ -342,7 +444,7 @@ export function PacksManager() {
                 </td>
                 <td className="px-4 py-3 tabular-nums">{naira(row.priceMinor)}</td>
                 <td className="px-4 py-3 text-pos-ink-muted">
-                  {formatStock(row.onHand, row.unit, size, row.unitLabel, "composite")}
+                  {packStockLabel(row, base)}
                 </td>
                 <td className="px-4 py-3">
                   <span
@@ -389,7 +491,7 @@ export function PacksManager() {
                 placeholder="Search existing products…"
                 value={draft.name}
                 onChange={(event) => {
-                  setDraft({ ...draft, name: event.target.value });
+                  setDraft({ ...draft, name: event.target.value, baseId: "" });
                   setSuggestionsOpen(true);
                 }}
                 onFocus={() => setSuggestionsOpen(true)}
@@ -411,10 +513,22 @@ export function PacksManager() {
                         type="button"
                         className="block w-full px-3.5 py-2 text-left transition hover:bg-pos-surface-muted"
                         onClick={() => {
+                          const derived = nairaInputFromMinor((item.costMinor ?? 0) * packSizeNum);
+                          const derivedPrice = nairaInputFromMinor(
+                            (item.priceMinor ?? 0) * packSizeNum,
+                          );
+                          const hand = Math.floor(Math.max(0, item.onHand ?? 0) / packSizeNum);
                           setDraft({
                             ...draft,
+                            baseId: item.id,
                             name: item.name,
                             category: item.category || draft.category,
+                            cost: derived,
+                            price: derivedPrice,
+                            onHand: String(hand),
+                            auto: true,
+                            autoHand: true,
+                            image: item.image ?? "",
                           });
                           setSuggestionsOpen(false);
                         }}
@@ -473,10 +587,36 @@ export function PacksManager() {
               step={1}
               className={fieldClass}
               value={draft.packSize}
-              onChange={(event) => setDraft({ ...draft, packSize: event.target.value })}
+              onChange={(event) => {
+                const size = Math.max(2, Math.round(Number(event.target.value) || 12));
+                setDraft((current) => {
+                  const hand = packsInfo ? Math.floor(packsInfo.pieces / size) : current.onHand;
+                  return {
+                    ...current,
+                    packSize: event.target.value,
+                    ...(current.auto && baseItem
+                      ? {
+                          cost: nairaInputFromMinor((baseItem.costMinor ?? 0) * size),
+                          price: nairaInputFromMinor((baseItem.priceMinor ?? 0) * size),
+                        }
+                      : {}),
+                    ...(current.autoHand && baseItem ? { onHand: String(hand) } : {}),
+                  };
+                });
+              }}
             />
           </Field>
         </div>
+        <ProductImageField
+          itemId={draft.id ?? draft.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 24)}
+          imageUrl={draft.image}
+          onChange={(file) => setDraft({ ...draft, imageFile: file })}
+        />
+        <p className="-mt-1 text-[12px] text-pos-ink-faint">
+          {baseItem?.image
+            ? `This pack mirrors the "${baseItem.name}" product photo. Upload your own to use a pack-specific photo.`
+            : "Shown on tills and price check. Pick a base product to copy its photo onto this pack."}
+        </p>
         <Field label="Pack barcode">
           <div className="flex gap-2">
             <input
@@ -516,31 +656,95 @@ export function PacksManager() {
             <input
               className={fieldClass}
               value={draft.cost}
-              onChange={(event) => setDraft({ ...draft, cost: event.target.value })}
+              onChange={(event) =>
+                setDraft({ ...draft, cost: event.target.value, auto: false })
+              }
             />
           </Field>
           <Field label="Sell price per pack (₦)">
             <input
               className={fieldClass}
               value={draft.price}
-              onChange={(event) => setDraft({ ...draft, price: event.target.value })}
+              onChange={(event) =>
+                setDraft({ ...draft, price: event.target.value, auto: false })
+              }
             />
           </Field>
         </div>
-        <Field label="Packs on hand">
+        {baseItem ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-pos-border bg-pos-surface-muted px-3.5 py-2.5">
+            <p className="text-[13px] text-pos-ink-muted">
+              From <span className="font-medium text-pos-ink">{baseItem.name}</span> —{" "}
+              {naira(baseItem.costMinor ?? 0)}/piece · sell {naira(baseItem.priceMinor ?? 0)}/piece.
+            </p>
+            <button
+              type="button"
+              className={secondaryButtonClass}
+              onClick={() => {
+                const pricing = derivedPricing();
+                if (!pricing) return;
+                setDraft({ ...draft, ...pricing, auto: true });
+              }}
+            >
+              Apply pricing from pieces
+            </button>
+          </div>
+        ) : null}
+        <Field
+          label="Packs on hand"
+          hint={
+            baseItem && draft.autoHand
+              ? "Auto-calculated from the base product's pieces — edit to override."
+              : undefined
+          }
+        >
           <input
             type="number"
             min={0}
             className={fieldClass}
-            value={draft.onHand}
-            onChange={(event) => setDraft({ ...draft, onHand: event.target.value })}
+            value={baseItem && draft.autoHand && packsInfo ? String(packsInfo.packs) : draft.onHand}
+            onChange={(event) =>
+              setDraft({ ...draft, onHand: event.target.value, autoHand: false })
+            }
           />
         </Field>
-        {Number(draft.packSize) >= 2 && Number(draft.onHand) >= 0 ? (
+        {packsInfo ? (
+          <p className="-mt-1 mb-1 text-[13px] text-pos-ink-muted">
+            {packsInfo.pieces} single {packSizeNum === 1 ? "piece" : "pieces"} on hand ÷ {packSizeNum} per
+            pack ={" "}
+            <span className="font-semibold text-pos-ink">
+              {packsInfo.packs} pack{packsInfo.packs === 1 ? "" : "s"}
+            </span>
+            {packsInfo.remainder > 0 ? (
+              <>
+                {" "}
+                · <span className="font-semibold text-pos-ink">{packsInfo.remainder} pcs</span> left in
+                singles
+              </>
+            ) : (
+              ""
+            )}
+            .
+          </p>
+        ) : null}
+        {baseItem && packsInfo ? (
           <p className="mb-3 text-sm text-pos-ink-muted">
             That is{" "}
             <span className="font-semibold text-pos-ink">
-              {Math.round(Number(draft.onHand) || 0) * Math.max(2, Math.round(Number(draft.packSize) || 12))}{" "}
+              {packsInfo.pieces} pieces
+            </span>{" "}
+            in the base product —{" "}
+            <span className="font-semibold text-pos-ink">
+              {packsInfo.packs} pack{packsInfo.packs === 1 ? "" : "s"}
+            </span>{" "}
+            {packsInfo.remainder > 0 ? `and ${packsInfo.remainder} loose` : ""}.
+          </p>
+        ) : Number(draft.packSize) >= 2 && Number(draft.onHand) >= 0 ? (
+          <p className="mb-3 text-sm text-pos-ink-muted">
+            That is{" "}
+            <span className="font-semibold text-pos-ink">
+              {Math.round(Number(draft.onHand) || 0) *
+                Math.max(2, Math.round(Number(draft.packSize) || 12))}{" "}
               pieces
             </span>{" "}
             total.

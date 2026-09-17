@@ -3,6 +3,9 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Subject } from "rxjs";
 import { ConsoleService } from "../console/console.service";
+import { CatalogService } from "../catalog/catalog.service";
+import { ComboService } from "../combos/combo.service";
+import { deductSoldStock } from "./stock-deduct";
 
 export type StoredSale = {
   ticketId: string;
@@ -39,7 +42,11 @@ export class SalesService implements OnModuleInit {
   private readonly receiptsDir = join(this.dir, "receipts");
   private readonly events = new Subject<SaleEvent>();
 
-  constructor(private readonly consoleService: ConsoleService) {}
+  constructor(
+    private readonly consoleService: ConsoleService,
+    private readonly catalog: CatalogService,
+    private readonly combos: ComboService,
+  ) {}
 
   async onModuleInit() {
     await mkdir(this.receiptsDir, { recursive: true });
@@ -72,6 +79,7 @@ export class SalesService implements OnModuleInit {
       storeName: storeName ?? sale.storeName ?? null,
       paidAt: sale.paidAt || new Date().toISOString(),
     };
+    deductSoldStock(next.lines, this.catalog, this.combos);
     this.sales = [next, ...this.sales.filter((row) => row.ticketId !== next.ticketId)];
     await mkdir(this.receiptsDir, { recursive: true });
     await writeFile(this.file, JSON.stringify(this.sales, null, 2), "utf8");

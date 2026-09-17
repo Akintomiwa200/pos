@@ -7,7 +7,7 @@ import { nairaInputFromMinor, parseNairaInput, resolveSellPriceMinor } from "@/l
 import { deleteCatalogItem, type HqCatalogItem } from "@/lib/hq-api";
 import { setProductsActive } from "@/lib/catalog-bulk";
 import { naira } from "@/lib/hq-ops";
-import { productImageSrc } from "@/lib/product-image";
+import { productImageFor } from "@/lib/product-image";
 import { importCatalogRows } from "@/lib/hq-setup";
 import { toast } from "@/lib/toast";
 import { formatStock, inferUnitKind } from "@/lib/units";
@@ -24,6 +24,7 @@ const blank: ItemDraft = {
   subcategory: "",
   sku: "",
   barcode: "",
+  trackBatches: false,
   batchNumber: "",
   brand: "",
   cost: "",
@@ -134,6 +135,7 @@ function toDraft(item: HqCatalogItem): ItemDraft {
     subcategory: item.subcategory ?? "",
     sku: item.sku,
     barcode: item.barcode,
+    trackBatches: item.trackBatches === true,
     batchNumber: item.batchNumber ?? "",
     brand: item.brand ?? "",
     cost: nairaInputFromMinor(item.costMinor ?? 0),
@@ -177,6 +179,11 @@ export function CategoryProductsPage({ slug }: { slug: string }) {
     [rows, slug],
   );
 
+  const itemsById = useMemo(
+    () => new Map((rows || []).map((row) => [row.id, row] as const)),
+    [rows],
+  );
+
   const displayName = useMemo(() => {
     const hit = categories.find((row) => categorySlug(row.name) === slug);
     if (hit) return hit.name;
@@ -191,7 +198,7 @@ export function CategoryProductsPage({ slug }: { slug: string }) {
   const filtered = matching.filter((row) => {
     const query = search.trim().toLowerCase();
     if (!query) return true;
-    return [row.name, row.sku, row.barcode, row.subcategory, row.brand]
+    return [row.name, row.sku, row.productCode, row.barcode, row.subcategory, row.brand]
       .filter(Boolean)
       .some((value) => value!.toLowerCase().includes(query));
   });
@@ -243,6 +250,7 @@ export function CategoryProductsPage({ slug }: { slug: string }) {
           subcategory: draft.subcategory.trim() || "",
           sku: draft.sku.trim() || undefined,
           barcode: draft.barcode.trim() || undefined,
+          trackBatches: draft.trackBatches,
           batchNumber: draft.batchNumber.trim() || "",
           brand: draft.brand.trim() || "",
           costMinor,
@@ -421,13 +429,14 @@ export function CategoryProductsPage({ slug }: { slug: string }) {
                     >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={productImageSrc(item.id, item.image)}
+                      src={productImageFor(item, item.baseId ? itemsById.get(item.baseId) : undefined)}
                       alt=""
                       className="h-10 w-10 shrink-0 rounded-lg object-cover shadow-pos-sm"
                     />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate font-medium text-pos-ink">{item.name}</span>
                       <span className="mt-0.5 block truncate font-mono text-[12px] text-pos-ink-faint">
+                        {item.productCode ? `${item.productCode} · ` : ""}
                         {item.sku}
                         {item.subcategory ? ` · ${item.subcategory}` : ""}
                       </span>

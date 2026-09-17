@@ -21,7 +21,7 @@ import { marginPercent, nairaInputFromMinor, parseNairaInput, resolveSellPriceMi
 import { deleteCatalogItem, listSales, type HqCatalogItem, type HqSale } from "@/lib/hq-api";
 import { setProductsActive } from "@/lib/catalog-bulk";
 import { listMovements, naira, prettyDay, type StockMovement } from "@/lib/hq-ops";
-import { productImageSrc } from "@/lib/product-image";
+import { productImageFor, productImageSrc } from "@/lib/product-image";
 import { importCatalogRows } from "@/lib/hq-setup";
 import { toast } from "@/lib/toast";
 import { formatMovementQty, formatStock, inferUnitKind } from "@/lib/units";
@@ -107,6 +107,7 @@ function toDraft(item: HqCatalogItem): ItemDraft {
     subcategory: item.subcategory ?? "",
     sku: item.sku,
     barcode: item.barcode,
+    trackBatches: item.trackBatches === true,
     batchNumber: item.batchNumber ?? "",
     brand: item.brand ?? "",
     cost: nairaInputFromMinor(item.costMinor ?? 0),
@@ -144,6 +145,11 @@ export function ProductDetailsPage({ id }: { id: string }) {
   const item = useMemo(
     () => items.find((row) => row.id === id) ?? null,
     [items, id],
+  );
+
+  const baseItem = useMemo(
+    () => (item?.baseId ? items.find((row) => row.id === item.baseId) ?? null : null),
+    [items, item?.baseId],
   );
 
   const itemMoves = useMemo(
@@ -246,6 +252,7 @@ export function ProductDetailsPage({ id }: { id: string }) {
           subcategory: draft.subcategory.trim() || "",
           sku: draft.sku.trim() || undefined,
           barcode: draft.barcode.trim() || undefined,
+          trackBatches: draft.trackBatches,
           batchNumber: draft.batchNumber.trim() || "",
           brand: draft.brand.trim() || "",
           costMinor,
@@ -329,7 +336,7 @@ export function ProductDetailsPage({ id }: { id: string }) {
         <div className="flex min-w-0 items-center gap-4">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={productImageSrc(item.id, item.image)}
+            src={productImageFor(item, baseItem)}
             alt=""
             className="h-16 w-16 shrink-0 rounded-2xl object-cover shadow-pos-md"
           />
@@ -338,6 +345,8 @@ export function ProductDetailsPage({ id }: { id: string }) {
               {item.name}
             </h1>
             <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-pos-ink-muted">
+              <span className="font-mono text-pos-ink-faint">{item.productCode || "—"}</span>
+              <span>·</span>
               <span className="font-mono text-pos-ink-faint">{item.sku}</span>
               <span>·</span>
               <span>{item.category}</span>
@@ -443,6 +452,12 @@ export function ProductDetailsPage({ id }: { id: string }) {
             Identifiers & batch
           </p>
           <dl className="space-y-3 text-sm">
+            <div className="flex items-center justify-between gap-3">
+              <dt className="flex items-center gap-2 text-pos-ink-muted">
+                <Tag size={14} /> Product code
+              </dt>
+              <dd className="truncate font-mono text-pos-ink">{item.productCode || "—"}</dd>
+            </div>
             <div className="flex items-center justify-between gap-3">
               <dt className="flex items-center gap-2 text-pos-ink-muted">
                 <Tag size={14} /> SKU

@@ -91,6 +91,7 @@ export type HqOrgSnapshot = {
     receiptShowFooter?: boolean;
     receiptShowDiscount?: boolean;
     receiptShowPoweredBy?: boolean;
+    receiptTemplate?: "classic" | "compact" | "bold" | "minimal";
     receiptTitle?: string;
     receiptAddress?: string;
     receiptEmail?: string;
@@ -160,6 +161,7 @@ export function applyHqOrg(org: HqOrgSnapshot) {
     receiptShowFooter: s.receiptShowFooter ?? current.receiptShowFooter,
     receiptShowDiscount: s.receiptShowDiscount ?? current.receiptShowDiscount,
     receiptShowPoweredBy: s.receiptShowPoweredBy ?? current.receiptShowPoweredBy,
+    receiptTemplate: s.receiptTemplate ?? current.receiptTemplate,
     storefrontEnabled: front?.enabled ?? current.storefrontEnabled,
     storefrontUrl: front?.url || current.storefrontUrl,
     storefrontSyncPrices: front?.syncPrices ?? current.storefrontSyncPrices,

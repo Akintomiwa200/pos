@@ -26,8 +26,8 @@ export class StaffController {
   }
 
   @Post("shift/close")
-  close(@Body() body: { staffId?: string; pin?: string }) {
-    this.staff.unlock(body.pin ?? "");
+  async close(@Body() body: { staffId?: string; pin?: string }) {
+    await this.staff.unlock(body.pin ?? "");
     return this.staff.closeShift(body.staffId ?? "");
   }
 
@@ -37,28 +37,28 @@ export class StaffController {
   }
 
   @Post("shift/print")
-  printShift(@Body() body: { pin?: string; staffId?: string }) {
-    const unlockedBy = this.staff.unlock(body.pin ?? "");
+  async printShift(@Body() body: { pin?: string; staffId?: string }) {
+    const unlockedBy = await this.staff.unlock(body.pin ?? "");
     return {
       unlockedBy,
-      shift: this.staff.currentShift(body.staffId ?? ""),
+      shift: await this.staff.currentShift(body.staffId ?? ""),
       kind: "shift",
     };
   }
 
   @Post("day/print")
-  printDay(@Body() body: { pin?: string }) {
-    const unlockedBy = this.staff.unlock(body.pin ?? "");
+  async printDay(@Body() body: { pin?: string }) {
+    const unlockedBy = await this.staff.unlock(body.pin ?? "");
     return {
       unlockedBy,
-      ...this.staff.dayStatus(),
+      ...(await this.staff.dayStatus()),
       kind: "day",
     };
   }
 
   @Post("day/close")
-  closeDay(@Body() body: { pin?: string }) {
-    const unlockedBy = this.staff.unlock(body.pin ?? "");
-    return { unlockedBy, ...this.staff.closeDay(), kind: "day" };
+  async closeDay(@Body() body: { pin?: string }) {
+    const unlockedBy = await this.staff.unlock(body.pin ?? "");
+    return { unlockedBy, ...(await this.staff.closeDay()), kind: "day" };
   }
 }

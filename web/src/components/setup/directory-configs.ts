@@ -1,6 +1,6 @@
 import type { DirectoryName, DirectoryRecord } from "@/lib/hq-directory";
 
-export type DirectoryFieldKind = "text" | "textarea" | "select" | "number" | "date";
+export type DirectoryFieldKind = "text" | "textarea" | "select" | "number" | "date" | "password";
 
 export type DirectoryField = {
   key: string;
@@ -178,14 +178,15 @@ export const DIRECTORY_CONFIGS: Record<string, DirectoryConfig> = {
     directory: "staff",
     kicker: "Setup · Staff",
     title: "Staff",
-    copy: "Your people — roles, departments and roster status.",
+    copy: "Your people — roles, departments, roster status and till sign-in accounts. Set a till username (plus password and PIN) and the member can open the till.",
     singular: "staff member",
     detail: "/setup/staff",
     secondary: "extra.role",
     columns: [
       { key: "extra.role", label: "Role", badge: true },
       { key: "extra.department", label: "Department", badge: true },
-      { key: "phone", label: "Phone" },
+      { key: "extra.tillRole", label: "Till access", badge: true },
+      { key: "extra.tillUsername", label: "Till user", mono: true },
       { key: "extra.staffCode", label: "ID", mono: true },
     ],
     fields: [
@@ -211,6 +212,20 @@ export const DIRECTORY_CONFIGS: Record<string, DirectoryConfig> = {
         kind: "select",
         options: ["Office", "Counter", "Bakery", "Kitchen", "Store", "Dispatch"],
       },
+      {
+        key: "extra.tillRole",
+        label: "Till access",
+        kind: "select",
+        options: ["Cashier", "Supervisor", "Manager"],
+      },
+      { key: "extra.tillUsername", label: "Till username", placeholder: "e.g. chika", kind: "text" },
+      {
+        key: "extra.tillPassword",
+        label: "Till password",
+        placeholder: "Set or reset the till sign-in password",
+        kind: "password",
+      },
+      { key: "extra.tillPin", label: "Till PIN", placeholder: "4-digit PIN for supervisor actions", kind: "password" },
       { key: "extra.staffCode", label: "Staff ID", placeholder: "e.g. ST-012" },
       { key: "extra.joined", label: "Joined", kind: "date" },
       { key: "phone", label: "Phone" },
@@ -218,12 +233,11 @@ export const DIRECTORY_CONFIGS: Record<string, DirectoryConfig> = {
       { key: "note", label: "Notes", kind: "textarea" },
     ],
     insight: (rows) => ({
-      label: "Departments",
+      label: "On the till",
       value: String(
-        new Set(
-          rows.map((row) => String((row.extra ?? {}).department ?? "")).filter(Boolean),
-        ).size,
+        rows.filter((row) => String((row.extra ?? {}).tillUsername ?? "").trim()).length,
       ),
+      hint: "with till sign-in",
     }),
   },
   manufacturer: {

@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { CatalogItem } from "../../lib/types";
-import { formatMoney } from "../../lib/types";
+import { computeTotals, formatMoney } from "../../lib/types";
 import {
   type StockMode,
   type StoreSettings,
 } from "../../lib/store-settings";
 import { formatReceiptText, type SaleReceipt } from "../../lib/receipt";
+import { ReceiptVisual } from "../../components/receipt/ReceiptVisual";
 import {
   detectPrinters,
   loadPrinterConfig,
@@ -386,14 +387,43 @@ export function LoyaltySettings() {
 
 export function ReceiptSettings() {
   const [settings, patch] = useSettings();
+  const sampleLines = [
+    {
+      id: "sample-coke",
+      itemId: "sample-coke",
+      name: "COKE 50CL",
+      quantity: 1,
+      unitPriceMinor: 30000,
+      image: "",
+      unit: "each",
+      unitLabel: "",
+    },
+    {
+      id: "sample-fab",
+      itemId: "sample-fab",
+      name: "PARLE FAB BISCUIT",
+      quantity: 2,
+      unitPriceMinor: 12500,
+      image: "",
+      unit: "each",
+      unitLabel: "",
+    },
+  ];
+  const sampleTotalMinor = computeTotals(
+    sampleLines.reduce(
+      (sum, line) => sum + line.unitPriceMinor * line.quantity,
+      0,
+    ),
+    settings,
+  ).totalMinor;
   const sale: SaleReceipt = {
-    ticketId: "",
+    ticketId: "T-1001",
     paidAt: new Date().toISOString(),
     tender: "cash",
-    cashierName: "",
-    tillKey: "",
-    customerName: "",
-    customerPhone: "",
+    cashierName: "Tosin",
+    tillKey: "TIL-ILU-001",
+    customerName: "Alex Customer",
+    customerPhone: "08012345678",
     loyaltyNumber: null,
     loyaltyBalanceBefore: null,
     loyaltyPointsRedeemed: null,
@@ -402,21 +432,89 @@ export function ReceiptSettings() {
     giftCardCode: "",
     giftCardChargedMinor: null,
     giftCardBalanceAfterMinor: null,
-    amountTenderedMinor: 0,
-    changeMinor: 0,
+    amountTenderedMinor: 60000,
+    changeMinor: Math.max(0, 60000 - sampleTotalMinor),
     discountMinor: 0,
-    lines: [],
-    totalMinor: 0,
+    lines: sampleLines,
+    totalMinor: sampleTotalMinor,
   };
   const preview = useMemo(() => formatReceiptText(sale, settings), [settings, sale]);
+
+  function sendPreviewToPrinter() {
+    const printer = loadPrinterConfig().receiptPrinter;
+    if (!printer) {
+      toast.error("Assign a receipt printer in Settings → Printing first.");
+      return;
+    }
+    const id = toast.loading(`Printing preview on ${printer}…`);
+    sendToPrinter(
+      printer,
+      preview,
+      settings.receiptPaper === "58mm" ? 58 : 80,
+    )
+      .then(() => toast.success(`Preview printed on ${printer}.`, { id }))
+      .catch((error) =>
+        toast.error(error instanceof Error ? error.message : "Print failed.", { id }),
+      );
+  }
+
+  function openPopupPreview() {
+    const body = preview
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+    const win = window.open("", "receipt-preview", "width=460,height=840");
+    if (!win) {
+      toast.error("Pop-ups are blocked. Allow pop-ups for this site to preview the receipt.");
+      return;
+    }
+    win.document.open();
+    win.document.write(
+      `<!doctype html><html><head><meta charset="utf-8"><title>Receipt preview</title>` +
+        `<style>` +
+        `body{margin:0;background:#e5e7eb;display:flex;justify-content:center;padding:24px 0}` +
+        `pre{width:72mm;background:#fff;padding:16px 14px;margin:0;font:12px/1.45 'Courier New',Courier,monospace;white-space:pre-wrap;box-shadow:0 6px 24px rgba(0,0,0,.14)}` +
+        `</style></head><body><pre>${body}</pre></body></html>`,
+    );
+    win.document.close();
+    win.focus();
+  }
 
   return (
     <>
       <p className="set-lede">
         Header, tax lines, cashier, and footer printed after payment. The preview
-        below is live — it is the same layout the till prints.
+        below is live — it follows the template you pick (classic, compact, bold,
+        minimal) and mirrors the web workspace preview.
       </p>
-      <pre className="set-preview">{preview}</pre>
+      <ReceiptVisual
+        settings={settings}
+        lines={sampleLines}
+        ticketId={sale.ticketId}
+        paidAt={sale.paidAt}
+        cashier={sale.cashierName}
+        till="TIL-ILU-001"
+        tender={sale.tender}
+        customerName={sale.customerName}
+        customerPhone={sale.customerPhone}
+        tenderedMinor={sale.amountTenderedMinor ?? undefined}
+        changeMinor={sale.changeMinor ?? undefined}
+      />
+      <SetCard title="Print preview">
+        <SetRow
+          label="Print the current preview on the receipt printer?"
+          hint="Edge-to-edge on your assigned printer, same as after a sale"
+        >
+          <button type="button" className="set-text-btn" onClick={sendPreviewToPrinter}>
+            Print preview
+          </button>
+        </SetRow>
+        <SetRow label="See it on screen first?" hint="Opens a pop-up window with the slip">
+          <button type="button" className="set-text-btn" onClick={openPopupPreview}>
+            Open popup
+          </button>
+        </SetRow>
+      </SetCard>
       <SetCard title="Header">
         <SetRow label="Store name on the receipt">
           <TextField
@@ -961,6 +1059,12 @@ export function AccountingAdmin() {
   );
 }
 
+const PRINTER_ROLES: { role: keyof PrinterConfig; label: string }[] = [
+  { role: "receiptPrinter", label: "Receipt" },
+  { role: "kitchenPrinter", label: "Kitchen" },
+  { role: "labelPrinter", label: "Label" },
+];
+
 export function PrintingSettings() {
   const [settings, patch] = useSettings();
   const [detected, setDetected] = useState<DetectedPrinter[]>([]);
@@ -969,7 +1073,6 @@ export function PrintingSettings() {
 
   async function scan() {
     setBusy(true);
-    const id = toast.loading("Reading installed printer drivers…");
     try {
       const list = await detectPrinters();
       setDetected(list);
@@ -980,13 +1083,8 @@ export function PrintingSettings() {
         savePrinterConfig(next);
         return next;
       });
-      if (list.length) {
-        toast.success(`${list.length} printer(s) found.`, { id });
-      } else {
-        toast.error("No printers found. Install a driver, then scan again.", { id });
-      }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Scan failed.", { id });
+      toast.error(error instanceof Error ? error.message : "Scan failed.");
     } finally {
       setBusy(false);
     }
@@ -994,10 +1092,21 @@ export function PrintingSettings() {
 
   useEffect(() => {
     void scan();
+    const timer = window.setInterval(() => void scan(), 10_000);
+    return () => window.clearInterval(timer);
   }, []);
 
   function assign(role: keyof PrinterConfig, name: string) {
     const next = { ...config, [role]: name || null };
+    setConfig(next);
+    savePrinterConfig(next);
+  }
+
+  function unassign(name: string) {
+    const next = { ...config };
+    for (const { role } of PRINTER_ROLES) {
+      if (next[role] === name) next[role] = null;
+    }
     setConfig(next);
     savePrinterConfig(next);
   }
@@ -1014,6 +1123,7 @@ export function PrintingSettings() {
       await sendToPrinter(
         name,
         `POS TEST PRINT\n${settings.storeName}\n${settings.storeAddress}\nPaper ${settings.receiptPaper}\nPrinter OK\n`,
+        settings.receiptPaper === "58mm" ? 58 : 80,
       );
       toast.success(`Printed on ${name}.`, { id });
     } catch (error) {
@@ -1030,12 +1140,13 @@ export function PrintingSettings() {
       label: printer.offline ? `${printer.name} (offline)` : printer.name,
     })),
   ];
+  const onlineCount = detected.filter((item) => !item.offline).length;
 
   return (
     <>
       <p className="set-lede">
         Assign Windows printers and how many copies leave the till after a sale.
-        A test print uses the live store name and paper width.
+        The list below refreshes live — connect a printer and it appears here.
       </p>
       <LiveNote>
         Receipt printer: <strong>{config.receiptPrinter ?? "not assigned"}</strong>
@@ -1043,6 +1154,7 @@ export function PrintingSettings() {
           ? ` · auto-prints ${settings.receiptCopies} cop${settings.receiptCopies === 1 ? "y" : "ies"} after payment`
           : " · cashier prints from Paid"}
         {settings.openCashDrawer ? " · cash drawer pulse with the receipt" : ""}.
+        {" "}{onlineCount} of {detected.length} printer{detected.length === 1 ? "" : "s"} online.
       </LiveNote>
       <SetCard title="After payment">
         <SetRow label="Auto-print a receipt after payment?">
@@ -1086,6 +1198,65 @@ export function PrintingSettings() {
           />
         </SetRow>
       </SetCard>
+      <SetCard title="Live printers">
+        {detected.length === 0 ? (
+          <SetRow label="No printers detected">
+            <span className="set-muted">
+              Install a driver, then press Scan again.
+            </span>
+          </SetRow>
+        ) : (
+          detected.map((printer) => {
+            const usedBy = PRINTER_ROLES.filter(
+              ({ role }) => config[role] === printer.name,
+            ).map(({ label }) => label);
+            return (
+              <SetRow
+                key={printer.name}
+                label={printer.name}
+                hint={`${printer.driver || "driver"} · ${printer.port}`}
+              >
+                <span className="printer-actions">
+                  <span
+                    className={
+                      printer.offline
+                        ? "printer-badge offline"
+                        : "printer-badge"
+                    }
+                  >
+                    {printer.offline
+                      ? "offline"
+                      : printer.isDefault
+                        ? "default"
+                        : "online"}
+                  </span>
+                  {usedBy.length > 0 && (
+                    <button
+                      type="button"
+                      className="set-text-btn set-danger"
+                      onClick={() => unassign(printer.name)}
+                    >
+                      Unassign ({usedBy.join("/")})
+                    </button>
+                  )}
+                  {PRINTER_ROLES.map(({ role, label }) =>
+                    config[role] === printer.name ? null : (
+                      <button
+                        key={role}
+                        type="button"
+                        className="set-text-btn"
+                        onClick={() => assign(role, printer.name)}
+                      >
+                        Use as {label}
+                      </button>
+                    ),
+                  )}
+                </span>
+              </SetRow>
+            );
+          })
+        )}
+      </SetCard>
       <SetCard title="Hardware">
         <SetRow label="Receipt printer">
           <SelectField
@@ -1115,7 +1286,7 @@ export function PrintingSettings() {
             onClick={() => void scan()}
             disabled={busy}
           >
-            {busy ? "Scanning…" : "Scan"}
+            {busy ? "Scanning…" : "Scan again"}
           </button>
         </SetRow>
         <SetRow label="Send a test print to the receipt printer">

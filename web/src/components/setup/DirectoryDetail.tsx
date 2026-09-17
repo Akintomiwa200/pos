@@ -130,6 +130,20 @@ function FieldControl({
       </Field>
     );
   }
+  if (field.kind === "password") {
+    return (
+      <Field key={field.key} label={field.label}>
+        <input
+          className={fieldClass}
+          type="password"
+          autoComplete="new-password"
+          placeholder={field.placeholder}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      </Field>
+    );
+  }
   return (
     <Field key={field.key} label={field.label}>
       <div className="flex items-center gap-2">
@@ -206,9 +220,14 @@ function DetailShell({
   const editing: Partial<DirectoryRecord> | DirectoryRecord = draft ?? row;
 
   const detailKeys = Array.from(new Set(["name", ...config.fields.map((field) => field.key)]));
+  const passwordKeys = new Set(
+    config.fields.filter((field) => field.kind === "password").map((field) => field.key),
+  );
   const hairline = detailKeys
     .map((key) => ({ key, label: labels[key] ?? labelize(key), value: cellValue(row, key) }))
-    .filter((entry) => entry.value || entry.key === "extra.joined")
+    .filter(
+      (entry) => !passwordKeys.has(entry.key) && (entry.value || entry.key === "extra.joined"),
+    )
     .slice(0, 6);
 
   async function onSave() {

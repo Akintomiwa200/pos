@@ -84,6 +84,7 @@ export type StoreSettings = {
   receiptShowDiscount: boolean;
   receiptShowPoweredBy: boolean;
   receiptPaper: ReceiptPaper;
+  receiptTemplate: "classic" | "compact" | "bold" | "minimal";
   storeName: string;
   storeAddress: string;
   storePhone: string;
@@ -203,6 +204,7 @@ export function defaultStoreSettings(): StoreSettings {
     receiptShowDiscount: true,
     receiptShowPoweredBy: true,
     receiptPaper: "80mm",
+    receiptTemplate: "classic",
     storeName: "",
     storeAddress: "",
     storePhone: "",

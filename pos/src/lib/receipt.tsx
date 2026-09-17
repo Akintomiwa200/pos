@@ -65,10 +65,11 @@ export function formatReceiptText(
   const showTicket = settings.receiptShowTicketNumber !== false;
   const showDate = settings.receiptShowDate !== false;
 
+  const isMinimal = settings.receiptTemplate === "minimal";
   const showTitle = settings.receiptShowTitle !== false;
-  const showAddress = settings.receiptShowAddress !== false;
-  const showEmail = settings.receiptShowEmail !== false;
-  const showPhone = settings.receiptShowPhone !== false;
+  const showAddress = !isMinimal && settings.receiptShowAddress !== false;
+  const showEmail = !isMinimal && settings.receiptShowEmail !== false;
+  const showPhone = !isMinimal && settings.receiptShowPhone !== false;
   const showHeader = settings.receiptShowHeader !== false;
   const showFooter = settings.receiptShowFooter !== false;
   const showDiscount = settings.receiptShowDiscount !== false;
@@ -196,9 +197,10 @@ export async function printReceipt(sale: SaleReceipt) {
   }
   const settings = loadStoreSettings();
   const copies = Math.max(1, settings.receiptCopies);
+  const width = settings.receiptPaper === "58mm" ? 58 : 80;
   const text = formatReceiptText(sale, settings);
   for (let i = 0; i < copies; i += 1) {
-    await sendToPrinter(config.receiptPrinter, text);
+    await sendToPrinter(config.receiptPrinter, text, width);
   }
   return config.receiptPrinter;
 }

@@ -21,6 +21,7 @@ import { downloadText, parseCsv, toCsv } from "../../lib/csv";
 import { loadCustomers, saveCustomers, type CustomerRecord } from "../../lib/customers";
 import { loadLocalSales } from "../../lib/sales";
 import { loadPrinterConfig } from "../../lib/printers";
+import { resetTerminalState } from "../../lib/reset";
 import {
   loadBranches,
   loadTills,
@@ -63,7 +64,8 @@ type OtherPage =
   | "invoices"
   | "hold"
   | "refunds"
-  | "accounting";
+  | "accounting"
+  | "reset";
 
 const OTHER_TILES: { id: OtherPage; label: string; icon: typeof Store }[] = [
   { id: "company", label: "Company", icon: Landmark },
@@ -78,6 +80,7 @@ const OTHER_TILES: { id: OtherPage; label: string; icon: typeof Store }[] = [
   { id: "hold", label: "On hold", icon: Pause },
   { id: "refunds", label: "Refunds", icon: RotateCcw },
   { id: "accounting", label: "Accounting", icon: BookOpen },
+  { id: "reset", label: "Reset", icon: RotateCcw },
   { id: "data", label: "Data", icon: Database },
   { id: "import", label: "Import", icon: Upload },
   { id: "export", label: "Export", icon: Download },
@@ -144,6 +147,7 @@ export function OthersSettings({ onOpenTill, items, onUpdateItem }: Props) {
       {page === "hold" && <HoldAdmin />}
       {page === "refunds" && <RefundsAdmin />}
       {page === "accounting" && <AccountingAdmin />}
+      {page === "reset" && <ResetTerminalSettings />}
     </>
   );
 }
@@ -677,6 +681,60 @@ function DataSettings({ items }: { items: CatalogItem[] }) {
           <span className="set-muted">
             {settings.invoicePrefix}-{String(settings.nextInvoiceNumber).padStart(4, "0")}
           </span>
+        </SetRow>
+      </SetCard>
+    </>
+  );
+}
+
+function ResetTerminalSettings() {
+  const [arm, setArm] = useState(false);
+  return (
+    <>
+      <p className="set-lede">
+        Wipe this device back to its fresh state. The till key, branches, store
+        settings, local sales, customers, printer config, and any other till
+        data are removed and the register restarts at activation.
+      </p>
+      <LiveNote>
+        {arm
+          ? "This cannot be undone. A till must be assigned again before anyone can sign in."
+          : "Sales not yet synced to HQ are lost on reset."}
+      </LiveNote>
+      <SetCard title="Reset this terminal">
+        <SetRow
+          label="Clear everything on this device?"
+          hint="Removes every pos.* storage key, then reloads"
+        >
+          {arm ? (
+            <span className="till-key-actions">
+              <button
+                type="button"
+                className="set-text-btn set-danger"
+                onClick={() => {
+                  resetTerminalState();
+                  window.location.reload();
+                }}
+              >
+                Yes, reset this terminal
+              </button>
+              <button
+                type="button"
+                className="set-text-btn"
+                onClick={() => setArm(false)}
+              >
+                Cancel
+              </button>
+            </span>
+          ) : (
+            <button
+              type="button"
+              className="set-text-btn set-danger"
+              onClick={() => setArm(true)}
+            >
+              Reset terminal
+            </button>
+          )}
         </SetRow>
       </SetCard>
     </>

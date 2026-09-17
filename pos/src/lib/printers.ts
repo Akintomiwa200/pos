@@ -39,17 +39,27 @@ export function savePrinterConfig(config: PrinterConfig) {
 }
 
 export async function detectPrinters(): Promise<DetectedPrinter[]> {
-  const res = await fetch(apiUrl("/api/hardware/printers"));
+  let res: Response;
+  try {
+    res = await fetch(apiUrl("/api/hardware/printers"));
+  } catch {
+    throw new Error("Backend offline. Start the POS server, then scan again.");
+  }
   if (!res.ok) throw new Error("Could not read installed printers.");
   return res.json();
 }
 
-export async function sendToPrinter(printerName: string, content: string) {
-  const res = await fetch(apiUrl("/api/hardware/print"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ printerName, content }),
-  });
+export async function sendToPrinter(printerName: string, content: string, widthMm?: number) {
+  let res: Response;
+  try {
+    res = await fetch(apiUrl("/api/hardware/print"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ printerName, content, widthMm }),
+    });
+  } catch {
+    throw new Error("Backend offline. Receipt will print when the server is back.");
+  }
   const body = (await res.json().catch(() => ({}))) as { error?: string };
   if (!res.ok) {
     throw new Error(body.error ?? "Print job failed.");

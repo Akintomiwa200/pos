@@ -43,11 +43,12 @@ export function buildReceiptPreviewText(
   const when = new Date();
   const loyaltyAfter = 0;
 
+  const isMinimal = draft.receiptTemplate === "minimal";
   const rows: string[] = [
     ...(draft.receiptShowTitle !== false && title ? [title] : []),
-    ...(draft.receiptShowAddress !== false && address ? [address] : []),
-    ...(draft.receiptShowEmail !== false && email ? [email] : []),
-    ...(draft.receiptShowPhone !== false && phone ? [phone] : []),
+    ...(!isMinimal && draft.receiptShowAddress !== false && address ? [address] : []),
+    ...(!isMinimal && draft.receiptShowEmail !== false && email ? [email] : []),
+    ...(!isMinimal && draft.receiptShowPhone !== false && phone ? [phone] : []),
     ...(draft.receiptShowHeader !== false && draft.receiptHeader
       ? [draft.receiptHeader]
       : []),

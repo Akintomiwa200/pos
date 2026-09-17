@@ -109,31 +109,77 @@ export class HardwareService {
     }
   }
 
-  async print(printerName: string, content: string) {
+  async print(printerName: string, content: string, widthMm = 80) {
     if (process.platform !== "win32") {
       throw new Error("Printing is available on the Windows POS terminal.");
     }
-    const file = join(tmpdir(), `pos-receipt-${Date.now()}.txt`);
-    await writeFile(file, content.replace(/\n/g, "\r\n"), "utf8");
+    const widthIn = Math.round((widthMm / 25.4) * 100);
+    const text = content.replace(/\r\n/g, "\n");
+    const lines = text.split("\n");
+    const longest = Math.max(1, ...lines.map((line) => line.length));
+    const availablePt = (widthMm / 25.4) * 72;
+    const fontSize = Math.min(
+      20,
+      Math.max(7, Math.floor((availablePt / (longest * 0.6)) * 100) / 100),
+    );
+    const lineHeightPt = fontSize * 1.25;
+    const heightIn = Math.max(600, Math.ceil((lines.length * lineHeightPt * 100) / 72));
+
     const escapedPrinter = printerName.replace(/'/g, "''");
-    const escapedFile = file.replace(/'/g, "''");
+    const script = [
+      "Add-Type -AssemblyName System.Drawing",
+      `$printer = '${escapedPrinter}'`,
+      `$script:fontPt = ${fontSize}`,
+      `$script:widthPt = ${Math.round(availablePt * 100) / 100}`,
+      `$script:heightPt = ${Math.round(lines.length * lineHeightPt * 100) / 100}`,
+      `$script:widthIn = ${widthIn}`,
+      `$script:heightIn = ${heightIn}`,
+      `$script:text = @'`,
+      text,
+      `'@`,
+      `$font = New-Object System.Drawing.Font('Courier New', [single]$script:fontPt, [System.Drawing.FontStyle]::Regular, [System.Drawing.GraphicsUnit]::Point)`,
+      `$script:font = $font`,
+      `$paper = New-Object System.Drawing.Printing.PaperSize('Receipt', $script:widthIn, $script:heightIn)`,
+      `$paper.RawKind = 9`,
+      `$doc = New-Object System.Drawing.Printing.PrintDocument`,
+      `$doc.PrinterSettings.PrinterName = $printer`,
+      `$doc.DefaultPageSettings.PaperSize = $paper`,
+      `$doc.DefaultPageSettings.PaperSize.RawKind = 9`,
+      `$doc.DefaultPageSettings.Margins = New-Object System.Drawing.Printing.Margins(0, 0, 0, 0)`,
+      `$doc.OriginAtMargins = $false`,
+      `$null = $doc.add_PrintPage({`,
+      `  param($sender, $e)`,
+      `  $e.Graphics.PageUnit = [System.Drawing.GraphicsUnit]::Point`,
+      `  $rect = New-Object System.Drawing.RectangleF(0, 0, [single]$script:widthPt, [single]$script:heightPt)`,
+      `  $e.Graphics.DrawString($script:text, $script:font, [System.Drawing.Brushes]::Black, $rect)`,
+      `})`,
+      `try {`,
+      `  $doc.Print()`,
+      `} finally {`,
+      `  $doc.Dispose()`,
+      `  $font.Dispose()`,
+      `}`,
+      `Write-Output "printed"`,
+    ];
+
+    const file = join(tmpdir(), `pos-receipt-${Date.now()}.ps1`);
+    await writeFile(file, script.join("\r\n"), "utf8");
     try {
-      await execFileAsync(
+      const { stdout } = await execFileAsync(
         "powershell.exe",
-        [
-          "-NoProfile",
-          "-NonInteractive",
-          "-ExecutionPolicy",
-          "Bypass",
-          "-Command",
-          `Get-Content -LiteralPath '${escapedFile}' | Out-Printer -Name '${escapedPrinter}'`,
-        ],
-        { windowsHide: true, timeout: 20000 },
+        ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", file],
+        { windowsHide: true, timeout: 60000 },
       );
+      if (!/printed/.test(stdout)) {
+        throw new Error(`The printer did not confirm the job on "${printerName}".`);
+      }
+      return { ok: true, printer: printerName, paper: `${widthMm}mm` };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Print failed";
+      throw new Error(`Receipt print failed on "${printerName}". ${message}`);
     } finally {
       await unlink(file).catch(() => undefined);
     }
-    return { ok: true, printer: printerName };
   }
 
   async loadLabelPrinterConfig(): Promise<LabelPrinterConfig> {

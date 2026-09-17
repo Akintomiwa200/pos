@@ -839,6 +839,13 @@ export default function App() {
     if (activeTicketId) {
       patchTicket(activeTicketId, { status: "dispatched", lines: cart });
     }
+    setCart([]);
+    setTender("cash");
+    setSplitCount(2);
+    setSplitTenders(["cash", "card"]);
+    setSplitPaid([false, false]);
+    setLoyaltyOpen(false);
+    setLoyaltyNumber(null);
     setPaying(false);
   }
 
@@ -1124,8 +1131,8 @@ export default function App() {
                       ? "New ticket"
                       : "Walk-in"
           }
-          lines={screen === "paid" && receipt ? receipt.lines : cart}
-          onQty={changeQty}
+lines={cart}
+            onQty={changeQty}
           onPrice={changePrice}
           onContinue={continueAction}
           continueLabel={continueLabel}

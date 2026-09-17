@@ -22,12 +22,14 @@ export class HardwareController {
   }
 
   @Post("print")
-  async print(@Body() body: { printerName?: string; content?: string }) {
+  async print(@Body() body: { printerName?: string; content?: string; widthMm?: number }) {
     if (!body.printerName || !body.content) {
       throw new BadRequestException("printerName and content are required");
     }
+    const width = Number(body.widthMm);
+    const paper = Number.isFinite(width) && width >= 32 && width <= 120 ? width : 80;
     try {
-      return await this.hardware.print(body.printerName, body.content);
+      return await this.hardware.print(body.printerName, body.content, paper);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Print failed";
       throw new BadRequestException(message);

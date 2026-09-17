@@ -72,6 +72,7 @@ const VALUE_TONES: Record<string, string> = {
   "stock controller": "teal",
   rider: "orange",
   cleaner: "stone",
+  manager: "rose",
   cash: "emerald",
   card: "indigo",
   transfer: "sky",
@@ -367,6 +368,20 @@ export function DirectoryManager({
                 <input
                   type="date"
                   className={fieldClass}
+                  value={value}
+                  onChange={(event) => setDraft(setField(draft, field.key, event.target.value))}
+                />
+              </Field>
+            );
+          }
+          if (field.kind === "password") {
+            return (
+              <Field key={field.key} label={field.label}>
+                <input
+                  className={fieldClass}
+                  type="password"
+                  autoComplete="new-password"
+                  placeholder={field.placeholder}
                   value={value}
                   onChange={(event) => setDraft(setField(draft, field.key, event.target.value))}
                 />

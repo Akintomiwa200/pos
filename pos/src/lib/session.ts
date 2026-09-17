@@ -101,6 +101,7 @@ export async function printReport(content: string) {
   if (!printer) {
     return { printed: false, printer: null };
   }
-  await sendToPrinter(printer, content);
+  const width = loadStoreSettings().receiptPaper === "58mm" ? 58 : 80;
+  await sendToPrinter(printer, content, width);
   return { printed: true, printer };
 }

@@ -18,6 +18,8 @@ const SAVE_COPY = {
   queued: "HQ unreachable — receipt is safe on this till and will retry.",
 } as const;
 
+const autoPrintedTickets = new Set<string>();
+
 export function PaidScreen({ sale, saveState = "saved", onNewOrder }: Props) {
   const settings = useStoreSettings();
   const [status, setStatus] = useState<string>(SAVE_COPY[saveState]);
@@ -46,10 +48,11 @@ export function PaidScreen({ sale, saveState = "saved", onNewOrder }: Props) {
   }
 
   useEffect(() => {
-    if (settings.autoPrintReceipt) {
+    if (settings.autoPrintReceipt && !autoPrintedTickets.has(sale.ticketId)) {
+      autoPrintedTickets.add(sale.ticketId);
       void handlePrint();
     }
-    // print once when this ticket is shown
+    // print once per ticket even under StrictMode re-mounts
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sale.ticketId]);
 

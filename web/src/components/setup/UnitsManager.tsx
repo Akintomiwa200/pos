@@ -1,24 +1,29 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Plus } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { inferUnitKind, unitKindLabel, type UnitKind } from "@/lib/units";
 import {
   deleteUnit,
-  getTaxonomyUsage,
-  listUnits,
-  productCount,
   renameTaxonomy,
   saveUnit,
   unitCode,
   unitKindFromRecord,
   type TaxonomyRecord,
-  type TaxonomyUsage,
 } from "@/lib/hq-taxonomy";
+import { useLiveCatalog } from "@/lib/live-catalog";
+import { useLiveDirectoryRows } from "@/lib/live-directory-rows";
 import { ManagerSkeleton } from "../Skeleton";
 import { SlideOver } from "../SlideOver";
-import { DataTable, Field, PrimaryButton, ToggleField, fieldClass } from "./SetupChrome";
+import {
+  DataTable,
+  Field,
+  LiveBadge,
+  PrimaryButton,
+  ToggleField,
+  fieldClass,
+} from "./SetupChrome";
 
 const KINDS: UnitKind[] = ["count", "weight", "volume", "composite"];
 
@@ -28,27 +33,17 @@ const blank: Draft = { name: "", code: "", kind: "count", active: true };
 const compositeBlank: Draft = { name: "", code: "", kind: "composite", active: true };
 
 export function UnitsManager({ kindFilter }: { kindFilter?: UnitKind }) {
-  const [rows, setRows] = useState<TaxonomyRecord[]>([]);
-  const [usage, setUsage] = useState<TaxonomyUsage | null>(null);
+  const { items: catalog } = useLiveCatalog();
+  const { rows, live, ready } = useLiveDirectoryRows("units");
   const [draft, setDraft] = useState<Draft>(blank);
   const [originalCode, setOriginalCode] = useState("");
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [ready, setReady] = useState(false);
 
-  async function load() {
-    const [units, taxonomy] = await Promise.all([listUnits(), getTaxonomyUsage()]);
-    setRows(units);
-    setUsage(taxonomy);
-    setReady(true);
+  function unitCount(code: string) {
+    const needle = code.toLowerCase();
+    return catalog.filter((item) => (item.unit || "").toLowerCase() === needle).length;
   }
-
-  useEffect(() => {
-    load().catch((err) => {
-      toast.error(err, "Could not load units.");
-      setReady(true);
-    });
-  }, []);
 
   const sorted = useMemo(
     () =>
@@ -62,11 +57,9 @@ export function UnitsManager({ kindFilter }: { kindFilter?: UnitKind }) {
         })
         .sort(
           (a, b) =>
-            productCount(usage, "units", unitCode(b)) -
-              productCount(usage, "units", unitCode(a)) ||
-            a.name.localeCompare(b.name),
+            unitCount(unitCode(b)) - unitCount(unitCode(a)) || a.name.localeCompare(b.name),
         ),
-    [rows, usage, kindFilter],
+    [rows, kindFilter, catalog],
   );
 
   const isComposite = kindFilter === "composite";
@@ -108,7 +101,6 @@ export function UnitsManager({ kindFilter }: { kindFilter?: UnitKind }) {
       if (draft.id && originalCode && originalCode !== code) {
         await renameTaxonomy("unit", originalCode, code);
       }
-      await load();
       setOpen(false);
       toast.success(draft.id ? "Unit updated." : "Unit created.");
     } catch (err) {
@@ -131,10 +123,13 @@ export function UnitsManager({ kindFilter }: { kindFilter?: UnitKind }) {
               : `Count, weight and volume · ${sorted.length} units · ${activeCount} active`}
           </p>
         </div>
-        <PrimaryButton onClick={openNew}>
-          <Plus size={16} strokeWidth={2.2} />
-          {isComposite ? "New pack unit" : "New unit"}
-        </PrimaryButton>
+        <div className="flex items-center gap-2">
+          <LiveBadge live={live} />
+          <PrimaryButton onClick={openNew}>
+            <Plus size={16} strokeWidth={2.2} />
+            {isComposite ? "New pack unit" : "New unit"}
+          </PrimaryButton>
+        </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
@@ -191,7 +186,7 @@ export function UnitsManager({ kindFilter }: { kindFilter?: UnitKind }) {
                   <td className="px-4 py-3.5 text-pos-ink-muted">{unitKindLabel(kind)}</td>
                 ) : null}
                 <td className="px-4 py-3.5 tabular-nums text-pos-ink">
-                  {productCount(usage, "units", code)}
+                  {unitCount(code)}
                 </td>
                 <td className="px-4 py-3.5">
                   <span
@@ -235,14 +230,13 @@ export function UnitsManager({ kindFilter }: { kindFilter?: UnitKind }) {
                 className="rounded-full bg-pos-surface-muted px-4 py-2.5 text-sm text-pos-ink"
                 disabled={busy}
                 onClick={async () => {
-                  const count = productCount(usage, "units", draft.code);
+                  const count = unitCount(draft.code);
                   if (count > 0) {
                     toast.error(`Reassign ${count} product(s) before deleting this unit.`);
                     return;
                   }
                   try {
                     await deleteUnit(draft.id!);
-                    await load();
                     setOpen(false);
                     toast.success("Unit deleted.");
                   } catch (err) {

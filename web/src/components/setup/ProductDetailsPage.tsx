@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import {
+  Archive,
+  ArchiveRestore,
   ArrowLeft,
   Barcode,
   Boxes,
@@ -17,20 +19,15 @@ import {
 } from "lucide-react";
 import { marginPercent, nairaInputFromMinor, parseNairaInput, resolveSellPriceMinor } from "@/lib/catalog";
 import { deleteCatalogItem, listSales, type HqCatalogItem, type HqSale } from "@/lib/hq-api";
+import { setProductsActive } from "@/lib/catalog-bulk";
 import { listMovements, naira, prettyDay, type StockMovement } from "@/lib/hq-ops";
 import { productImageSrc } from "@/lib/product-image";
 import { importCatalogRows } from "@/lib/hq-setup";
 import { toast } from "@/lib/toast";
 import { formatMovementQty, formatStock, inferUnitKind } from "@/lib/units";
 import { useLiveCatalog } from "@/lib/live-catalog";
-import {
-  listCategories,
-  listSubcategories,
-  listUnits,
-  unitCode,
-  type TaxonomyRecord,
-} from "@/lib/hq-taxonomy";
-import { listDirectory } from "@/lib/hq-directory";
+import { useLiveDirectoryRows } from "@/lib/live-directory-rows";
+import { unitCode } from "@/lib/hq-taxonomy";
 import { ManagerSkeleton } from "../Skeleton";
 import { PrimaryButton } from "./SetupChrome";
 import { ItemFormSheet, type ItemDraft } from "./ItemFormSheet";
@@ -129,10 +126,10 @@ function toDraft(item: HqCatalogItem): ItemDraft {
 
 export function ProductDetailsPage({ id }: { id: string }) {
   const { items, removeItem, live } = useLiveCatalog();
-  const [categories, setCategories] = useState<TaxonomyRecord[]>([]);
-  const [subcategories, setSubcategories] = useState<TaxonomyRecord[]>([]);
-  const [units, setUnits] = useState<TaxonomyRecord[]>([]);
-  const [brands, setBrands] = useState<TaxonomyRecord[]>([]);
+  const { rows: categories, ready: catsReady } = useLiveDirectoryRows("item-groups");
+  const { rows: subcategories, ready: subsReady } = useLiveDirectoryRows("item-subgroups");
+  const { rows: units, ready: unitReady } = useLiveDirectoryRows("units");
+  const { rows: brands, ready: brandReady } = useLiveDirectoryRows("manufacturers");
   const [draft, setDraft] = useState<ItemDraft | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [editOpen, setEditOpen] = useState(false);
@@ -141,6 +138,8 @@ export function ProductDetailsPage({ id }: { id: string }) {
   const [ready, setReady] = useState(false);
   const [movements, setMovements] = useState<StockMovement[]>([]);
   const [sales, setSales] = useState<HqSale[]>([]);
+
+  const optionsReady = catsReady && subsReady && unitReady && brandReady;
 
   const item = useMemo(
     () => items.find((row) => row.id === id) ?? null,
@@ -189,18 +188,8 @@ export function ProductDetailsPage({ id }: { id: string }) {
   }, [sales, id, item?.name]);
 
   useEffect(() => {
-    Promise.all([listCategories(), listSubcategories(), listUnits(), listDirectory("manufacturers")])
-      .then(([cats, subs, unitRows, brandRows]) => {
-        setCategories(cats);
-        setSubcategories(subs);
-        setUnits(unitRows);
-        setBrands(brandRows);
-      })
-      .catch((err) => {
-        toast.error(err, "Could not load product options.");
-      })
-      .finally(() => setReady(true));
-  }, []);
+    if (optionsReady) setReady(true);
+  }, [optionsReady]);
 
   useEffect(() => {
     listMovements(id)
@@ -286,6 +275,20 @@ export function ProductDetailsPage({ id }: { id: string }) {
       toast.success("Product updated.");
     } catch (err) {
       toast.error(err, "Could not save this product.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleActive() {
+    if (!item) return;
+    const archived = item.active === false;
+    setBusy(true);
+    try {
+      await setProductsActive([{ id: item.id, name: item.name }], archived);
+      toast.success(archived ? "Product restored." : "Product archived.");
+    } catch (err) {
+      toast.error(err, "Could not update this product.");
     } finally {
       setBusy(false);
     }
@@ -585,7 +588,16 @@ export function ProductDetailsPage({ id }: { id: string }) {
       </section>
 
       {item ? (
-        <div className="flex justify-end">
+        <div className="flex flex-wrap justify-end gap-2">
+          <button
+            type="button"
+            className="inline-flex items-center gap-2 rounded-full bg-pos-surface px-4 py-2.5 text-sm font-medium text-pos-ink shadow-pos-sm transition hover:bg-pos-surface-muted disabled:opacity-60"
+            disabled={busy}
+            onClick={() => void toggleActive()}
+          >
+            {item.active === false ? <ArchiveRestore size={15} /> : <Archive size={15} />}
+            {item.active === false ? "Restore product" : "Archive product"}
+          </button>
           <button
             type="button"
             className="inline-flex items-center gap-2 rounded-full bg-pos-surface px-4 py-2.5 text-sm font-medium text-pos-danger shadow-pos-sm transition hover:bg-red-500/10"

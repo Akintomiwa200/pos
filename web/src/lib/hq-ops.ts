@@ -75,6 +75,7 @@ export type StockMovement = {
   countedOnHand?: number;
   reason?: string;
   staff?: string;
+  runId?: string;
 };
 
 export async function listStockLevels(lowOnly = false): Promise<StockLevel[]> {

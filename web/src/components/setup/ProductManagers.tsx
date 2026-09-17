@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Plus } from "lucide-react";
 import { toast } from "@/lib/toast";
-import { listCatalog, type HqCatalogItem } from "@/lib/hq-api";
+import { listCatalog } from "@/lib/hq-api";
 import { importCatalogRows, exportSetup } from "@/lib/hq-setup";
 import { naira } from "@/lib/hq-ops";
 import { marginPercent, parseNairaInput } from "@/lib/catalog";
@@ -14,11 +14,14 @@ import {
   saveDirectory,
   type DirectoryRecord,
 } from "@/lib/hq-directory";
+import { useLiveCatalog } from "@/lib/live-catalog";
+import { useLiveDirectoryRows } from "@/lib/live-directory-rows";
 import { ManagerSkeleton } from "../Skeleton";
 import { SlideOver } from "../SlideOver";
 import {
   DataTable,
   Field,
+  LiveBadge,
   PrimaryButton,
   SetupHeader,
   SetupStat,
@@ -36,24 +39,19 @@ function daysUntil(iso?: string) {
 }
 
 export function BrandsManager() {
-  const [rows, setRows] = useState<DirectoryRecord[]>([]);
+  const { rows, live, ready, setRows } = useLiveDirectoryRows("manufacturers");
   const [draft, setDraft] = useState<Partial<DirectoryRecord>>({ name: "", note: "", active: true });
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [ready, setReady] = useState(false);
   const [search, setSearch] = useState("");
 
-  async function load() {
-    setRows(await listDirectory("manufacturers"));
-    setReady(true);
-  }
-
-  useEffect(() => {
-    load().catch((err) => {
+  async function refresh() {
+    try {
+      setRows(await listDirectory("manufacturers"));
+    } catch (err) {
       toast.error(err, "Could not load brands.");
-      setReady(true);
-    });
-  }, []);
+    }
+  }
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -71,19 +69,22 @@ export function BrandsManager() {
       <SetupHeader
         kicker={KICKER}
         title="Brands"
-        copy="Manufacturers and brand names attached to products — Nestlé, Chi, Indomie, and your own labels."
+        copy="Manufacturers and brand names attached to products — Nestlé, Chi, Indomie, and your own labels. Updates in real-time."
         action={
-          <PrimaryButton
-            onClick={() => {
-              setDraft({ name: "", note: "", active: true });
-              setOpen(true);
-            }}
-          >
-            <span className="inline-flex items-center gap-2">
-              <Plus size={16} />
-              New brand
-            </span>
-          </PrimaryButton>
+          <div className="flex items-center gap-2">
+            <LiveBadge live={live} />
+            <PrimaryButton
+              onClick={() => {
+                setDraft({ name: "", note: "", active: true });
+                setOpen(true);
+              }}
+            >
+              <span className="inline-flex items-center gap-2">
+                <Plus size={16} />
+                New brand
+              </span>
+            </PrimaryButton>
+          </div>
         }
       />
       <div className="mb-6 grid gap-3 sm:grid-cols-2">
@@ -137,7 +138,7 @@ export function BrandsManager() {
                 onClick={async () => {
                   try {
                     await deleteDirectory("manufacturers", draft.id!);
-                    await load();
+                    await refresh();
                     setOpen(false);
                     toast.success("Brand deleted.");
                   } catch (err) {
@@ -159,7 +160,7 @@ export function BrandsManager() {
                 setBusy(true);
                 try {
                   await saveDirectory("manufacturers", draft);
-                  await load();
+                  await refresh();
                   setOpen(false);
                   toast.success("Brand saved.");
                 } catch (err) {
@@ -200,35 +201,36 @@ export function BrandsManager() {
 }
 
 export function PriceListManager() {
-  const [items, setItems] = useState<HqCatalogItem[]>([]);
+  const { items, setItems, live } = useLiveCatalog();
   const [edits, setEdits] = useState<Record<string, { cost: string; price: string }>>({});
   const [search, setSearch] = useState("");
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
 
-  async function load() {
-    const rows = await listCatalog();
-    setItems(rows);
-    setEdits(
-      Object.fromEntries(
-        rows.map((row) => [
-          row.id,
-          {
-            cost: (row.costMinor / 100).toFixed(2),
-            price: (row.priceMinor / 100).toFixed(2),
-          },
-        ]),
-      ),
-    );
-    setReady(true);
-  }
+  useEffect(() => {
+    listCatalog()
+      .then((rows) => setItems(rows))
+      .catch((err) => toast.error(err, "Could not load price list."))
+      .finally(() => setReady(true));
+  }, [setItems]);
 
   useEffect(() => {
-    load().catch((err) => {
-      toast.error(err, "Could not load price list.");
-      setReady(true);
+    if (items.length === 0) return;
+    setEdits((current) => {
+      const next = { ...current };
+      let changed = false;
+      for (const item of items) {
+        if (!next[item.id]) {
+          next[item.id] = {
+            cost: (item.costMinor / 100).toFixed(2),
+            price: (item.priceMinor / 100).toFixed(2),
+          };
+          changed = true;
+        }
+      }
+      return changed ? next : current;
     });
-  }, []);
+  }, [items]);
 
   const rows = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -259,33 +261,35 @@ export function PriceListManager() {
       <SetupHeader
         kicker={KICKER}
         title="Price List"
-        copy="Review and adjust cost and selling price across the catalog. Save only the rows you changed."
+        copy="Review and adjust cost and selling price across the catalog. Save only the rows you changed. Prices and stock refresh in real-time."
         action={
-          <PrimaryButton
-            disabled={busy || dirty.length === 0}
-            onClick={async () => {
-              setBusy(true);
-              try {
-                await importCatalogRows(
-                  dirty.map((item) => ({
-                    id: item.id,
-                    name: item.name,
-                    category: item.category,
-                    costMinor: parseNairaInput(edits[item.id]?.cost ?? "0"),
-                    priceMinor: parseNairaInput(edits[item.id]?.price ?? "0"),
-                  })),
-                );
-                await load();
-                toast.success(`Updated ${dirty.length} product${dirty.length === 1 ? "" : "s"}.`);
-              } catch (err) {
-                toast.error(err, "Could not save prices.");
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            Save {dirty.length ? `(${dirty.length})` : "changes"}
-          </PrimaryButton>
+          <div className="flex items-center gap-2">
+            <LiveBadge live={live} />
+            <PrimaryButton
+              disabled={busy || dirty.length === 0}
+              onClick={async () => {
+                setBusy(true);
+                try {
+                  await importCatalogRows(
+                    dirty.map((item) => ({
+                      id: item.id,
+                      name: item.name,
+                      category: item.category,
+                      costMinor: parseNairaInput(edits[item.id]?.cost ?? "0"),
+                      priceMinor: parseNairaInput(edits[item.id]?.price ?? "0"),
+                    })),
+                  );
+                  toast.success(`Updated ${dirty.length} product${dirty.length === 1 ? "" : "s"}.`);
+                } catch (err) {
+                  toast.error(err, "Could not save prices.");
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              Save {dirty.length ? `(${dirty.length})` : "changes"}
+            </PrimaryButton>
+          </div>
         }
       />
       <div className="mb-6 grid gap-3 sm:grid-cols-3">
@@ -351,7 +355,7 @@ export function PriceListManager() {
 }
 
 export function LowStockManager() {
-  const [items, setItems] = useState<HqCatalogItem[]>([]);
+  const { items, setItems, live } = useLiveCatalog();
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -359,7 +363,7 @@ export function LowStockManager() {
       .then(setItems)
       .catch((err) => toast.error(err, "Could not load stock."))
       .finally(() => setReady(true));
-  }, []);
+  }, [setItems]);
 
   const rows = useMemo(
     () =>
@@ -379,9 +383,12 @@ export function LowStockManager() {
         title="Low Stock"
         copy="Products at or below reorder level. Raise a purchase order or adjust stock before shelves go empty."
         action={
-          <Link href="/orders/new" className={secondaryButtonClass}>
-            New purchase order
-          </Link>
+          <div className="flex items-center gap-2">
+            <LiveBadge live={live} />
+            <Link href="/orders/new" className={secondaryButtonClass}>
+              New purchase order
+            </Link>
+          </div>
         }
       />
       <div className="mb-6 grid gap-3 sm:grid-cols-3">
@@ -424,7 +431,7 @@ export function LowStockManager() {
 }
 
 export function ExpiringManager() {
-  const [items, setItems] = useState<HqCatalogItem[]>([]);
+  const { items, setItems, live } = useLiveCatalog();
   const [ready, setReady] = useState(false);
   const [windowDays, setWindowDays] = useState(30);
 
@@ -433,7 +440,7 @@ export function ExpiringManager() {
       .then(setItems)
       .catch((err) => toast.error(err, "Could not load expiry data."))
       .finally(() => setReady(true));
-  }, []);
+  }, [setItems]);
 
   const rows = useMemo(() => {
     return items
@@ -456,24 +463,27 @@ export function ExpiringManager() {
         copy="Batches nearing or past expiry — clear shelves, discount, or write off before customers complain."
       />
       <div className="mb-6 flex flex-wrap items-end gap-4">
-        <div className="grid gap-3 sm:grid-cols-3 sm:flex-1">
-          <SetupStat label="In window" value={String(rows.length)} tone="accent" />
-          <SetupStat label="Already expired" value={String(expired)} />
-          <SetupStat label="Window" value={`${windowDays} days`} />
-        </div>
-        <Field label="Show next (days)">
-          <select
-            className={fieldClass}
-            value={windowDays}
-            onChange={(event) => setWindowDays(Number(event.target.value))}
-          >
-            <option value={7}>7 days</option>
-            <option value={14}>14 days</option>
-            <option value={30}>30 days</option>
-            <option value={60}>60 days</option>
-            <option value={90}>90 days</option>
-          </select>
-        </Field>
+<div className="grid gap-3 sm:grid-cols-3 sm:flex-1">
+                <SetupStat label="In window" value={String(rows.length)} tone="accent" />
+                <SetupStat label="Already expired" value={String(expired)} />
+                <SetupStat label="Window" value={`${windowDays} days`} />
+              </div>
+              <div className="flex items-end gap-2">
+                <LiveBadge live={live} />
+                <Field label="Show next (days)">
+                  <select
+                    className={`${fieldClass} min-w-[150px]`}
+                    value={windowDays}
+                    onChange={(event) => setWindowDays(Number(event.target.value))}
+                  >
+                    <option value={7}>7 days</option>
+                    <option value={14}>14 days</option>
+                    <option value={30}>30 days</option>
+                    <option value={60}>60 days</option>
+                    <option value={90}>90 days</option>
+                  </select>
+                </Field>
+              </div>
       </div>
       <DataTable columns={["Product", "Batch", "Expires", "Days left", "On hand", "Status"]}>
         {rows.length === 0 ? (
@@ -552,7 +562,7 @@ export function ProductImportManager() {
       <SetupHeader
         kicker={KICKER}
         title="Import Products"
-        copy="Paste a CSV of products. Matching SKU or barcode updates the existing item; blank codes are generated."
+        copy="Paste a CSV of products. Matching SKU or barcode updates the existing item; blank codes are generated. Imports refresh every product page instantly."
       />
       <section className="rounded-[24px] bg-pos-surface p-5 shadow-pos-md">
         <Field label="CSV">
@@ -591,14 +601,14 @@ export function ProductImportManager() {
 }
 
 export function ProductExportManager() {
+  const { items, setItems, live } = useLiveCatalog();
   const [busy, setBusy] = useState(false);
-  const [items, setItems] = useState<HqCatalogItem[]>([]);
 
   useEffect(() => {
     listCatalog()
       .then(setItems)
       .catch(() => setItems([]));
-  }, []);
+  }, [setItems]);
 
   function downloadCsv() {
     const header = [
@@ -660,9 +670,13 @@ export function ProductExportManager() {
       />
       <div className="grid gap-4 sm:grid-cols-2">
         <section className="rounded-[24px] bg-pos-surface p-6 shadow-pos-md">
-          <h2 className="text-lg font-semibold text-pos-ink">CSV spreadsheet</h2>
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold text-pos-ink">CSV spreadsheet</h2>
+            <LiveBadge live={live} />
+          </div>
           <p className="mt-2 text-sm text-pos-ink-muted">
-            {items.length} products ready — columns match the import format.
+            {items.length} products ready — columns match the import format. Count updates in
+            real-time as the catalog changes.
           </p>
           <PrimaryButton className="mt-5" onClick={downloadCsv}>
             Download CSV

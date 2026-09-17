@@ -1,15 +1,31 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Boxes, Plus } from "lucide-react";
 import { toast } from "@/lib/toast";
-import { categorySlug, deleteSubcategory, getTaxonomyUsage, listCategories, listSubcategories, productCount, renameTaxonomy, saveSubcategory, subcategoryParentId, subcategoryParentName, type TaxonomyRecord, type TaxonomyUsage } from "@/lib/hq-taxonomy";
+import {
+  categorySlug,
+  deleteSubcategory,
+  renameTaxonomy,
+  saveSubcategory,
+  subcategoryParentId,
+  subcategoryParentName,
+  type TaxonomyRecord,
+} from "@/lib/hq-taxonomy";
 import { naira } from "@/lib/hq-ops";
 import { useLiveCatalog } from "@/lib/live-catalog";
+import { useLiveDirectoryRows } from "@/lib/live-directory-rows";
 import { ManagerSkeleton } from "../Skeleton";
 import { SlideOver } from "../SlideOver";
-import { DataTable, Field, PrimaryButton, ToggleField, fieldClass } from "./SetupChrome";
+import {
+  DataTable,
+  Field,
+  LiveBadge,
+  PrimaryButton,
+  ToggleField,
+  fieldClass,
+} from "./SetupChrome";
 
 type Draft = {
   id?: string;
@@ -21,35 +37,23 @@ type Draft = {
 const blank: Draft = { name: "", categoryId: "", active: true };
 
 export function SubcategoriesManager() {
-  const { items: catalog, live } = useLiveCatalog();
-  const [categories, setCategories] = useState<TaxonomyRecord[]>([]);
-  const [rows, setRows] = useState<TaxonomyRecord[]>([]);
-  const [usage, setUsage] = useState<TaxonomyUsage | null>(null);
+  const { items: catalog } = useLiveCatalog();
+  const { rows: categories } = useLiveDirectoryRows("item-groups");
+  const { rows, live, ready } = useLiveDirectoryRows("item-subgroups");
   const [filterCategory, setFilterCategory] = useState("");
   const [draft, setDraft] = useState<Draft>(blank);
   const [originalName, setOriginalName] = useState("");
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [ready, setReady] = useState(false);
 
-  async function load() {
-    const [cats, subs, taxonomy] = await Promise.all([
-      listCategories(),
-      listSubcategories(),
-      getTaxonomyUsage(),
-    ]);
-    setCategories(cats.filter((row) => row.active));
-    setRows(subs);
-    setUsage(taxonomy);
-    setReady(true);
+  const activeCategories = useMemo(
+    () => categories.filter((row) => row.active),
+    [categories],
+  );
+
+  function subcategoryCount(name: string) {
+    return catalog.filter((item) => item.subcategory === name).length;
   }
-
-  useEffect(() => {
-    load().catch((err) => {
-      toast.error(err, "Could not load subcategories.");
-      setReady(true);
-    });
-  }, []);
 
   const filtered = useMemo(() => {
     let list = [...rows];
@@ -79,7 +83,7 @@ export function SubcategoriesManager() {
   if (!ready) return <ManagerSkeleton variant="table" />;
 
   function openNew() {
-    setDraft({ ...blank, categoryId: filterCategory || categories[0]?.id || "" });
+    setDraft({ ...blank, categoryId: filterCategory || activeCategories[0]?.id || "" });
     setOriginalName("");
     setOpen(true);
   }
@@ -88,7 +92,7 @@ export function SubcategoriesManager() {
     setDraft({
       id: row.id,
       name: row.name,
-      categoryId: subcategoryParentId(row) || categories[0]?.id || "",
+      categoryId: subcategoryParentId(row) || activeCategories[0]?.id || "",
       active: row.active,
     });
     setOriginalName(row.name);
@@ -104,7 +108,7 @@ export function SubcategoriesManager() {
       toast.error("Choose a parent category.");
       return;
     }
-    const parent = categories.find((row) => row.id === draft.categoryId);
+    const parent = activeCategories.find((row) => row.id === draft.categoryId);
     setBusy(true);
     try {
       await saveSubcategory({
@@ -116,7 +120,6 @@ export function SubcategoriesManager() {
       if (draft.id && originalName && originalName !== draft.name.trim()) {
         await renameTaxonomy("subcategory", originalName, draft.name.trim());
       }
-      await load();
       setOpen(false);
       toast.success(draft.id ? "Subcategory updated." : "Subcategory created.");
     } catch (err) {
@@ -140,13 +143,16 @@ export function SubcategoriesManager() {
           </h1>
           <p className="mt-3 text-[14px] text-pos-ink-muted">
             Second-level grouping under a category · {activeCount} active · cost value{" "}
-            {naira(totalCost, 0)} · {live ? "live" : "offline"}
+            {naira(totalCost, 0)}
           </p>
         </div>
-        <PrimaryButton onClick={openNew}>
-          <Plus size={16} strokeWidth={2.2} />
-          New subcategory
-        </PrimaryButton>
+        <div className="flex flex-wrap items-center gap-2">
+          <LiveBadge live={live} />
+          <PrimaryButton onClick={openNew}>
+            <Plus size={16} strokeWidth={2.2} />
+            New subcategory
+          </PrimaryButton>
+        </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -182,7 +188,7 @@ export function SubcategoriesManager() {
             aria-label="Filter by category"
           >
             <option value="">All categories</option>
-            {categories.map((row) => (
+            {activeCategories.map((row) => (
               <option key={row.id} value={row.id}>
                 {row.name}
               </option>
@@ -209,9 +215,9 @@ export function SubcategoriesManager() {
               <td className="px-4 py-3.5 text-pos-ink-muted">
                 {subcategoryParentName(row) || "Unassigned"}
               </td>
-              <td className="px-4 py-3.5 tabular-nums text-pos-ink">
-                {productCount(usage, "subcategories", row.name)}
-              </td>
+<td className="px-4 py-3.5 tabular-nums text-pos-ink">
+                  {subcategoryCount(row.name)}
+                </td>
               <td className="px-4 py-3.5 font-medium tabular-nums text-pos-ink">
                 {naira(valuesBySubcategory.get(row.name)?.cost ?? 0, 0)}
               </td>
@@ -257,14 +263,13 @@ export function SubcategoriesManager() {
                 className="rounded-full bg-pos-surface-muted px-4 py-2.5 text-sm text-pos-ink"
                 disabled={busy}
                 onClick={async () => {
-                  const count = productCount(usage, "subcategories", draft.name);
+                  const count = subcategoryCount(draft.name);
                   if (count > 0) {
                     toast.error(`Remove or reassign ${count} product(s) before deleting.`);
                     return;
                   }
                   try {
                     await deleteSubcategory(draft.id!);
-                    await load();
                     setOpen(false);
                     toast.success("Subcategory deleted.");
                   } catch (err) {
@@ -289,7 +294,7 @@ export function SubcategoriesManager() {
             onChange={(event) => setDraft({ ...draft, categoryId: event.target.value })}
           >
             <option value="">Select category…</option>
-            {categories.map((row) => (
+            {activeCategories.map((row) => (
               <option key={row.id} value={row.id}>
                 {row.name}
               </option>

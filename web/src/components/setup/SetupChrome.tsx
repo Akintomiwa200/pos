@@ -32,6 +32,26 @@ export function SetupHeader({
   );
 }
 
+export function LiveBadge({ live, label }: { live: boolean; label?: string }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+        live ? "bg-pos-success/10 text-pos-success" : "bg-pos-surface-muted text-pos-ink-faint"
+      }`}
+    >
+      <span className="relative flex h-1.5 w-1.5">
+        {live ? (
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-pos-success opacity-75" />
+        ) : null}
+        <span
+          className={`relative inline-flex h-1.5 w-1.5 rounded-full ${live ? "bg-pos-success" : "bg-pos-ink-faint"}`}
+        />
+      </span>
+      {label ?? (live ? "Live" : "Connecting")}
+    </span>
+  );
+}
+
 export function SetupStat({
   label,
   value,

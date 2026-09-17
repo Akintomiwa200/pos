@@ -95,11 +95,24 @@ export class InventoryService implements OnModuleInit {
   }): Promise<StockMovement[]> {
     const { lines = [], ...base } = input;
     const movements: StockMovement[] = [];
+    const runId = base.type === "transfer" ? this.nextRunId() : undefined;
     for (const line of lines) {
-      movements.push(await this.store.recordMovement({ ...base, ...line }));
+      movements.push(await this.store.recordMovement({ ...base, ...line, runId }));
     }
     this.publish();
     return movements;
+  }
+
+  /** Human-friendly reference shared by every line of one transfer run. */
+  private nextRunId(): string {
+    const now = new Date();
+    const stamp = [
+      now.getFullYear(),
+      String(now.getMonth() + 1).padStart(2, "0"),
+      String(now.getDate()).padStart(2, "0"),
+    ].join("");
+    const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
+    return `TRF-${stamp}-${rand}`;
   }
 }
 

@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
+  Archive,
+  ArchiveRestore,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -11,27 +13,25 @@ import {
   Plus,
   Search,
   SlidersHorizontal,
+  Trash2,
   Upload,
   Wifi,
   WifiOff,
+  X,
 } from "lucide-react";
 import { nairaInputFromMinor, parseNairaInput, resolveSellPriceMinor } from "@/lib/catalog";
 import { listCatalog, uploadProductImage, type HqCatalogItem } from "@/lib/hq-api";
 import { importCatalogRows } from "@/lib/hq-setup";
+import { archiveProducts, deleteProducts, restoreProducts } from "@/lib/catalog-bulk";
 import { naira } from "@/lib/hq-ops";
 import { productImageSrc } from "@/lib/product-image";
 import { toast } from "@/lib/toast";
 import { formatStock } from "@/lib/units";
 import { useLiveCatalog } from "@/lib/live-catalog";
-import {
-  listCategories,
-  listSubcategories,
-  listUnits,
-  unitCode,
-  type TaxonomyRecord,
-} from "@/lib/hq-taxonomy";
-import { listDirectory } from "@/lib/hq-directory";
+import { useLiveDirectoryRows } from "@/lib/live-directory-rows";
+import { unitCode } from "@/lib/hq-taxonomy";
 import { ManagerSkeleton } from "../Skeleton";
+import { RowMenu, useRowMenu } from "../RowMenu";
 import { PrimaryButton } from "./SetupChrome";
 import { ItemFormSheet, type ItemDraft } from "./ItemFormSheet";
 
@@ -123,15 +123,21 @@ function productStatus(item: HqCatalogItem): {
 const outlineBtn =
   "inline-flex items-center justify-center gap-2 rounded-xl border border-pos-border bg-pos-surface px-4 py-2.5 text-sm font-medium text-pos-ink transition hover:bg-pos-surface-muted";
 
+const bulkBtn =
+  "inline-flex items-center gap-1.5 rounded-xl border border-pos-border bg-pos-surface px-3.5 py-2 text-[13px] font-medium text-pos-ink shadow-pos-sm transition hover:bg-pos-surface-muted disabled:opacity-50";
+
+const bulkDangerBtn =
+  "inline-flex items-center gap-1.5 rounded-xl border border-red-500/30 bg-pos-surface px-3.5 py-2 text-[13px] font-medium text-pos-danger shadow-pos-sm transition hover:bg-red-500/10 disabled:opacity-50";
+
 const filterSelect =
   "appearance-none rounded-xl border border-pos-border bg-pos-surface py-2.5 pl-3.5 pr-9 text-sm text-pos-ink outline-none transition focus:border-pos-primary focus:ring-1 focus:ring-pos-primary/25";
 
 export function ItemsManager() {
-  const { items: rows, setItems: setRows, live } = useLiveCatalog();
-  const [categories, setCategories] = useState<TaxonomyRecord[]>([]);
-  const [subcategories, setSubcategories] = useState<TaxonomyRecord[]>([]);
-  const [units, setUnits] = useState<TaxonomyRecord[]>([]);
-  const [brands, setBrands] = useState<TaxonomyRecord[]>([]);
+  const { items: rows, setItems: setRows, removeItem, live } = useLiveCatalog();
+  const { rows: categories, ready: catsReady } = useLiveDirectoryRows("item-groups");
+  const { rows: subcategories, ready: subsReady } = useLiveDirectoryRows("item-subgroups");
+  const { rows: units, ready: unitReady } = useLiveDirectoryRows("units");
+  const { rows: brands, ready: brandReady } = useLiveDirectoryRows("manufacturers");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [categoryFilter, setCategoryFilter] = useState("");
@@ -139,47 +145,35 @@ export function ItemsManager() {
   const [pageSize, setPageSize] = useState<(typeof PAGE_SIZES)[number]>(10);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [menuId, setMenuId] = useState<string | null>(null);
+  const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
   const [draft, setDraft] = useState<ItemDraft>(blank);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<HqCatalogItem[]>([]);
   const [ready, setReady] = useState(false);
 
-  async function load() {
-    const [catalog, cats, subs, unitRows, brandRows] = await Promise.all([
-      listCatalog(),
-      listCategories(),
-      listSubcategories(),
-      listUnits(),
-      listDirectory("manufacturers"),
-    ]);
-    setRows(catalog);
-    setCategories(cats);
-    setSubcategories(subs);
-    setUnits(unitRows);
-    setBrands(brandRows);
-    setReady(true);
-  }
+  const optionsReady = catsReady && subsReady && unitReady && brandReady;
 
   useEffect(() => {
-    load().catch((err) => {
-      toast.error(err, "Could not load your product catalog.");
-      setReady(true);
-    });
-  }, []);
+    listCatalog()
+      .then(setRows)
+      .catch((err) => toast.error(err, "Could not load your product catalog."));
+  }, [setRows]);
+
+  useEffect(() => {
+    if (optionsReady) setReady(true);
+  }, [optionsReady]);
 
   useEffect(() => {
     setPage(1);
   }, [search, statusFilter, categoryFilter, pageSize]);
 
-  useEffect(() => {
-    function closeMenu() {
-      setMenuId(null);
-    }
-    if (!menuId) return;
-    window.addEventListener("click", closeMenu);
-    return () => window.removeEventListener("click", closeMenu);
-  }, [menuId]);
+  function closeRowMenu() {
+    setMenuId(null);
+    setMenuAnchor(null);
+  }
 
   const categoryOptions = useMemo(() => {
     const names = new Set(rows.map((row) => row.category).filter(Boolean));
@@ -221,6 +215,11 @@ export function ItemsManager() {
     return buttons;
   }, [safePage, pageCount]);
 
+  const selectedRows = useMemo(
+    () => rows.filter((row) => selected.has(row.id)),
+    [rows, selected],
+  );
+
   if (!ready) return <ManagerSkeleton variant="table" />;
 
   function openNew() {
@@ -233,7 +232,7 @@ export function ItemsManager() {
     setDraft(toDraft(item));
     setImageFile(null);
     setOpen(true);
-    setMenuId(null);
+    closeRowMenu();
   }
 
   function toggleAllPage() {
@@ -255,6 +254,72 @@ export function ItemsManager() {
       else next.add(id);
       return next;
     });
+  }
+
+  const selectedActive = selectedRows.filter((row) => row.active !== false);
+  const selectedArchived = selectedRows.filter((row) => row.active === false);
+
+  function patchRows(ids: string[], active: boolean) {
+    const set = new Set(ids);
+    setRows((current) =>
+      current.map((row) => (set.has(row.id) ? { ...row, active } : row)),
+    );
+  }
+
+  async function applyActive(items: HqCatalogItem[], active: boolean) {
+    if (!items.length) return;
+    const ids = items.map((row) => row.id);
+    const refs = items.map((row) => ({ id: row.id, name: row.name }));
+    patchRows(ids, active);
+    setBulkBusy(true);
+    try {
+      const result = active ? await restoreProducts(refs) : await archiveProducts(refs);
+      if (result.failed) {
+        patchRows(ids, !active);
+        toast.error(`${result.failed} product(s) could not be updated.`);
+      } else {
+        toast.success(
+          active
+            ? `Restored ${result.ok} product${result.ok === 1 ? "" : "s"}.`
+            : `Archived ${result.ok} product${result.ok === 1 ? "" : "s"}.`,
+        );
+      }
+      setSelected((current) => {
+        const next = new Set(current);
+        for (const id of ids) next.delete(id);
+        return next;
+      });
+    } catch (err) {
+      patchRows(ids, !active);
+      toast.error(err, active ? "Could not restore products." : "Could not archive products.");
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  async function runDelete(items: HqCatalogItem[]) {
+    if (!items.length) return;
+    const ids = items.map((row) => row.id);
+    setBulkBusy(true);
+    try {
+      const result = await deleteProducts(ids);
+      for (const id of ids) removeItem(id);
+      if (result.failed) toast.error(`${result.failed} product(s) could not be deleted.`);
+      else
+        toast.success(
+          `Deleted ${result.ok} product${result.ok === 1 ? "" : "s"}.`,
+        );
+      setSelected((current) => {
+        const next = new Set(current);
+        for (const id of ids) next.delete(id);
+        return next;
+      });
+    } catch (err) {
+      toast.error(err, "Could not delete products.");
+    } finally {
+      setBulkBusy(false);
+      setPendingDelete([]);
+    }
   }
 
   async function save() {
@@ -309,7 +374,6 @@ export function ItemsManager() {
         await uploadProductImage(itemId, imageFile);
       }
 
-      await load();
       setOpen(false);
       toast.success(draft.id ? "Product updated." : "Product added to catalog.");
     } catch (err) {
@@ -433,6 +497,98 @@ export function ItemsManager() {
           </div>
         </div>
 
+        {selected.size > 0 ? (
+          <div className="flex flex-wrap items-center gap-2 border-b border-pos-border/60 bg-pos-primary/5 px-4 py-3 sm:px-5">
+            <span className="mr-1 text-[13px] font-semibold text-pos-ink">
+              {selected.size} selected
+            </span>
+            <button
+              type="button"
+              className={bulkBtn}
+              disabled={bulkBusy || selectedActive.length === 0}
+              onClick={() => void applyActive(selectedActive, false)}
+            >
+              <Archive size={15} />
+              Archive
+            </button>
+            <button
+              type="button"
+              className={bulkBtn}
+              disabled={bulkBusy || selectedArchived.length === 0}
+              onClick={() => void applyActive(selectedArchived, true)}
+            >
+              <ArchiveRestore size={15} />
+              Restore
+            </button>
+            <button
+              type="button"
+              className={bulkDangerBtn}
+              disabled={bulkBusy}
+              onClick={() => setPendingDelete(selectedRows)}
+            >
+              <Trash2 size={15} />
+              Delete
+            </button>
+            {selected.size < rows.length ? (
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-[13px] font-medium text-pos-ink-muted transition hover:bg-pos-surface-muted hover:text-pos-ink"
+                disabled={bulkBusy}
+                onClick={() =>
+                  setSelected((current) => {
+                    const next = new Set(current);
+                    for (const row of filtered) next.add(row.id);
+                    return next;
+                  })
+                }
+              >
+                Select all {filtered.length}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="ml-auto inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-[13px] font-medium text-pos-ink-muted transition hover:bg-pos-surface-muted hover:text-pos-ink"
+              disabled={bulkBusy}
+              onClick={() => setSelected(new Set())}
+            >
+              <X size={15} />
+              Clear
+            </button>
+          </div>
+        ) : null}
+
+        {pendingDelete.length ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-red-500/30 bg-red-500/5 px-4 py-3 sm:px-5">
+            <p className="text-[13px] text-pos-ink-muted">
+              Permanently delete{" "}
+              <span className="font-medium text-pos-ink">
+                {pendingDelete.length === 1
+                  ? pendingDelete[0]!.name
+                  : `${pendingDelete.length} products`}
+              </span>
+              ? This cannot be undone.
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className="rounded-full bg-pos-surface px-3.5 py-1.5 text-[12px] font-medium text-pos-ink shadow-pos-sm"
+                disabled={bulkBusy}
+                onClick={() => setPendingDelete([])}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="rounded-full bg-red-600 px-3.5 py-1.5 text-[12px] font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
+                disabled={bulkBusy}
+                onClick={() => void runDelete(pendingDelete)}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        ) : null}
+
         <div className="overflow-x-auto">
           <table className="w-full min-w-[860px] text-left text-sm">
             <thead>
@@ -551,36 +707,63 @@ export function ItemsManager() {
                           aria-label={`Actions for ${item.name}`}
                           onClick={(event) => {
                             event.stopPropagation();
+                            setMenuAnchor(event.currentTarget);
                             setMenuId((current) => (current === item.id ? null : item.id));
                           }}
                         >
                           <MoreHorizontal size={18} />
                         </button>
-                        {menuId === item.id ? (
-                          <div className="absolute right-4 top-11 z-20 min-w-[140px] overflow-hidden rounded-xl border border-pos-border bg-pos-surface py-1 shadow-pos-md">
-                            <button
-                              type="button"
-                              className="block w-full px-3.5 py-2 text-left text-sm text-pos-ink hover:bg-pos-surface-muted"
-                              onClick={() => openEdit(item)}
-                            >
-                              Edit
-                            </button>
-                            <button
-                              type="button"
-                              className="block w-full px-3.5 py-2 text-left text-sm text-pos-ink hover:bg-pos-surface-muted"
-                              onClick={() => {
-                                setMenuId(null);
-                                navigator.clipboard
-                                  .writeText(item.sku || item.id)
-                                  .then(
-                                    () => toast.success("SKU copied."),
-                                    () => toast.error("Could not copy SKU."),
-                                  );
-                              }}
-                            >
-                              Copy SKU
-                            </button>
-                          </div>
+                        {menuId === item.id && menuAnchor ? (
+                          createPortal(
+                            <RowMenu anchor={menuAnchor} onClose={closeRowMenu}>
+                              <button
+                                type="button"
+                                className="block w-full px-3.5 py-2 text-left text-sm text-pos-ink hover:bg-pos-surface-muted"
+                                onClick={() => {
+                                  closeRowMenu();
+                                  openEdit(item);
+                                }}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                className="block w-full px-3.5 py-2 text-left text-sm text-pos-ink hover:bg-pos-surface-muted"
+                                onClick={() => {
+                                  closeRowMenu();
+                                  navigator.clipboard
+                                    .writeText(item.sku || item.id)
+                                    .then(
+                                      () => toast.success("SKU copied."),
+                                      () => toast.error("Could not copy SKU."),
+                                    );
+                                }}
+                              >
+                                Copy SKU
+                              </button>
+                              <button
+                                type="button"
+                                className="block w-full px-3.5 py-2 text-left text-sm text-pos-ink hover:bg-pos-surface-muted"
+                                onClick={() => {
+                                  closeRowMenu();
+                                  void applyActive([item], item.active === false);
+                                }}
+                              >
+                                {item.active === false ? "Restore" : "Archive"}
+                              </button>
+                              <button
+                                type="button"
+                                className="block w-full px-3.5 py-2 text-left text-sm text-pos-danger hover:bg-red-500/10"
+                                onClick={() => {
+                                  closeRowMenu();
+                                  setPendingDelete([item]);
+                                }}
+                              >
+                                Delete
+                              </button>
+                            </RowMenu>,
+                            document.body,
+                          )
                         ) : null}
                       </td>
                     </tr>

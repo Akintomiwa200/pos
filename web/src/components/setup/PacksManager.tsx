@@ -1,25 +1,22 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Plus, RefreshCw } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown, Plus, RefreshCw } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { nairaInputFromMinor, parseNairaInput, suggestPackBarcode } from "@/lib/catalog";
 import { listCatalog, type HqCatalogItem } from "@/lib/hq-api";
 import { importCatalogRows } from "@/lib/hq-setup";
 import { naira } from "@/lib/hq-ops";
 import { formatStock, inferUnitKind, unitKindLabel } from "@/lib/units";
-import {
-  listCategories,
-  listUnits,
-  unitCode,
-  unitKindFromRecord,
-  type TaxonomyRecord,
-} from "@/lib/hq-taxonomy";
+import { unitCode, unitKindFromRecord, type TaxonomyRecord } from "@/lib/hq-taxonomy";
+import { useLiveCatalog } from "@/lib/live-catalog";
+import { useLiveDirectoryRows } from "@/lib/live-directory-rows";
 import { ManagerSkeleton } from "../Skeleton";
 import { SlideOver } from "../SlideOver";
 import {
   DataTable,
   Field,
+  LiveBadge,
   PrimaryButton,
   SetupHeader,
   SetupStat,
@@ -67,33 +64,25 @@ function isPackProduct(item: HqCatalogItem, compositeCodes: Set<string>) {
 }
 
 export function PacksManager() {
-  const [items, setItems] = useState<HqCatalogItem[]>([]);
-  const [units, setUnits] = useState<TaxonomyRecord[]>([]);
-  const [categories, setCategories] = useState<TaxonomyRecord[]>([]);
+  const { items, setItems, live } = useLiveCatalog();
+  const { rows: units, ready: unitsReady } = useLiveDirectoryRows("units");
+  const { rows: categories, ready: catsReady } = useLiveDirectoryRows("item-groups");
   const [draft, setDraft] = useState<PackDraft>(blank());
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
   const [search, setSearch] = useState("");
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+  const nameRef = useRef<HTMLDivElement | null>(null);
 
-  async function load() {
-    const [catalog, unitRows, cats] = await Promise.all([
-      listCatalog(),
-      listUnits(),
-      listCategories(),
-    ]);
-    setItems(catalog);
-    setUnits(unitRows);
-    setCategories(cats);
-    setReady(true);
-  }
+  const readyAll = ready && unitsReady && catsReady;
 
   useEffect(() => {
-    load().catch((err) => {
-      toast.error(err, "Could not load packs.");
-      setReady(true);
-    });
-  }, []);
+    listCatalog()
+      .then(setItems)
+      .catch((err) => toast.error(err, "Could not load packs."))
+      .finally(() => setReady(true));
+  }, [setItems]);
 
   const packUnits = useMemo(
     () => units.filter((row) => row.active !== false && isCompositeUnit(row)),
@@ -109,6 +98,35 @@ export function PacksManager() {
     () => items.filter((item) => isPackProduct(item, compositeCodes)),
     [items, compositeCodes],
   );
+
+  const baseOptions = useMemo(
+    () =>
+      items
+        .filter((item) => !isPackProduct(item, compositeCodes))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [items, compositeCodes],
+  );
+
+  const suggestions = useMemo(() => {
+    const query = draft.name.trim().toLowerCase();
+    const matches = baseOptions.filter((item) =>
+      [item.name, item.sku, item.barcode, item.category, item.brand ?? ""].some((value) =>
+        value.toLowerCase().includes(query),
+      ),
+    );
+    return matches.slice(0, 30);
+  }, [baseOptions, draft.name]);
+
+  useEffect(() => {
+    if (!suggestionsOpen) return;
+    function handle(event: MouseEvent) {
+      if (nameRef.current && !nameRef.current.contains(event.target as Node)) {
+        setSuggestionsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, [suggestionsOpen]);
 
   const missingBarcode = packs.filter((row) => !row.barcode?.trim());
 
@@ -126,6 +144,7 @@ export function PacksManager() {
   function openNew() {
     const defaultUnit = packUnits[0] ? unitCode(packUnits[0]) : "pack";
     setDraft(blank(defaultUnit));
+    setSuggestionsOpen(false);
     setOpen(true);
   }
 
@@ -143,6 +162,7 @@ export function PacksManager() {
       onHand: String(item.onHand),
       active: item.active !== false,
     });
+    setSuggestionsOpen(false);
     setOpen(true);
   }
 
@@ -182,7 +202,6 @@ export function PacksManager() {
           active: draft.active,
         },
       ]);
-      await load();
       setOpen(false);
       toast.success(
         draft.id
@@ -218,7 +237,6 @@ export function PacksManager() {
         };
       });
       await importCatalogRows(rows);
-      await load();
       toast.success(`Generated barcodes for ${rows.length} pack${rows.length === 1 ? "" : "s"}.`);
     } catch (err) {
       toast.error(err, "Could not generate barcodes.");
@@ -227,7 +245,7 @@ export function PacksManager() {
     }
   }
 
-  if (!ready) return <ManagerSkeleton variant="table" />;
+  if (!readyAll) return <ManagerSkeleton variant="table" />;
 
   return (
     <div>
@@ -236,7 +254,8 @@ export function PacksManager() {
         title="Pack & Cartons"
         copy="Products sold as a pack, carton, bag or case — not as single pieces. Example: Chivita sold as a pack of 12. Each pack can have its own barcode; blank ones are auto-generated."
         action={
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <LiveBadge live={live} />
             {missingBarcode.length ? (
               <button
                 type="button"
@@ -353,14 +372,66 @@ export function PacksManager() {
           </PrimaryButton>
         }
       >
-        <Field label="Product name">
-          <input
-            className={fieldClass}
-            placeholder="e.g. Chivita Active 1L Pack"
-            value={draft.name}
-            onChange={(event) => setDraft({ ...draft, name: event.target.value })}
-          />
-        </Field>
+        {draft.id ? (
+          <Field label="Product name">
+            <input
+              className={fieldClass}
+              placeholder="e.g. Chivita Active 1L Pack"
+              value={draft.name}
+              onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+            />
+          </Field>
+        ) : (
+          <Field label="Base product" hint="Pick an existing product — this pack becomes its composite (carton/case/bag) variant.">
+            <div className="relative" ref={nameRef}>
+              <input
+                className={fieldClass}
+                placeholder="Search existing products…"
+                value={draft.name}
+                onChange={(event) => {
+                  setDraft({ ...draft, name: event.target.value });
+                  setSuggestionsOpen(true);
+                }}
+                onFocus={() => setSuggestionsOpen(true)}
+              />
+              <ChevronDown
+                size={15}
+                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-pos-ink-faint"
+              />
+              {suggestionsOpen ? (
+                <div className="absolute inset-x-0 top-full z-30 mt-1 max-h-72 overflow-y-auto rounded-xl border border-pos-border bg-pos-surface py-1 shadow-pos-md">
+                  {suggestions.length === 0 ? (
+                    <p className="px-3.5 py-2.5 text-sm text-pos-ink-faint">
+                      No matching products — type the pack name to create it fresh.
+                    </p>
+                  ) : (
+                    suggestions.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className="block w-full px-3.5 py-2 text-left transition hover:bg-pos-surface-muted"
+                        onClick={() => {
+                          setDraft({
+                            ...draft,
+                            name: item.name,
+                            category: item.category || draft.category,
+                          });
+                          setSuggestionsOpen(false);
+                        }}
+                      >
+                        <span className="block truncate text-sm text-pos-ink">{item.name}</span>
+                        <span className="block text-[12px] text-pos-ink-faint">
+                          {item.category}
+                          {item.sku ? ` · ${item.sku}` : ""}
+                        </span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              ) : null}
+            </div>
+          </Field>
+        )}
         <Field label="Category">
           <select
             className={fieldClass}

@@ -24,6 +24,7 @@ import { naira } from "@/lib/hq-ops";
 import { toast } from "@/lib/toast";
 import { useLiveCatalog } from "@/lib/live-catalog";
 import { ManagerSkeleton } from "../Skeleton";
+import { RowMenu, useRowMenu } from "../RowMenu";
 import { PrimaryButton, SetupStat } from "./SetupChrome";
 import { ComboFormSheet, type ComboDraft } from "./ComboFormSheet";
 
@@ -73,7 +74,8 @@ export function CombosManager() {
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive" | "short">("all");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<(typeof PAGE_SIZES)[number]>(10);
-  const [menuId, setMenuId] = useState<string | null>(null);
+  const { openId: menuId, anchor: menuAnchor, toggleMenu: toggleRowMenu, closeMenu: closeRowMenu } =
+    useRowMenu();
   const [draft, setDraft] = useState<ComboDraft>(blank);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -95,15 +97,6 @@ export function CombosManager() {
   useEffect(() => {
     setPage(1);
   }, [search, statusFilter, pageSize]);
-
-  useEffect(() => {
-    function closeMenu() {
-      setMenuId(null);
-    }
-    if (!menuId) return;
-    window.addEventListener("click", closeMenu);
-    return () => window.removeEventListener("click", closeMenu);
-  }, [menuId]);
 
   const itemsById = useMemo(
     () => new Map(catalog.map((item) => [item.id, item] as const)),
@@ -157,7 +150,7 @@ export function CombosManager() {
   function openEdit(combo: ComboView) {
     setDraft(toDraft(combo));
     setOpen(true);
-    setMenuId(null);
+    closeRowMenu();
   }
 
   async function confirmDelete(combo: ComboView) {
@@ -407,13 +400,13 @@ export function CombosManager() {
                           aria-label={`Actions for ${combo.name}`}
                           onClick={(event) => {
                             event.stopPropagation();
-                            setMenuId((current) => (current === combo.id ? null : combo.id));
+                            toggleRowMenu(combo.id, event.currentTarget);
                           }}
                         >
                           <MoreHorizontal size={18} />
                         </button>
-                        {menuId === combo.id ? (
-                          <div className="absolute right-4 top-11 z-20 min-w-[150px] overflow-hidden rounded-xl border border-pos-border bg-pos-surface py-1 shadow-pos-md">
+                        {menuId === combo.id && menuAnchor ? (
+                          <RowMenu anchor={menuAnchor} onClose={closeRowMenu}>
                             <button
                               type="button"
                               className="block w-full px-3.5 py-2 text-left text-sm text-pos-ink hover:bg-pos-surface-muted"
@@ -424,11 +417,14 @@ export function CombosManager() {
                             <button
                               type="button"
                               className="block w-full px-3.5 py-2 text-left text-sm text-pos-danger hover:bg-pos-surface-muted"
-                              onClick={() => confirmDelete(combo)}
+                              onClick={() => {
+                                closeRowMenu();
+                                confirmDelete(combo);
+                              }}
                             >
                               Delete
                             </button>
-                          </div>
+                          </RowMenu>
                         ) : null}
                       </td>
                     </tr>

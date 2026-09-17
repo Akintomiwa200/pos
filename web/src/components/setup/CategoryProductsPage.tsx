@@ -2,24 +2,18 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Download, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { ArrowLeft, Archive, ArchiveRestore, Download, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { nairaInputFromMinor, parseNairaInput, resolveSellPriceMinor } from "@/lib/catalog";
 import { deleteCatalogItem, type HqCatalogItem } from "@/lib/hq-api";
+import { setProductsActive } from "@/lib/catalog-bulk";
 import { naira } from "@/lib/hq-ops";
 import { productImageSrc } from "@/lib/product-image";
 import { importCatalogRows } from "@/lib/hq-setup";
 import { toast } from "@/lib/toast";
 import { formatStock, inferUnitKind } from "@/lib/units";
 import { useLiveCatalog } from "@/lib/live-catalog";
-import {
-  categorySlug,
-  listCategories,
-  listSubcategories,
-  listUnits,
-  unitCode,
-  type TaxonomyRecord,
-} from "@/lib/hq-taxonomy";
-import { listDirectory } from "@/lib/hq-directory";
+import { useLiveDirectoryRows } from "@/lib/live-directory-rows";
+import { categorySlug, unitCode } from "@/lib/hq-taxonomy";
 import { ManagerSkeleton } from "../Skeleton";
 import { PrimaryButton } from "./SetupChrome";
 import { ItemFormSheet, type ItemDraft } from "./ItemFormSheet";
@@ -159,34 +153,24 @@ function toDraft(item: HqCatalogItem): ItemDraft {
 
 export function CategoryProductsPage({ slug }: { slug: string }) {
   const { items: rows, removeItem, live } = useLiveCatalog();
-  const [categories, setCategories] = useState<TaxonomyRecord[]>([]);
-  const [subcategories, setSubcategories] = useState<TaxonomyRecord[]>([]);
-  const [units, setUnits] = useState<TaxonomyRecord[]>([]);
-  const [brands, setBrands] = useState<TaxonomyRecord[]>([]);
+  const { rows: categories, ready: catsReady } = useLiveDirectoryRows("item-groups");
+  const { rows: subcategories, ready: subsReady } = useLiveDirectoryRows("item-subgroups");
+  const { rows: units, ready: unitReady } = useLiveDirectoryRows("units");
+  const { rows: brands, ready: brandReady } = useLiveDirectoryRows("manufacturers");
   const [search, setSearch] = useState("");
   const [draft, setDraft] = useState<ItemDraft>(blank);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [confirmId, setConfirmId] = useState<string | null>(null);
-  const [ready, setReady] = useState(false);
   const [note, setNote] = useState("");
 
+  const ready = catsReady && subsReady && unitReady && brandReady;
+
   useEffect(() => {
-    Promise.all([listCategories(), listSubcategories(), listUnits(), listDirectory("manufacturers")])
-      .then(([cats, subs, unitRows, brandRows]) => {
-        setCategories(cats);
-        setSubcategories(subs);
-        setUnits(unitRows);
-        setBrands(brandRows);
-        const hit = cats.find((row) => categorySlug(row.name) === slug);
-        if (hit) setNote(hit.note ?? "");
-      })
-      .catch((err) => {
-        toast.error(err, "Could not load product options.");
-      })
-      .finally(() => setReady(true));
-  }, [slug]);
+    const hit = categories.find((row) => categorySlug(row.name) === slug);
+    if (hit) setNote(hit.note ?? "");
+  }, [categories, slug]);
 
   const matching = useMemo(
     () => (rows || []).filter((row) => categorySlug(row.category) === slug),
@@ -218,28 +202,7 @@ export function CategoryProductsPage({ slug }: { slug: string }) {
 
   if (!ready) return <ManagerSkeleton variant="table" />;
 
-  function requireTaxonomy() {
-    return Promise.all([
-      listCategories(),
-      listSubcategories(),
-      listUnits(),
-      listDirectory("manufacturers"),
-    ]).then(([cats, subs, unitRows, brandRows]) => {
-      setCategories(cats);
-      setSubcategories(subs);
-      setUnits(unitRows);
-      setBrands(brandRows);
-      return true;
-    });
-  }
-
   async function openAdd() {
-    try {
-      await requireTaxonomy();
-    } catch (err) {
-      toast.error(err, "Could not load product options.");
-      return;
-    }
     setDraft({ ...blank, category: displayName });
     setImageFile(null);
     setConfirmId(null);
@@ -322,6 +285,17 @@ export function CategoryProductsPage({ slug }: { slug: string }) {
       toast.success("Product removed.");
     } catch (err) {
       toast.error(err, "Could not remove product.");
+    }
+  }
+
+  async function toggleActive(item: HqCatalogItem) {
+    const archived = item.active === false;
+    try {
+      await setProductsActive([{ id: item.id, name: item.name }], archived);
+      setConfirmId(null);
+      toast.success(archived ? "Product restored." : "Product archived.");
+    } catch (err) {
+      toast.error(err, "Could not update product.");
     }
   }
 
@@ -480,6 +454,15 @@ export function CategoryProductsPage({ slug }: { slug: string }) {
                     }}
                   >
                     <Pencil size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-pos-ink-muted transition hover:bg-pos-surface-muted hover:text-pos-ink"
+                    aria-label={`${item.active === false ? "Restore" : "Archive"} ${item.name}`}
+                    title={item.active === false ? "Restore" : "Archive"}
+                    onClick={() => void toggleActive(item)}
+                  >
+                    {item.active === false ? <ArchiveRestore size={15} /> : <Archive size={15} />}
                   </button>
                   <button
                     type="button"

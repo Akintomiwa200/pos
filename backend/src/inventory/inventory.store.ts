@@ -27,6 +27,7 @@ export type StockMovement = {
   countedOnHand?: number;
   reason?: string;
   staff?: string;
+  runId?: string;
 };
 
 export type MovementInput = {
@@ -40,6 +41,7 @@ export type MovementInput = {
   countedOnHand?: number;
   reason?: string;
   staff?: string;
+  runId?: string;
 };
 
 export function levelFromItem(
@@ -143,6 +145,7 @@ export class InventoryStore {
         typeof input.countedOnHand === "number" ? Math.max(0, Math.round(input.countedOnHand)) : undefined,
       reason: input.reason?.trim() || undefined,
       staff: input.staff?.trim() || undefined,
+      runId: input.runId?.trim() || undefined,
     };
     const rows = await this.movements();
     await writeMovements(this.file, [movement, ...rows].slice(0, 5000));

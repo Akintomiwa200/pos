@@ -1,39 +1,41 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Boxes, Plus } from "lucide-react";
 import { toast } from "@/lib/toast";
 import {
   categorySlug,
   deleteCategory,
-  getTaxonomyUsage,
-  listCategories,
-  productCount,
   renameTaxonomy,
   saveCategory,
   type TaxonomyRecord,
-  type TaxonomyUsage,
 } from "@/lib/hq-taxonomy";
 import { naira } from "@/lib/hq-ops";
 import { useLiveCatalog } from "@/lib/live-catalog";
+import { useLiveDirectoryRows } from "@/lib/live-directory-rows";
 import { ManagerSkeleton } from "../Skeleton";
 import { SlideOver } from "../SlideOver";
-import { DataTable, Field, PrimaryButton, ToggleField, fieldClass } from "./SetupChrome";
+import {
+  DataTable,
+  Field,
+  LiveBadge,
+  PrimaryButton,
+  ToggleField,
+  fieldClass,
+} from "./SetupChrome";
 
 type Draft = { id?: string; name: string; note: string; active: boolean };
 
 const blank: Draft = { name: "", note: "", active: true };
 
 export function CategoriesManager() {
-  const { items: catalog, live } = useLiveCatalog();
-  const [rows, setRows] = useState<TaxonomyRecord[]>([]);
-  const [usage, setUsage] = useState<TaxonomyUsage | null>(null);
+  const { items: catalog } = useLiveCatalog();
+  const { rows, live, ready } = useLiveDirectoryRows("item-groups");
   const [draft, setDraft] = useState<Draft>(blank);
   const [originalName, setOriginalName] = useState("");
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [ready, setReady] = useState(false);
 
   const valuesByCategory = useMemo(() => {
     const values = new Map<string, { cost: number; retail: number }>();
@@ -46,31 +48,17 @@ export function CategoriesManager() {
     return values;
   }, [catalog]);
 
-  async function load() {
-    const [categories, taxonomy] = await Promise.all([
-      listCategories(),
-      getTaxonomyUsage(),
-    ]);
-    setRows(categories);
-    setUsage(taxonomy);
-    setReady(true);
+  function categoryCount(name: string) {
+    return catalog.filter((item) => item.category === name).length;
   }
-
-  useEffect(() => {
-    load().catch((err) => {
-      toast.error(err, "Could not load categories.");
-      setReady(true);
-    });
-  }, []);
 
   const sorted = useMemo(
     () =>
       [...rows].sort(
         (a, b) =>
-          productCount(usage, "categories", b.name) - productCount(usage, "categories", a.name) ||
-          a.name.localeCompare(b.name),
+          categoryCount(b.name) - categoryCount(a.name) || a.name.localeCompare(b.name),
       ),
-    [rows, usage],
+    [rows, catalog],
   );
 
   if (!ready) return <ManagerSkeleton variant="table" />;
@@ -103,7 +91,6 @@ export function CategoriesManager() {
       if (draft.id && originalName && originalName !== draft.name.trim()) {
         await renameTaxonomy("category", originalName, draft.name.trim());
       }
-      await load();
       setOpen(false);
       toast.success(draft.id ? "Category updated." : "Category created.");
     } catch (err) {
@@ -126,10 +113,11 @@ export function CategoriesManager() {
           </h1>
           <p className="mt-3 text-[14px] text-pos-ink-muted">
             Top-level product groups · {activeCount} active · cost value{" "}
-            {naira(totalCost, 0)} · {live ? "live" : "offline"}
+            {naira(totalCost, 0)}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <LiveBadge live={live} />
           <Link
             href="/setup/items/items"
             className="rounded-full bg-pos-surface px-4 py-2.5 text-sm font-medium text-pos-ink shadow-pos-sm"
@@ -179,7 +167,7 @@ export function CategoriesManager() {
           </tr>
         ) : (
           sorted.map((row) => {
-            const count = productCount(usage, "categories", row.name);
+            const count = categoryCount(row.name);
             const value = valuesByCategory.get(row.name) ?? { cost: 0, retail: 0 };
             const href = `/setup/items/groups/${categorySlug(row.name)}`;
             return (
@@ -256,14 +244,13 @@ export function CategoriesManager() {
                 className="rounded-full bg-pos-surface-muted px-4 py-2.5 text-sm text-pos-ink"
                 disabled={busy}
                 onClick={async () => {
-                  const count = productCount(usage, "categories", draft.name);
+                  const count = categoryCount(draft.name);
                   if (count > 0) {
                     toast.error(`Remove or reassign ${count} product(s) before deleting.`);
                     return;
                   }
                   try {
                     await deleteCategory(draft.id!);
-                    await load();
                     setOpen(false);
                     toast.success("Category deleted.");
                   } catch (err) {

@@ -1,16 +1,20 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Boxes, Package, PackageCheck, ShieldAlert } from "lucide-react";
+import { Boxes, Package, PackageCheck, ShieldAlert, SlidersHorizontal } from "lucide-react";
+import { useAuth } from "@/components/AuthProvider";
 import { listStockLevels, naira, type StockLevel } from "@/lib/hq-ops";
+import { StockAdjustmentModal } from "@/components/transactions/StockAdjustmentModal";
 import { useOrgLocale } from "@/lib/org-locale";
 import { useThemeColors } from "@/hooks/useThemeColors";
 import { ManagerSkeleton } from "../../Skeleton";
 
 export function OnHandPage() {
   const colors = useThemeColors();
+  const { session } = useAuth();
   useOrgLocale();
   const [levels, setLevels] = useState<StockLevel[] | null>(null);
+  const [adjustItem, setAdjustItem] = useState<StockLevel | null>(null);
 
   useEffect(() => {
     listStockLevels().then(setLevels).catch(() => setLevels([]));
@@ -96,6 +100,7 @@ export function OnHandPage() {
                     <th className="px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wide text-pos-ink-faint">Reorder level</th>
                     <th className="px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wide text-pos-ink-faint">Value</th>
                     <th className="px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wide text-pos-ink-faint">Status</th>
+                    <th className="px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wide text-pos-ink-faint">Adjust</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-pos-border/60">
@@ -126,6 +131,15 @@ export function OnHandPage() {
                             {out ? "Out of stock" : low ? "Low" : "In stock"}
                           </span>
                         </td>
+                        <td className="px-4 py-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() => setAdjustItem(row)}
+                            className="inline-flex items-center gap-1 rounded-full border border-pos-border/70 px-2.5 py-1 text-[11px] font-semibold text-pos-ink-muted transition hover:border-pos-primary/50 hover:bg-pos-primary-soft hover:text-pos-primary"
+                          >
+                            <SlidersHorizontal size={11} /> Adjust
+                          </button>
+                        </td>
                       </tr>
                     );
                   })}
@@ -135,6 +149,18 @@ export function OnHandPage() {
           </div>
         )}
       </article>
+
+      {adjustItem && (
+        <StockAdjustmentModal
+          initialReason="Count correction"
+          initialItemId={adjustItem.itemId}
+          recordedBy={session?.name ?? ""}
+          onClose={() => setAdjustItem(null)}
+          onSaved={(fresh) => {
+            setLevels(fresh);
+          }}
+        />
+      )}
     </div>
   );
 }

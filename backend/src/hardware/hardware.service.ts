@@ -115,15 +115,22 @@ export class HardwareService {
     }
     const widthIn = Math.round((widthMm / 25.4) * 100);
     const text = content.replace(/\r\n/g, "\n");
-    const lines = text.split("\n");
+    const lines = text.split("\n").filter((line) => line.length > 0);
     const longest = Math.max(1, ...lines.map((line) => line.length));
     const availablePt = (widthMm / 25.4) * 72;
     const fontSize = Math.min(
-      20,
-      Math.max(7, Math.floor((availablePt / (longest * 0.6)) * 100) / 100),
+      18,
+      Math.max(6, Math.floor((availablePt / (longest * 0.6)) * 100) / 100),
     );
-    const lineHeightPt = fontSize * 1.25;
-    const heightIn = Math.max(600, Math.ceil((lines.length * lineHeightPt * 100) / 72));
+    const charW = fontSize * 0.6;
+    const widthChars = Math.max(1, Math.floor(availablePt / charW));
+    let wrappedLines = 0;
+    for (const line of lines) {
+      wrappedLines += Math.max(1, Math.ceil((line.length + 1) / widthChars));
+    }
+    const lineHeightPt = fontSize * 1.3;
+    const heightPt = wrappedLines * lineHeightPt + fontSize;
+    const heightIn = Math.max(450, Math.ceil((heightPt * 100) / 72));
 
     const escapedPrinter = printerName.replace(/'/g, "''");
     const script = [
@@ -131,7 +138,7 @@ export class HardwareService {
       `$printer = '${escapedPrinter}'`,
       `$script:fontPt = ${fontSize}`,
       `$script:widthPt = ${Math.round(availablePt * 100) / 100}`,
-      `$script:heightPt = ${Math.round(lines.length * lineHeightPt * 100) / 100}`,
+      `$script:heightPt = ${Math.round(heightPt * 100) / 100}`,
       `$script:widthIn = ${widthIn}`,
       `$script:heightIn = ${heightIn}`,
       `$script:text = @'`,
@@ -140,11 +147,9 @@ export class HardwareService {
       `$font = New-Object System.Drawing.Font('Courier New', [single]$script:fontPt, [System.Drawing.FontStyle]::Regular, [System.Drawing.GraphicsUnit]::Point)`,
       `$script:font = $font`,
       `$paper = New-Object System.Drawing.Printing.PaperSize('Receipt', $script:widthIn, $script:heightIn)`,
-      `$paper.RawKind = 9`,
       `$doc = New-Object System.Drawing.Printing.PrintDocument`,
       `$doc.PrinterSettings.PrinterName = $printer`,
       `$doc.DefaultPageSettings.PaperSize = $paper`,
-      `$doc.DefaultPageSettings.PaperSize.RawKind = 9`,
       `$doc.DefaultPageSettings.Margins = New-Object System.Drawing.Printing.Margins(0, 0, 0, 0)`,
       `$doc.OriginAtMargins = $false`,
       `$null = $doc.add_PrintPage({`,
@@ -238,11 +243,9 @@ export class HardwareService {
       `    $w = [int][math]::Round([double]$job.widthMm / 25.4 * 100)`,
       `    $h = [int][math]::Round([double]$job.heightMm / 25.4 * 100)`,
       `    $paper = New-Object System.Drawing.Printing.PaperSize('Label', $w, $h)`,
-      `    $paper.RawKind = 9`,
       `    $doc = New-Object System.Drawing.Printing.PrintDocument`,
       `    $doc.PrinterSettings.PrinterName = $printer`,
       `    $doc.DefaultPageSettings.PaperSize = $paper`,
-      `    $doc.DefaultPageSettings.PaperSize.RawKind = 9`,
       `    $doc.DefaultPageSettings.Margins = New-Object System.Drawing.Printing.Margins(0, 0, 0, 0)`,
       `    $null = $doc.add_PrintPage({`,
       `      param($sender, $e)`,

@@ -83,6 +83,8 @@ export type StoreSettings = {
   receiptShowFooter: boolean;
   receiptShowDiscount: boolean;
   receiptShowPoweredBy: boolean;
+  receiptShowLogo: boolean;
+  showSkuOnReceipt: boolean;
   receiptPaper: ReceiptPaper;
   receiptTemplate: "classic" | "compact" | "bold" | "minimal";
   storeName: string;
@@ -203,6 +205,8 @@ export function defaultStoreSettings(): StoreSettings {
     receiptShowFooter: true,
     receiptShowDiscount: true,
     receiptShowPoweredBy: true,
+    receiptShowLogo: true,
+    showSkuOnReceipt: false,
     receiptPaper: "80mm",
     receiptTemplate: "classic",
     storeName: "",

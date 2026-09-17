@@ -5,6 +5,7 @@ import { formatLineQty } from "../../lib/units";
 import { printReceipt, TENDER_LABEL, type SaleReceipt } from "../../lib/receipt";
 import { loadPrinterConfig } from "../../lib/printers";
 import { useStoreSettings } from "../../lib/use-store-settings";
+import { ReceiptVisual } from "../../components/receipt/ReceiptVisual";
 
 type Props = {
   sale: SaleReceipt;
@@ -70,16 +71,25 @@ export function PaidScreen({ sale, saveState = "saved", onNewOrder }: Props) {
           ? ` · ${settings.receiptCopies} cop${settings.receiptCopies === 1 ? "y" : "ies"}`
           : ""}
       </p>
-      <ul className="paid-lines">
-        {sale.lines.map((line) => (
-          <li key={line.id}>
-            <span>
-              {line.name} · {formatLineQty(line.quantity, line.unit, line.unitLabel)}
-            </span>
-            <strong>{formatMoney(line.unitPriceMinor * line.quantity)}</strong>
-          </li>
-        ))}
-      </ul>
+      <div style={{ display: "flex", justifyContent: "center", margin: "16px 0" }}>
+        <ReceiptVisual
+          settings={settings}
+          lines={sale.lines.map((l) => ({
+            name: l.name,
+            quantity: l.quantity,
+            unitPriceMinor: l.unitPriceMinor,
+          }))}
+          ticketId={sale.ticketId}
+          paidAt={sale.paidAt}
+          cashier={sale.cashierName}
+          till={sale.tillKey || ""}
+          tender={sale.tender}
+          customerName={sale.customerName}
+          customerPhone={sale.customerPhone}
+          tenderedMinor={sale.amountTenderedMinor || sale.totalMinor}
+          changeMinor={sale.changeMinor || 0}
+        />
+      </div>
       {status ? <p className="pay-sub">{status}</p> : null}
       <div className="paid-actions">
         <button className="ghost-btn" onClick={onNewOrder}>

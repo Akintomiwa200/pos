@@ -48,6 +48,18 @@ function maskGiftCard(code: string) {
   return `${clean.slice(0, 2)}-····${clean.slice(-4)}`;
 }
 
+function initialsOf(name: string) {
+  return (
+    name
+      .trim()
+      .split(/\s+/)
+      .map((word) => word.charAt(0))
+      .join("")
+      .slice(0, 2)
+      .toUpperCase() || "?"
+  );
+}
+
 export function formatReceiptText(
   sale: SaleReceipt,
   settings: StoreSettings = loadStoreSettings(),
@@ -80,6 +92,9 @@ export function formatReceiptText(
   const showGiftBalance = settings.receiptShowGiftCardBalance !== false;
 
   const lines = [
+    ...(showTitle && settings.receiptShowLogo !== false
+      ? ["", `   ${initialsOf(settings.storeName || settings.companyLegalName)}   `, ""]
+      : []),
     ...(showTitle ? [settings.storeName] : []),
     ...(showTitle &&
     settings.companyLegalName &&
@@ -89,12 +104,12 @@ export function formatReceiptText(
     ...(showAddress ? [settings.storeAddress] : []),
     ...(showPhone ? [settings.storePhone] : []),
     ...(showEmail ? [settings.storeEmail] : []),
-    ...(settings.showTinOnReceipt ? [`TIN ${settings.storeTin}`] : []),
+    ...(settings.showTinOnReceipt && !isMinimal ? [`TIN ${settings.storeTin}`] : []),
     ...(showHeader ? [settings.receiptHeader] : []),
     "--------------------------------",
     ...(showTicket ? [`Receipt # ${sale.ticketId}`] : []),
     ...(showDate
-      ? [`${when.toLocaleDateString("en-NG")} ${when.toLocaleTimeString("en-NG")}`]
+      ? [`${when.toLocaleDateString("en-GB")} ${when.toLocaleTimeString("en-GB", { hour12: false })}`]
       : []),
     ...(settings.receiptShowCashier ? [`Cashier: ${sale.cashierName}`] : []),
     ...(settings.receiptShowTill && (sale.tillKey || till)
@@ -109,10 +124,14 @@ export function formatReceiptText(
         ]
       : []),
     "--------------------------------",
-    ...sale.lines.map(
-      (line) =>
-        `${line.name} ${formatLineQty(line.quantity, line.unit, line.unitLabel)}  ${formatMoney(line.unitPriceMinor * line.quantity)}`,
-    ),
+    ...sale.lines.flatMap((line) => {
+      // e.g. "COKE 50CL" on line 1, "  2 x 30,000.00" on line 2
+      const lineTotal = formatMoney(line.unitPriceMinor * line.quantity);
+      const nameLine = `${line.name}   ${lineTotal}`;
+      const qtyStr = formatLineQty(line.quantity, line.unit, line.unitLabel);
+      const qtyLine = `  ${qtyStr} x ${formatMoney(line.unitPriceMinor)}`;
+      return [nameLine, qtyLine];
+    }),
     "--------------------------------",
     `Subtotal     ${formatMoney(totals.subtotalMinor)}`,
     ...(showDiscount && sale.discountMinor && sale.discountMinor > 0

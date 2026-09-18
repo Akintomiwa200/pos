@@ -5,6 +5,7 @@ import { formatLineQty } from "../../lib/units";
 import { printReceipt, TENDER_LABEL, type SaleReceipt } from "../../lib/receipt";
 import { loadPrinterConfig } from "../../lib/printers";
 import { useStoreSettings } from "../../lib/use-store-settings";
+import { overlayReceiptIdentity } from "../../lib/receipt-identity";
 import { ReceiptVisual } from "../../components/receipt/ReceiptVisual";
 
 type Props = {
@@ -22,7 +23,8 @@ const SAVE_COPY = {
 const autoPrintedTickets = new Set<string>();
 
 export function PaidScreen({ sale, saveState = "saved", onNewOrder }: Props) {
-  const settings = useStoreSettings();
+  // Keep the receipt card on the same HQ + branch configuration used at print time.
+  const settings = overlayReceiptIdentity(useStoreSettings());
   const [status, setStatus] = useState<string>(SAVE_COPY[saveState]);
   const [busy, setBusy] = useState(false);
 
@@ -64,7 +66,7 @@ export function PaidScreen({ sale, saveState = "saved", onNewOrder }: Props) {
       </div>
       <h1>Payment successful</h1>
       <p className="pay-sub">
-        {TENDER_LABEL[sale.tender]} · {formatMoney(sale.totalMinor)}
+        {TENDER_LABEL[sale.tender]} · {formatMoney(sale.totalMinor, settings.currency)}
         {sale.loyaltyNumber ? ` · Loyalty ${sale.loyaltyNumber}` : ""}
         {sale.tillKey ? ` · ${sale.tillKey}` : ""}
         {settings.autoPrintReceipt
@@ -78,6 +80,7 @@ export function PaidScreen({ sale, saveState = "saved", onNewOrder }: Props) {
             name: l.name,
             quantity: l.quantity,
             unitPriceMinor: l.unitPriceMinor,
+            sku: l.sku,
           }))}
           ticketId={sale.ticketId}
           paidAt={sale.paidAt}
@@ -88,6 +91,17 @@ export function PaidScreen({ sale, saveState = "saved", onNewOrder }: Props) {
           customerPhone={sale.customerPhone}
           tenderedMinor={sale.amountTenderedMinor || sale.totalMinor}
           changeMinor={sale.changeMinor || 0}
+          loyaltyNumber={sale.loyaltyNumber}
+          loyaltyPointsEarned={sale.loyaltyPointsEarned}
+          loyaltyPointsRedeemed={sale.loyaltyPointsRedeemed}
+          loyaltyBalanceBefore={sale.loyaltyBalanceBefore}
+          loyaltyBalanceAfter={sale.loyaltyBalanceAfter}
+          loyaltyRedeemMinor={sale.loyaltyRedeemMinor}
+          giftCardCode={sale.giftCardCode}
+          giftCardChargedMinor={sale.giftCardChargedMinor}
+          giftCardBalanceAfterMinor={sale.giftCardBalanceAfterMinor}
+          discountMinor={sale.discountMinor}
+          totalMinor={sale.totalMinor}
         />
       </div>
       {status ? <p className="pay-sub">{status}</p> : null}

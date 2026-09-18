@@ -112,8 +112,8 @@ const PRODUCTS_NAV: NavNode[] = [
   { id: "items-low-stock", label: "Low Stock", href: "/setup/items/low-stock" },
   { id: "items-expiring", label: "Expiring", href: "/setup/items/expiring" },
   { id: "scan-barcode", label: "Print Labels", href: "/setup/items/barcode" },
-  { id: "others-import", label: "Import Products", href: "/setup/items/import" },
-  { id: "items-export", label: "Export Products", href: "/setup/items/export" },
+  { id: "others-import", label: "Import Products", href: "/setup/others/import" },
+  { id: "items-export", label: "Export Products", href: "/setup/others/export" },
 ];
 
 const STOCK_REPORT_NAV: NavNode[] = [

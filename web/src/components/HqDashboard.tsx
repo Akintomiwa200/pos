@@ -216,10 +216,11 @@ function addDays(date: Date, days: number) {
   return next;
 }
 
-type RangePreset = "7d" | "30d" | "90d" | "thisMonth" | "lastMonth" | "12m" | "all";
+type RangePreset = "today" | "7d" | "30d" | "90d" | "thisMonth" | "lastMonth" | "12m" | "all";
 type BucketUnit = "day" | "week" | "month";
 
 const RANGE_PRESETS: { id: RangePreset; label: string }[] = [
+  { id: "today", label: "Today" },
   { id: "7d", label: "Last 7 days" },
   { id: "30d", label: "Last 30 days" },
   { id: "90d", label: "Last 90 days" },
@@ -233,6 +234,8 @@ function rangeForPreset(sales: HqSale[], preset: RangePreset): { from: Date; to:
   const now = new Date();
   const today = startOfDay(now);
   switch (preset) {
+    case "today":
+      return { from: startOfDay(now), to: endOfDay(now) };
     case "7d":
       return { from: addDays(today, -6), to: endOfDay(now) };
     case "30d":
@@ -1629,7 +1632,7 @@ export function HqDashboard() {
   const [sales, setSales] = useState<HqSale[]>([]);
   const [catalog, setCatalog] = useState<HqCatalogItem[]>([]);
   const [ready, setReady] = useState(false);
-  const [preset, setPreset] = useState<RangePreset>("90d");
+  const [preset, setPreset] = useState<RangePreset>("today");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
   const [customMode, setCustomMode] = useState(false);
@@ -1665,6 +1668,11 @@ export function HqDashboard() {
     };
   }, []);
 
+  const hiddenNames = useMemo(
+    () => new Set(accounts.map((row) => row.name.trim().toLowerCase().replace(/\s+/g, ""))),
+    [accounts],
+  );
+
   const report = useMemo(() => {
     const range =
       customMode && customFrom && customTo
@@ -1676,21 +1684,25 @@ export function HqDashboard() {
     const prevFrom = new Date(prevTo.getTime() - span + 1);
     const current = sales.filter((row) => inRange(row, from, to));
     const previous = sales.filter((row) => inRange(row, prevFrom, prevTo));
+    const team = current.filter(
+      (row) =>
+        !hiddenNames.has((row.cashierName || "").trim().toLowerCase().replace(/\s+/g, "")),
+    );
     const revenue = current.reduce((sum, row) => sum + row.totalMinor, 0);
     const prevRevenue = previous.reduce((sum, row) => sum + row.totalMinor, 0);
     const delta = revenue - prevRevenue;
     const pct = prevRevenue ? (delta / prevRevenue) * 100 : current.length ? 100 : 0;
-    const cashiers = sumBy(current, (row) => row.cashierName || "Till", (row) => row.totalMinor);
+    const cashiers = sumBy(team, (row) => row.cashierName || "Till", (row) => row.totalMinor);
     const tenders = sumBy(current, (row) => row.tender || "Other", (row) => row.totalMinor);
     const ticketsByTender = sumBy(current, (row) => row.tender || "Other", () => 1);
-    const ticketsByCashier = sumBy(current, (row) => row.cashierName || "Till", () => 1);
+    const ticketsByCashier = sumBy(team, (row) => row.cashierName || "Till", () => 1);
     const linesByCashier = sumBy(
-      current,
+      team,
       (row) => row.cashierName || "Till",
       (row) => row.lines?.length ?? 1,
     );
     const topCashier = ticketsByCashier[0];
-    const best = current.reduce<HqSale | null>(
+    const best = team.reduce<HqSale | null>(
       (lead, row) => (!lead || row.totalMinor > lead.totalMinor ? row : lead),
       null,
     );
@@ -1729,7 +1741,7 @@ export function HqDashboard() {
       months,
       avgTicket: current.length ? revenue / current.length : 0,
     };
-  }, [sales, preset, customMode, customFrom, customTo]);
+  }, [sales, preset, customMode, customFrom, customTo, hiddenNames]);
 
   useEffect(() => {
     if (selectedCashier && report.cashiers.some((row) => row.name === selectedCashier)) return;
@@ -1818,7 +1830,12 @@ export function HqDashboard() {
   const periodLabel = report.unit === "month" ? "Average monthly" : report.unit === "week" ? "Average weekly" : "Average daily";
   const people = accounts.slice(0, 3);
   const extra = accounts[3];
-  const cashierBar = fillCashierBar(report.cashiers, accounts);
+  const cashierBar = fillCashierBar(
+    report.cashiers,
+    accounts.filter(
+      (row) => !hiddenNames.has(row.name.trim().toLowerCase().replace(/\s+/g, "")),
+    ),
+  );
   const positive = report.pct >= 0;
   const DeltaIcon = positive ? ArrowUpRight : ArrowDownRight;
   const tenderRows = [...TENDERS]

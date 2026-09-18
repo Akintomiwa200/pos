@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Plus } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { listCatalog } from "@/lib/hq-api";
-import { importCatalogRows, exportSetup } from "@/lib/hq-setup";
+import { importCatalogRows } from "@/lib/hq-setup";
 import { naira } from "@/lib/hq-ops";
 import { marginPercent, parseNairaInput } from "@/lib/catalog";
 import {
@@ -16,6 +16,8 @@ import {
 } from "@/lib/hq-directory";
 import { useLiveCatalog } from "@/lib/live-catalog";
 import { useLiveDirectoryRows } from "@/lib/live-directory-rows";
+import { ImportManager } from "./ImportManager";
+import { ExportManager } from "./ExportManager";
 import { ManagerSkeleton } from "../Skeleton";
 import { SlideOver } from "../SlideOver";
 import {
@@ -521,201 +523,9 @@ export function ExpiringManager() {
 }
 
 export function ProductImportManager() {
-  const [csv, setCsv] = useState(
-    "name,category,subcategory,brand,sku,barcode,batch,cost,price,onHand,reorderLevel,unit,packSize,expiresAt\n",
-  );
-  const [busy, setBusy] = useState(false);
-
-  function parseCsv(text: string) {
-    const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-    if (lines.length < 2) return [];
-    const headers = lines[0]!.split(",").map((cell) => cell.trim().toLowerCase());
-    return lines.slice(1).map((line) => {
-      const cells = line.split(",").map((cell) => cell.trim());
-      const row: Record<string, string> = {};
-      headers.forEach((header, index) => {
-        row[header] = cells[index] ?? "";
-      });
-      const sell = Number(row.price || row.selling || "0");
-      const cost = Number(row.cost || "0");
-      return {
-        name: row.name,
-        category: row.category,
-        subcategory: row.subcategory || row.sub || "",
-        brand: row.brand || row.manufacturer || "",
-        sku: row.sku,
-        barcode: row.barcode,
-        productCode: row.productcode || row.productCode || "",
-        batchNumber: row.batch || row.batchnumber || "",
-        costMinor: Math.round((Number.isFinite(cost) ? cost : 0) * 100),
-        priceMinor: Math.round((Number.isFinite(sell) ? sell : 0) * 100),
-        onHand: Number(row.onhand || row.stock || row.qty || "0"),
-        reorderLevel: Number(row.reorder || row.reorderlevel || "5"),
-        unit: row.unit || "each",
-        packSize: Number(row.packsize || row.packSize || "1"),
-        expiresAt: row.expires || row.expiry || row.expiresat || "",
-      };
-    });
-  }
-
-  return (
-    <div>
-      <SetupHeader
-        kicker={KICKER}
-        title="Import Products"
-        copy="Paste a CSV of products. Matching SKU or barcode updates the existing item; blank codes are generated. Imports refresh every product page instantly."
-      />
-      <section className="rounded-[24px] bg-pos-surface p-5 shadow-pos-md">
-        <Field label="CSV">
-          <textarea
-            rows={14}
-            className={`${fieldClass} font-mono text-[12px]`}
-            value={csv}
-            onChange={(event) => setCsv(event.target.value)}
-          />
-        </Field>
-        <PrimaryButton
-          className="mt-2"
-          disabled={busy}
-          onClick={async () => {
-            const rows = parseCsv(csv);
-            if (!rows.length) {
-              toast.error("Add at least one data row under the header.");
-              return;
-            }
-            setBusy(true);
-            try {
-              const result = await importCatalogRows(rows);
-              toast.success(`Imported ${result.created} new, updated ${result.updated}.`);
-            } catch (err) {
-              toast.error(err, "Import failed.");
-            } finally {
-              setBusy(false);
-            }
-          }}
-        >
-          Import catalog
-        </PrimaryButton>
-      </section>
-    </div>
-  );
+  return <ImportManager />;
 }
 
 export function ProductExportManager() {
-  const { items, setItems, live } = useLiveCatalog();
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    listCatalog()
-      .then(setItems)
-      .catch(() => setItems([]));
-  }, [setItems]);
-
-  function downloadCsv() {
-    const header = [
-      "name",
-      "category",
-      "subcategory",
-      "brand",
-      "sku",
-      "barcode",
-      "batch",
-      "cost",
-      "price",
-      "onHand",
-      "reorderLevel",
-      "unit",
-      "packSize",
-      "expiresAt",
-      "active",
-    ];
-    const lines = [
-      header.join(","),
-      ...items.map((row) =>
-        [
-          row.name,
-          row.category,
-          row.subcategory ?? "",
-          row.brand ?? "",
-          row.sku,
-          row.barcode,
-          row.batchNumber ?? "",
-          (row.costMinor / 100).toFixed(2),
-          (row.priceMinor / 100).toFixed(2),
-          row.onHand,
-          row.reorderLevel,
-          row.unit,
-          row.packSize,
-          row.expiresAt?.slice(0, 10) ?? "",
-          row.active !== false ? "1" : "0",
-        ]
-          .map((cell) => `"${String(cell).replace(/"/g, '""')}"`)
-          .join(","),
-      ),
-    ];
-    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `products-${new Date().toISOString().slice(0, 10)}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
-  }
-
-  return (
-    <div>
-      <SetupHeader
-        kicker={KICKER}
-        title="Export Products"
-        copy="Download the catalog as CSV for spreadsheets, or JSON for a full HQ backup of catalog data."
-      />
-      <div className="grid gap-4 sm:grid-cols-2">
-        <section className="rounded-[24px] bg-pos-surface p-6 shadow-pos-md">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold text-pos-ink">CSV spreadsheet</h2>
-            <LiveBadge live={live} />
-          </div>
-          <p className="mt-2 text-sm text-pos-ink-muted">
-            {items.length} products ready — columns match the import format. Count updates in
-            real-time as the catalog changes.
-          </p>
-          <PrimaryButton className="mt-5" onClick={downloadCsv}>
-            Download CSV
-          </PrimaryButton>
-        </section>
-        <section className="rounded-[24px] bg-pos-surface p-6 shadow-pos-md">
-          <h2 className="text-lg font-semibold text-pos-ink">JSON backup</h2>
-          <p className="mt-2 text-sm text-pos-ink-muted">
-            Full catalog payload for restore or another site.
-          </p>
-          <PrimaryButton
-            className="mt-5"
-            disabled={busy}
-            onClick={async () => {
-              setBusy(true);
-              try {
-                const data = await exportSetup("catalog");
-                const blob = new Blob([JSON.stringify(data, null, 2)], {
-                  type: "application/json",
-                });
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement("a");
-                link.href = url;
-                link.download = `catalog-${new Date().toISOString().slice(0, 10)}.json`;
-                link.click();
-                URL.revokeObjectURL(url);
-                toast.success("Catalog JSON downloaded.");
-              } catch (err) {
-                toast.error(err, "Export failed.");
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            Download JSON
-          </PrimaryButton>
-        </section>
-      </div>
-    </div>
-  );
+  return <ExportManager />;
 }

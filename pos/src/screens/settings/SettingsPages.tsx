@@ -6,7 +6,7 @@ import {
   type StockMode,
   type StoreSettings,
 } from "../../lib/store-settings";
-import { formatReceiptText, type SaleReceipt } from "../../lib/receipt";
+import { formatReceiptText, printReceipt, type SaleReceipt } from "../../lib/receipt";
 import { ReceiptVisual } from "../../components/receipt/ReceiptVisual";
 import {
   detectPrinters,
@@ -386,7 +386,7 @@ export function LoyaltySettings() {
 }
 
 export function ReceiptSettings() {
-  const [settings, patch] = useSettings();
+  const [settings] = useSettings();
   const sampleLines = [
     {
       id: "sample-coke",
@@ -420,10 +420,10 @@ export function ReceiptSettings() {
     ticketId: "T-1001",
     paidAt: new Date().toISOString(),
     tender: "cash",
-    cashierName: "Tosin",
-    tillKey: "TIL-ILU-001",
-    customerName: "Alex Customer",
-    customerPhone: "08012345678",
+    cashierName: "",
+    tillKey: "",
+    customerName: "",
+    customerPhone: "",
     loyaltyNumber: null,
     loyaltyBalanceBefore: null,
     loyaltyPointsRedeemed: null,
@@ -447,11 +447,7 @@ export function ReceiptSettings() {
       return;
     }
     const id = toast.loading(`Printing preview on ${printer}…`);
-    sendToPrinter(
-      printer,
-      preview,
-      settings.receiptPaper === "58mm" ? 58 : 80,
-    )
+    printReceipt(sale)
       .then(() => toast.success(`Preview printed on ${printer}.`, { id }))
       .catch((error) =>
         toast.error(error instanceof Error ? error.message : "Print failed.", { id }),
@@ -483,17 +479,24 @@ export function ReceiptSettings() {
   return (
     <>
       <p className="set-lede">
-        Header, tax lines, cashier, and footer printed after payment. The preview
-        below is live — it follows the template you pick (classic, compact, bold,
-        minimal) and mirrors the web workspace preview.
+        This till prints the live HQ receipt layout for{" "}
+        <strong>{settings.receiptLocation || settings.storeName || "this branch"}</strong>.
+        Change header, footer, tax, logo, and fields in the web workspace Settings → Receipts;
+        this preview updates as soon as HQ saves.
       </p>
+      <LiveNote>
+        {settings.receiptPaper} · {settings.receiptTemplate}
+        {settings.receiptShowTax ? " · tax on" : " · tax off"}
+        {settings.receiptShowLogo ? " · logo on" : " · logo off"}
+        {settings.receiptLocation ? ` · ${settings.receiptLocation}` : ""}
+      </LiveNote>
       <ReceiptVisual
         settings={settings}
         lines={sampleLines}
         ticketId={sale.ticketId}
         paidAt={sale.paidAt}
         cashier={sale.cashierName}
-        till="TIL-ILU-001"
+        till={sale.tillKey ?? ""}
         tender={sale.tender}
         customerName={sale.customerName}
         customerPhone={sale.customerPhone}
@@ -502,8 +505,8 @@ export function ReceiptSettings() {
       />
       <SetCard title="Print preview">
         <SetRow
-          label="Print the current preview on the receipt printer?"
-          hint="Edge-to-edge on your assigned printer, same as after a sale"
+          label="Print the current HQ layout on the receipt printer?"
+          hint="Same slip the till sends after a sale"
         >
           <button type="button" className="set-text-btn" onClick={sendPreviewToPrinter}>
             Print preview
@@ -515,95 +518,17 @@ export function ReceiptSettings() {
           </button>
         </SetRow>
       </SetCard>
-      <SetCard title="Header">
-        <SetRow label="Store name on the receipt">
-          <TextField
-            value={settings.storeName}
-            onChange={(storeName) => patch({ storeName })}
-            width={280}
-          />
-        </SetRow>
-        <SetRow label="Address">
-          <TextField
-            value={settings.storeAddress}
-            onChange={(storeAddress) => patch({ storeAddress })}
-            width={280}
-          />
-        </SetRow>
-        <SetRow label="Phone">
-          <TextField
-            value={settings.storePhone}
-            onChange={(storePhone) => patch({ storePhone })}
-            width={200}
-          />
-        </SetRow>
-        <SetRow label="Email">
-          <TextField
-            value={settings.storeEmail}
-            onChange={(storeEmail) => patch({ storeEmail })}
-            width={220}
-          />
-        </SetRow>
-        <SetRow label="TIN">
-          <TextField
-            value={settings.storeTin}
-            onChange={(storeTin) => patch({ storeTin })}
-            width={160}
-          />
-        </SetRow>
-        <SetRow label="Policy line under the header">
-          <AreaField
-            value={settings.receiptHeader}
-            onChange={(receiptHeader) => patch({ receiptHeader })}
-          />
-        </SetRow>
-      </SetCard>
-      <SetCard title="Ticket">
-        <SetRow label="Show the cashier name?">
-          <Toggle
-            on={settings.receiptShowCashier}
-            onChange={(receiptShowCashier) => patch({ receiptShowCashier })}
-          />
-        </SetRow>
-        <SetRow label="Print a barcode of the ticket number?">
-          <Toggle
-            on={settings.receiptShowBarcode}
-            onChange={(receiptShowBarcode) => patch({ receiptShowBarcode })}
-          />
-        </SetRow>
-        <SetRow label="Paper width">
-          <SelectField
-            value={settings.receiptPaper}
-            onChange={(receiptPaper) =>
-              patch({ receiptPaper: receiptPaper as StoreSettings["receiptPaper"] })
-            }
-            options={[
-              { value: "80mm", label: "80 mm" },
-              { value: "58mm", label: "58 mm" },
-            ]}
-          />
-        </SetRow>
-        <SetRow label="Footer">
-          <AreaField
-            value={settings.receiptFooter}
-            onChange={(receiptFooter) => patch({ receiptFooter })}
-          />
-        </SetRow>
-        <SetRow label="Copies after payment">
-          <NumField
-            value={settings.receiptCopies}
-            step={1}
-            min={1}
-            onChange={(receiptCopies) =>
-              patch({ receiptCopies: Math.max(1, Math.round(receiptCopies)) })
-            }
-          />
-        </SetRow>
+      <SetCard title="What HQ is sending">
+        <SetRow label="Title">{settings.storeName || "—"}</SetRow>
+        <SetRow label="Branch">{settings.receiptLocation || "—"}</SetRow>
+        <SetRow label="Address">{settings.storeAddress || "—"}</SetRow>
+        <SetRow label="Phone">{settings.storePhone || "—"}</SetRow>
+        <SetRow label="Email">{settings.storeEmail || "—"}</SetRow>
+        <SetRow label="Header note">{settings.receiptHeader || "—"}</SetRow>
+        <SetRow label="Footer">{settings.receiptFooter || "—"}</SetRow>
+        <SetRow label="Copies after payment">{String(settings.receiptCopies)}</SetRow>
         <SetRow label="Auto-print after payment?">
-          <Toggle
-            on={settings.autoPrintReceipt}
-            onChange={(autoPrintReceipt) => patch({ autoPrintReceipt })}
-          />
+          {settings.autoPrintReceipt ? "On" : "Off"}
         </SetRow>
       </SetCard>
     </>

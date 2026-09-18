@@ -1,4 +1,4 @@
-import { saveStoreSettings, loadStoreSettings } from "./store-settings";
+import { saveStoreSettings, loadStoreSettings, type StoreSettings } from "./store-settings";
 
 export type HqOrgSnapshot = {
   company: {
@@ -10,6 +10,7 @@ export type HqOrgSnapshot = {
     phone: string;
     address: string;
     state: string;
+    currency?: string;
   };
   branches: Array<{
     id: string;
@@ -50,6 +51,7 @@ export type HqOrgSnapshot = {
     isDefault: boolean;
   }>;
   settings: {
+    currency?: string;
     receiptHeader: string;
     receiptFooter: string;
     receiptPaper: "80mm" | "58mm";
@@ -91,38 +93,101 @@ export type HqOrgSnapshot = {
     receiptShowFooter?: boolean;
     receiptShowDiscount?: boolean;
     receiptShowPoweredBy?: boolean;
+    receiptShowLogo?: boolean;
+    receiptShowTax?: boolean;
+    showSkuOnReceipt?: boolean;
+    printDuplicateReceipt?: boolean;
     receiptTemplate?: "classic" | "compact" | "bold" | "minimal";
+    receiptBrandColor?: string;
     receiptTitle?: string;
     receiptAddress?: string;
     receiptEmail?: string;
+    receiptBarcodeValue?: string;
   };
 };
 
-export function applyHqOrg(org: HqOrgSnapshot) {
+export type TillLocation = {
+  branchId?: string;
+  storeId?: string;
+};
+
+const ORG_KEY = "pos.hq-org.v1";
+export const HQ_ORG_EVENT = "pos-hq-org";
+
+function flag(value: boolean | undefined, fallback: boolean) {
+  return value ?? fallback;
+}
+
+export function formatBranchAddress(branch: HqOrgSnapshot["branches"][number]) {
+  return [branch.address, branch.city, branch.state].map((part) => part.trim()).filter(Boolean).join(", ");
+}
+
+export function cacheHqOrg(org: HqOrgSnapshot) {
+  localStorage.setItem(ORG_KEY, JSON.stringify(org));
+  window.dispatchEvent(new Event(HQ_ORG_EVENT));
+}
+
+export function loadCachedHqOrg(): HqOrgSnapshot | null {
+  try {
+    const raw = localStorage.getItem(ORG_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as HqOrgSnapshot;
+  } catch {
+    return null;
+  }
+}
+
+export function resolveTillBranch(org: HqOrgSnapshot, till?: TillLocation | null) {
+  if (!till) return undefined;
+  const byId = org.branches.find((row) => row.id && row.id === till.branchId);
+  if (byId) return byId;
+  if (till.storeId) {
+    return org.branches.find((row) => row.storeId === till.storeId);
+  }
+  return undefined;
+}
+
+export function applyHqOrg(org: HqOrgSnapshot, till?: TillLocation | null) {
+  cacheHqOrg(org);
   const vat = org.taxes.find((row) => row.isDefault && row.active) ?? org.taxes.find((row) => row.active);
   const service = org.taxes.find((row) => /service/i.test(row.name) && row.active);
   const front = org.storefronts[0];
   const pay = org.gateways;
   const current = loadStoreSettings();
   const s = org.settings;
-  saveStoreSettings({
+  const branch = resolveTillBranch(org, till);
+  const branchAddress = branch ? formatBranchAddress(branch) : "";
+  const branchPhone = branch?.phone?.trim() || "";
+  const branchName = branch?.name?.trim() || "";
+  const showTax = flag(s.receiptShowTax, current.receiptShowTax);
+  const copies = Math.max(1, s.receiptCopies ?? current.receiptCopies);
+  const duplicate = flag(s.printDuplicateReceipt, current.printDuplicateReceipt);
+
+  const next: StoreSettings = {
     ...current,
+    currency: s.currency?.trim() || org.company.currency || current.currency,
     storeName: s.receiptTitle?.trim() || org.company.name,
+    receiptLocation: branchName,
     companyLegalName: org.company.legalName,
     companyRc: org.company.rc,
     storeTin: org.company.tin,
     companyEmail: org.company.email,
-    storePhone: org.company.phone,
-    storeAddress: s.receiptAddress?.trim() || org.company.address,
+    storePhone: branchPhone || org.company.phone,
+    storeAddress: branchAddress || s.receiptAddress?.trim() || org.company.address,
     storeEmail: s.receiptEmail?.trim() || org.company.email,
     companyState: org.company.state,
     vatPercent: vat?.ratePercent ?? current.vatPercent,
     servicePercent: service?.ratePercent ?? current.servicePercent,
+    applyServiceCharge: Boolean(service),
     pricesIncludeVat: vat?.inclusive ?? s.pricesIncludeVat,
-    receiptHeader: s.receiptHeader,
-    receiptFooter: s.receiptFooter,
-    receiptPaper: s.receiptPaper,
-    invoicePrefix: s.invoicePrefix,
+    includeVatBreakdown: showTax,
+    receiptShowTax: showTax,
+    receiptHeader: s.receiptHeader ?? "",
+    receiptFooter: s.receiptFooter ?? "",
+    receiptPaper: s.receiptPaper ?? current.receiptPaper,
+    receiptBrandColor: s.receiptBrandColor?.trim() || current.receiptBrandColor,
+    receiptBarcodeValue: s.receiptBarcodeValue?.trim() || "",
+    invoicePrefix: s.invoicePrefix || current.invoicePrefix,
     idleLockMinutes: s.idleLockMinutes,
     requireOpenShift: s.requireOpenShift,
     lowStockQty: s.lowStockQty,
@@ -134,33 +199,34 @@ export function applyHqOrg(org: HqOrgSnapshot) {
     refundWithoutTicket: s.refundWithoutTicket ?? current.refundWithoutTicket,
     autoPrintReceipt: s.autoPrintReceipt ?? current.autoPrintReceipt,
     openCashDrawer: s.openCashDrawer ?? current.openCashDrawer,
-    receiptCopies: s.receiptCopies ?? current.receiptCopies,
+    receiptCopies: duplicate ? Math.max(2, copies) : copies,
+    printDuplicateReceipt: duplicate,
     holdExpiryMinutes: s.holdExpiryMinutes ?? current.holdExpiryMinutes,
-    receiptShowCashier: s.receiptShowCashier ?? current.receiptShowCashier,
-    receiptShowBarcode: s.receiptShowBarcode ?? current.receiptShowBarcode,
-    receiptShowTicketNumber: s.receiptShowTicketNumber ?? current.receiptShowTicketNumber,
-    receiptShowDate: s.receiptShowDate ?? current.receiptShowDate,
-    receiptShowCustomer: s.receiptShowCustomer ?? current.receiptShowCustomer,
-    receiptShowCustomerPhone: s.receiptShowCustomerPhone ?? current.receiptShowCustomerPhone,
-    receiptShowTill: s.receiptShowTill ?? current.receiptShowTill,
-    receiptShowTender: s.receiptShowTender ?? current.receiptShowTender,
-    receiptShowChange: s.receiptShowChange ?? current.receiptShowChange,
-    receiptShowLoyalty: s.receiptShowLoyalty ?? current.receiptShowLoyalty,
-    receiptShowLoyaltyBalance: s.receiptShowLoyaltyBalance ?? current.receiptShowLoyaltyBalance,
-    receiptShowLoyaltyRedeemed:
-      s.receiptShowLoyaltyRedeemed ?? current.receiptShowLoyaltyRedeemed,
-    receiptShowLoyaltyEarned: s.receiptShowLoyaltyEarned ?? current.receiptShowLoyaltyEarned,
-    receiptShowGiftCard: s.receiptShowGiftCard ?? current.receiptShowGiftCard,
-    receiptShowGiftCardBalance:
-      s.receiptShowGiftCardBalance ?? current.receiptShowGiftCardBalance,
-    receiptShowTitle: s.receiptShowTitle ?? current.receiptShowTitle,
-    receiptShowAddress: s.receiptShowAddress ?? current.receiptShowAddress,
-    receiptShowEmail: s.receiptShowEmail ?? current.receiptShowEmail,
-    receiptShowPhone: s.receiptShowPhone ?? current.receiptShowPhone,
-    receiptShowHeader: s.receiptShowHeader ?? current.receiptShowHeader,
-    receiptShowFooter: s.receiptShowFooter ?? current.receiptShowFooter,
-    receiptShowDiscount: s.receiptShowDiscount ?? current.receiptShowDiscount,
-    receiptShowPoweredBy: s.receiptShowPoweredBy ?? current.receiptShowPoweredBy,
+    receiptShowCashier: flag(s.receiptShowCashier, current.receiptShowCashier),
+    receiptShowBarcode: flag(s.receiptShowBarcode, current.receiptShowBarcode),
+    receiptShowTicketNumber: flag(s.receiptShowTicketNumber, current.receiptShowTicketNumber),
+    receiptShowDate: flag(s.receiptShowDate, current.receiptShowDate),
+    receiptShowCustomer: flag(s.receiptShowCustomer, current.receiptShowCustomer),
+    receiptShowCustomerPhone: flag(s.receiptShowCustomerPhone, current.receiptShowCustomerPhone),
+    receiptShowTill: flag(s.receiptShowTill, current.receiptShowTill),
+    receiptShowTender: flag(s.receiptShowTender, current.receiptShowTender),
+    receiptShowChange: flag(s.receiptShowChange, current.receiptShowChange),
+    receiptShowLoyalty: flag(s.receiptShowLoyalty, current.receiptShowLoyalty),
+    receiptShowLoyaltyBalance: flag(s.receiptShowLoyaltyBalance, current.receiptShowLoyaltyBalance),
+    receiptShowLoyaltyRedeemed: flag(s.receiptShowLoyaltyRedeemed, current.receiptShowLoyaltyRedeemed),
+    receiptShowLoyaltyEarned: flag(s.receiptShowLoyaltyEarned, current.receiptShowLoyaltyEarned),
+    receiptShowGiftCard: flag(s.receiptShowGiftCard, current.receiptShowGiftCard),
+    receiptShowGiftCardBalance: flag(s.receiptShowGiftCardBalance, current.receiptShowGiftCardBalance),
+    receiptShowTitle: flag(s.receiptShowTitle, current.receiptShowTitle),
+    receiptShowAddress: flag(s.receiptShowAddress, current.receiptShowAddress),
+    receiptShowEmail: flag(s.receiptShowEmail, current.receiptShowEmail),
+    receiptShowPhone: flag(s.receiptShowPhone, current.receiptShowPhone),
+    receiptShowHeader: flag(s.receiptShowHeader, current.receiptShowHeader),
+    receiptShowFooter: flag(s.receiptShowFooter, current.receiptShowFooter),
+    receiptShowDiscount: flag(s.receiptShowDiscount, current.receiptShowDiscount),
+    receiptShowPoweredBy: flag(s.receiptShowPoweredBy, current.receiptShowPoweredBy),
+    receiptShowLogo: flag(s.receiptShowLogo, current.receiptShowLogo),
+    showSkuOnReceipt: flag(s.showSkuOnReceipt, current.showSkuOnReceipt),
     receiptTemplate: s.receiptTemplate ?? current.receiptTemplate,
     storefrontEnabled: front?.enabled ?? current.storefrontEnabled,
     storefrontUrl: front?.url || current.storefrontUrl,
@@ -185,5 +251,39 @@ export function applyHqOrg(org: HqOrgSnapshot) {
     payAccountName: pay.find((row) => row.accountName)?.accountName || current.payAccountName,
     payAccountNumber: pay.find((row) => row.accountNumber)?.accountNumber || current.payAccountNumber,
     payBankName: pay.find((row) => row.bankName)?.bankName || current.payBankName,
-  });
+  };
+
+  saveStoreSettings(next);
+}
+
+export function applyHqSettingsPatch(
+  settings: HqOrgSnapshot["settings"],
+  till?: TillLocation | null,
+) {
+  const cached = loadCachedHqOrg();
+  if (cached) {
+    applyHqOrg({ ...cached, settings: { ...cached.settings, ...settings } }, till);
+    return;
+  }
+  applyHqOrg(
+    {
+      company: {
+        name: "",
+        legalName: "",
+        rc: "",
+        tin: "",
+        email: "",
+        phone: "",
+        address: "",
+        state: "",
+      },
+      branches: [],
+      stores: [],
+      storefronts: [],
+      gateways: [],
+      taxes: [],
+      settings,
+    },
+    till,
+  );
 }

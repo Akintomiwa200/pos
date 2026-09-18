@@ -46,11 +46,13 @@ import {
   takeNextTicketId,
 } from "./lib/store-settings";
 import { useStoreSettings, useTills } from "./lib/use-store-settings";
+import { syncLoyaltyProgram } from "./lib/loyalty";
 import { findTill, heartbeatDeviceTill, TILL_EXPIRED_EVENT, TILL_TAKEN_EVENT, tillLabel, tillNeedsActivation } from "./lib/tills";
 import { normalizeTillProduct } from "./lib/till-code";
 import { TablesScreen } from "./screens/tables/TablesScreen";
 import { RoomsScreen } from "./screens/rooms/RoomsScreen";
 import { KitchenHome } from "./screens/kitchen/KitchenHome";
+import { startHqOrgSync } from "./lib/hq-settings-sync";
 import { useHardwareHex } from "./lib/device-hex";
 import {
   canAccessSettings,
@@ -172,6 +174,8 @@ export default function App() {
   const awaitingActivation = useRef(false);
   const boardsHydrated = useRef(false);
   const boardSyncTimer = useRef(0);
+
+  useEffect(() => startHqOrgSync(), []);
 
   const items = catalog.filter((item) => {
     const q = query.trim().toLowerCase();
@@ -425,6 +429,7 @@ export default function App() {
     setRooms(createRooms());
     setTickets(createKitchenBoard());
     resetTill();
+    void syncLoyaltyProgram().catch(() => undefined);
     if (mustOpenShift && loadStoreSettings().requireOpenShift) {
       setNeedsShift(true);
       setShift(null);
@@ -566,22 +571,34 @@ export default function App() {
     setGate(next);
   }
 
-  function onMenu(action: MenuAction) {
-    if (action === "profile") setDialog("profile");
-    if (action === "settings") requestSettings();
-    if (action === "logout") requestGate("logout");
-    if (action === "print-shift") requestGate("print-shift");
-    if (action === "close-shift") requestGate("close-shift");
-    if (action === "print-day") requestGate("print-day");
-    if (action === "close-day") requestGate("close-day");
+  function actionToGate(action: MenuAction): Gate {
+    return action as Gate;
   }
 
-  async function handlePin(pin: string) {
-    if (!session || !gate) return;
-    setPinBusy(true);
+  function onMenu(action: MenuAction) {
+    if (action === "profile") {
+      setDialog("profile");
+      return;
+    }
+    if (action === "settings") {
+      requestSettings();
+      return;
+    }
+    if (!session) return;
+    const gate = actionToGate(action);
+    if (session.privileges.includes("unlock")) {
+      setPinError("");
+      setPinBusy(true);
+      void runGate(gate, session, "").finally(() => setPinBusy(false));
+      return;
+    }
+    setPinError("");
+    setGate(gate);
+  }
+
+  async function runGate(gate: Gate, unlockedBy: StaffUser, pin?: string) {
     setPinError("");
     try {
-      const unlockedBy = await unlockWithPin(pin);
       if (gate === "settings") {
         setGate(null);
         setScreen("settings");
@@ -596,6 +613,7 @@ export default function App() {
           result = { printed: false, printer: null };
         }
         if (gate === "logout") {
+          setGate(null);
           signOut();
           return;
         }
@@ -608,9 +626,9 @@ export default function App() {
         return;
       }
       if (gate === "close-shift") {
-        await closeShift(session.id, pin);
+        await closeShift(session!.id, pin);
         setShift(null);
-        if (isSellOnly(session)) setNeedsShift(true);
+        if (isSellOnly(session!)) setNeedsShift(true);
         setNotice("Shift closed.");
         setGate(null);
         return;
@@ -631,8 +649,20 @@ export default function App() {
         setGate(null);
         return;
       }
-      await closeDay(pin);
+      await closeDay(pin, session!.id);
       signOut();
+    } catch (error) {
+      setPinError(error instanceof Error ? error.message : "PIN rejected.");
+    }
+  }
+
+  async function handlePin(pin: string) {
+    if (!session || !gate) return;
+    setPinBusy(true);
+    setPinError("");
+    try {
+      const unlockedBy = await unlockWithPin(pin);
+      await runGate(gate, unlockedBy, pin);
     } catch (error) {
       setPinError(error instanceof Error ? error.message : "PIN rejected.");
     } finally {
@@ -691,6 +721,7 @@ export default function App() {
           quantity: 1,
           unitPriceMinor: item.priceMinor,
           image: item.image,
+          sku: item.sku,
           unit: item.unit,
           unitLabel: item.unitLabel,
           packSize: item.packSize,

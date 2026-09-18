@@ -29,6 +29,13 @@ export async function loginWithPassword(username: string, password: string) {
   }>("/api/auth/login", { username, password });
 }
 
+export async function loginWithPin(staffId: string, pin: string) {
+  return await post<{
+    user: StaffUser;
+    needsOpenShift: boolean;
+  }>("/api/auth/login", { staffId, pin });
+}
+
 export async function listStaff() {
   const response = await fetch(apiUrl("/api/staff"));
   if (!response.ok) throw new Error(`Staff request failed (${response.status})`);
@@ -43,8 +50,8 @@ export async function openShift(staffId: string) {
   return await post<ShiftRecord>("/api/staff/shift/open", { staffId });
 }
 
-export async function closeShift(staffId: string, pin: string) {
-  await unlockWithPin(pin);
+export async function closeShift(staffId: string, pin?: string) {
+  if (pin) await unlockWithPin(pin);
   return await post<ShiftRecord | null>("/api/staff/shift/close", {
     staffId,
     pin,
@@ -59,9 +66,9 @@ export async function recordShiftSale(staffId: string, amountMinor: number) {
   }
 }
 
-export async function closeDay(pin: string) {
-  await unlockWithPin(pin);
-  return await post<{ closedAt: string }>("/api/staff/day/close", { pin });
+export async function closeDay(pin?: string, staffId?: string) {
+  if (pin) await unlockWithPin(pin);
+  return await post<{ closedAt: string }>("/api/staff/day/close", { pin, staffId });
 }
 
 export function formatShiftReport(

@@ -38,6 +38,7 @@ export type CartLine = {
   quantity: number;
   unitPriceMinor: number;
   image: string;
+  sku?: string;
   unit?: string;
   unitLabel?: string;
   packSize?: number;

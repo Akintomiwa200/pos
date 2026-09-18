@@ -428,6 +428,21 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
     return result.rows.map((row) => publicAccount(this.mapAccount(row)));
   }
 
+  /** Bare console-account lookup used by the till (login, shift owner, authorisation). */
+  async webUser(id: string) {
+    const account = await this.findAccount("id = $1", [id]);
+    if (!account) return null;
+    const group = await this.findGroup(account.groupId);
+    return {
+      id: account.id,
+      name: account.name,
+      email: account.email,
+      username: account.username,
+      scope: group?.scope ?? "tenant",
+      privileges: group?.privileges ?? [],
+    };
+  }
+
   private async directorySnapshot(): Promise<DirectoryEvent> {
     const [accounts, groups] = await Promise.all([this.listAccounts(), this.listGroups()]);
     return {

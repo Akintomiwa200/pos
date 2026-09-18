@@ -27,6 +27,7 @@ function nid(prefix: string) {
 export type SettingsEvent = {
   type: "settings";
   settings: HqOrgSettings;
+  org: HqOrgSnapshot;
   at: string;
 };
 
@@ -64,6 +65,7 @@ export class SetupService implements OnModuleInit {
 
   private notifyOrg() {
     this.orgChanges.next();
+    this.publishSettings();
   }
 
   private pick<T>(stored: Map<string, unknown>, key: string, fallback: T): T {
@@ -350,6 +352,7 @@ export class SetupService implements OnModuleInit {
       subscriber.next({
         type: "settings",
         settings: this.settings,
+        org: this.snapshot(),
         at: new Date().toISOString(),
       });
       const sub = this.settingsEvents.subscribe(subscriber);
@@ -361,6 +364,7 @@ export class SetupService implements OnModuleInit {
     this.settingsEvents.next({
       type: "settings",
       settings: this.settings,
+      org: this.snapshot(),
       at: new Date().toISOString(),
     });
   }

@@ -27,8 +27,8 @@ export class StaffController {
 
   @Post("shift/close")
   async close(@Body() body: { staffId?: string; pin?: string }) {
-    await this.staff.unlock(body.pin ?? "");
-    return this.staff.closeShift(body.staffId ?? "");
+    const unlockedBy = await this.staff.authorize(body.staffId ?? "", body.pin ?? "");
+    return { unlockedBy, shift: await this.staff.closeShift(body.staffId ?? "") };
   }
 
   @Post("shift/sale")
@@ -57,8 +57,8 @@ export class StaffController {
   }
 
   @Post("day/close")
-  async closeDay(@Body() body: { pin?: string }) {
-    const unlockedBy = await this.staff.unlock(body.pin ?? "");
+  async closeDay(@Body() body: { pin?: string; staffId?: string }) {
+    const unlockedBy = await this.staff.authorize(body.staffId ?? "", body.pin ?? "");
     return { unlockedBy, ...(await this.staff.closeDay()), kind: "day" };
   }
 }

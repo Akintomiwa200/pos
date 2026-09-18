@@ -162,6 +162,11 @@ export function saveStores(rows: StoreRecord[]) {
   emit();
 }
 
+export function ingestHqOrg(org: HqOrgSnapshot) {
+  persistOrgLocations(org);
+  applyHqOrg(org, loadDeviceTill());
+}
+
 export function persistOrgLocations(org: HqOrgSnapshot) {
   if (org.stores?.length) {
     saveStores(
@@ -309,7 +314,6 @@ export async function activateDeviceTill(code: string, hardwareHex: string) {
     throw new Error(message || "Till code was rejected");
   }
   if (body.org) {
-    applyHqOrg(body.org);
     persistOrgLocations(body.org);
   }
   const current = loadDeviceTill();
@@ -331,6 +335,7 @@ export async function activateDeviceTill(code: string, hardwareHex: string) {
     subscriptionExpiresAt: body.subscriptionExpiresAt ?? addOneYear().toISOString(),
   };
   saveDeviceTill(next);
+  if (body.org) ingestHqOrg(body.org);
   return next;
 }
 
@@ -365,10 +370,7 @@ export async function heartbeatDeviceTill(hardwareHex: string) {
       return { taken: false as const, expired: true as const };
     }
     if (!response.ok) return { taken: false as const, expired: false as const };
-    if (body.org) {
-      applyHqOrg(body.org);
-      persistOrgLocations(body.org);
-    }
+    if (body.org) ingestHqOrg(body.org);
     const nextExpires = body.subscriptionExpiresAt ?? till.subscriptionExpiresAt;
     const nextProduct = body.product ? normalizeTillProduct(body.product) : till.product;
     if (

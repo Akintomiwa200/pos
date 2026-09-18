@@ -15,6 +15,7 @@ import {
 import type { CatalogItem } from "../../lib/types";
 import { TillKeysSettings } from "./TillKeysSettings";
 import { OthersSettings } from "./OthersSettings";
+import { LoyaltyHub } from "./LoyaltyPages";
 import {
   AccountingAdmin,
   BarcodeSettings,
@@ -22,7 +23,6 @@ import {
   HoldAdmin,
   InvoicesAdmin,
   ItemsAdmin,
-  LoyaltySettings,
   PaymentsSettings,
   PrintingSettings,
   ReceiptSettings,
@@ -122,13 +122,14 @@ export function SettingsScreen({
             ))}
           </div>
         </>
+      ) : page === "loyalty" ? (
+        <LoyaltyHub onBack={() => setPage("hub")} />
       ) : (
         <PageShell title={TITLES[page]} onBack={() => setPage(pageFromNested(page))}>
           {page === "keys" && <TillKeysSettings />}
           {page === "barcode" && <BarcodeSettings />}
           {page === "tax" && <TaxSettings />}
           {page === "stock" && <StockSettings items={items} />}
-          {page === "loyalty" && <LoyaltySettings />}
           {page === "printing" && <PrintingSettings />}
           {page === "receipt" && <ReceiptSettings />}
           {page === "payments" && <PaymentsSettings />}

@@ -3,6 +3,8 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { DirectoryRecord } from "../directory/directory.types";
+import { ConsoleService } from "../console/console.service";
+import { avatarFor, fromConsoleUser } from "./web-user";
 import {
   canUnlock,
   isSellOnly,
@@ -39,15 +41,6 @@ function roleFor(label: string): StaffRole {
   return "cashier";
 }
 
-function avatarFor(name: string) {
-  const initial = (name.trim().charAt(0) || "?").toUpperCase();
-  const svg =
-    `<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48'>` +
-    `<rect width='48' height='48' rx='24' fill='%236d5ef2'/>` +
-    `<text x='24' y='31' font-family='Arial,sans-serif' font-size='20' font-weight='600' fill='white' text-anchor='middle'>${initial}</text></svg>`;
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
-}
-
 function fromRecord(row: DirectoryRecord): StaffUser {
   const extra = row.extra ?? {};
   const label = roleLabel(extra);
@@ -69,6 +62,8 @@ export class StaffService {
   private shifts: ShiftRecord[] = [];
   private dayClosedAt: string | null = null;
   private readonly dataDir = join(process.cwd(), "data");
+
+  constructor(private readonly console: ConsoleService) {}
 
   private async roster(): Promise<DirectoryRecord[]> {
     try {
@@ -105,6 +100,22 @@ export class StaffService {
     };
   }
 
+  async loginWithPin(staffId: string, pin: string) {
+    const trimmed = pin.trim();
+    if (trimmed.length < 4) {
+      throw new UnauthorizedException("Enter your 4-digit PIN.");
+    }
+    const user = (await this.users()).find((staff) => staff.id === staffId);
+    if (!user || user.pin !== hash(trimmed)) {
+      throw new UnauthorizedException("Wrong PIN.");
+    }
+    return {
+      token: `dev-${user.id}`,
+      user: publicStaff(user),
+      needsOpenShift: isSellOnly(user),
+    };
+  }
+
   async unlock(pin: string) {
     const user = (await this.users()).find((staff) => staff.pin === hash(pin.trim()));
     if (!user || !canUnlock(user)) {
@@ -114,7 +125,22 @@ export class StaffService {
   }
 
   async findById(id: string): Promise<StaffUser | undefined> {
-    return (await this.users()).find((staff) => staff.id === id);
+    const rosterUser = (await this.users()).find((staff) => staff.id === id);
+    if (rosterUser) return rosterUser;
+    if (!id.startsWith("web:")) return undefined;
+    const web = await this.console.webUser(id.slice(4));
+    return web ? fromConsoleUser(web) ?? undefined : undefined;
+  }
+
+  async authorize(staffId: string, pin: string) {
+    if (pin.trim()) return this.unlock(pin);
+    if (!staffId) throw new UnauthorizedException("PIN required.");
+    const user = await this.findById(staffId);
+    if (!user) throw new UnauthorizedException("Unknown staff.");
+    if (!canUnlock(user)) {
+      throw new UnauthorizedException("This staff member cannot authorise that action.");
+    }
+    return publicStaff(user);
   }
 
   private async loadShifts() {

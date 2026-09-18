@@ -84,9 +84,16 @@ export type StoreSettings = {
   receiptShowDiscount: boolean;
   receiptShowPoweredBy: boolean;
   receiptShowLogo: boolean;
+  receiptShowTax: boolean;
+  receiptBrandColor: string;
+  /** HQ's configured barcode value is only for previews; completed sales use their ticket id. */
+  receiptBarcodeValue: string;
+  receiptLocation: string;
+  printDuplicateReceipt: boolean;
   showSkuOnReceipt: boolean;
   receiptPaper: ReceiptPaper;
   receiptTemplate: "classic" | "compact" | "bold" | "minimal";
+  currency: string;
   storeName: string;
   storeAddress: string;
   storePhone: string;
@@ -206,9 +213,15 @@ export function defaultStoreSettings(): StoreSettings {
     receiptShowDiscount: true,
     receiptShowPoweredBy: true,
     receiptShowLogo: true,
+    receiptShowTax: true,
+    receiptBrandColor: "#111827",
+    receiptBarcodeValue: "",
+    receiptLocation: "",
+    printDuplicateReceipt: false,
     showSkuOnReceipt: false,
     receiptPaper: "80mm",
     receiptTemplate: "classic",
+    currency: "NGN",
     storeName: "",
     storeAddress: "",
     storePhone: "",

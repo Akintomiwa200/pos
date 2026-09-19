@@ -7,6 +7,7 @@ import {
   generateSku,
   marginPercent,
   normalizeCatalogItem,
+  normalizeTaxPercent,
   slugFromName,
 } from "./catalog.utils";
 import { CloudinaryService } from "./cloudinary.service";
@@ -42,6 +43,7 @@ export type CatalogRow = {
   active?: boolean;
   image?: string;
   expiresAt?: string;
+  taxPercent?: number;
 };
 
 export type CatalogPatch = {
@@ -60,6 +62,7 @@ export type CatalogPatch = {
   packSize?: number;
   description?: string;
   active?: boolean;
+  taxPercent?: number;
 };
 
 @Injectable()
@@ -177,6 +180,8 @@ export class CatalogService implements OnModuleInit {
       description:
         typeof patch.description === "string" ? patch.description : current.description,
       active: typeof patch.active === "boolean" ? patch.active : current.active,
+      taxPercent:
+        patch.taxPercent !== undefined ? normalizeTaxPercent(patch.taxPercent) : current.taxPercent,
       updatedAt: now(),
     });
     this.items[index] = next;
@@ -323,6 +328,10 @@ export class CatalogService implements OnModuleInit {
             ? row.description.trim() || undefined
             : existing?.description,
         active: row.active !== undefined ? row.active !== false : existing?.active !== false,
+        taxPercent:
+          row.taxPercent !== undefined
+            ? normalizeTaxPercent(row.taxPercent)
+            : existing?.taxPercent,
         updatedAt: now(),
         expiresAt,
       });

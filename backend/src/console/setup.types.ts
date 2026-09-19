@@ -125,6 +125,8 @@ export type HqOrgSettings = {
   invoiceTerms: string;
   invoicePaymentNote: string;
   pricesIncludeVat: boolean;
+  /** Master switch that turns VAT on/off across the dashboard and tills. */
+  applyVat: boolean;
   idleLockMinutes: number;
   requireOpenShift: boolean;
   lowStockQty: number;
@@ -160,7 +162,7 @@ export type HqOrgSettings = {
     | "outfit"
     | "manrope"
     | "space-grotesk";
-  uiAccent: "macaron" | "teal" | "blue" | "amber" | "rose";
+  uiAccent: "macaron" | "teal" | "blue" | "amber" | "rose" | "violet";
   uiDensity: "comfortable" | "compact";
   uiReduceMotion: boolean;
 };
@@ -247,6 +249,7 @@ export const SEED_SETTINGS: HqOrgSettings = {
   invoiceTerms: "Payment is due within 7 days. Goods remain property of the seller until paid in full.",
   invoicePaymentNote: "Transfer to the account on your statement. Quote the invoice number.",
   pricesIncludeVat: false,
+  applyVat: true,
   idleLockMinutes: 0,
   requireOpenShift: true,
   lowStockQty: 5,

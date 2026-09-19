@@ -57,6 +57,7 @@ export type HqOrgSnapshot = {
     receiptPaper: "80mm" | "58mm";
     invoicePrefix: string;
     pricesIncludeVat: boolean;
+    applyVat?: boolean;
     idleLockMinutes: number;
     requireOpenShift: boolean;
     lowStockQty: number;
@@ -113,6 +114,82 @@ export type TillLocation = {
 
 const ORG_KEY = "pos.hq-org.v1";
 export const HQ_ORG_EVENT = "pos-hq-org";
+
+export const TAX_OVERRIDE_FIELDS = [
+  "applyVat",
+  "vatPercent",
+  "servicePercent",
+  "applyServiceCharge",
+  "pricesIncludeVat",
+  "includeVatBreakdown",
+  "receiptShowTax",
+] as const;
+
+const TAX_OVERRIDE_KEY = "pos.tax-overrides.v1";
+const TAX_LASTWEB_KEY = "pos.tax-lastweb.v1";
+
+export function getPinnedTaxFields(): ReadonlySet<string> {
+  try {
+    const raw = localStorage.getItem(TAX_OVERRIDE_KEY);
+    if (!raw) return new Set<string>();
+    const parsed: unknown = JSON.parse(raw);
+    return new Set(
+      Array.isArray(parsed) ? parsed.filter((field) => typeof field === "string") : [],
+    );
+  } catch {
+    return new Set<string>();
+  }
+}
+
+/** Hold a tax field to this terminal's values. The web still wins when it actually changes that field. */
+export function pinTaxFields(fields: string[]) {
+  const pinned = new Set(getPinnedTaxFields());
+  for (const field of fields) pinned.add(field);
+  localStorage.setItem(TAX_OVERRIDE_KEY, JSON.stringify([...pinned]));
+}
+
+/** Drop all local holds. Saved values stay, but the next sync is free to pull dashboard values. */
+export function clearTaxOverrides() {
+  localStorage.removeItem(TAX_OVERRIDE_KEY);
+  localStorage.removeItem(TAX_LASTWEB_KEY);
+}
+
+function loadLastWebTaxes(): Record<string, unknown> {
+  try {
+    const raw = localStorage.getItem(TAX_LASTWEB_KEY);
+    if (!raw) return {};
+    const parsed: unknown = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? { ...(parsed as Record<string, unknown>) } : {};
+  } catch {
+    return {};
+  }
+}
+
+function resolveTaxFields(
+  current: StoreSettings,
+  next: StoreSettings,
+  webTaxes: Record<string, unknown>,
+): StoreSettings {
+  const pinned = getPinnedTaxFields();
+  const lastWeb = loadLastWebTaxes();
+  const out = { ...next } as Record<string, unknown>;
+  const base = current as unknown as Record<string, unknown>;
+  for (const field of TAX_OVERRIDE_FIELDS) {
+    const webValue = webTaxes[field];
+    const last = lastWeb[field];
+    const changed = webValue !== last;
+    if (pinned.has(field) && !changed) {
+      out[field] = base[field];
+    } else if (pinned.has(field)) {
+      const released = new Set(pinned);
+      released.delete(field);
+      localStorage.setItem(TAX_OVERRIDE_KEY, JSON.stringify([...released]));
+    }
+    lastWeb[field] = webValue;
+  }
+  localStorage.setItem(TAX_LASTWEB_KEY, JSON.stringify(lastWeb));
+  return out as StoreSettings;
+}
 
 function flag(value: boolean | undefined, fallback: boolean) {
   return value ?? fallback;
@@ -176,10 +253,11 @@ export function applyHqOrg(org: HqOrgSnapshot, till?: TillLocation | null) {
     storeAddress: branchAddress || s.receiptAddress?.trim() || org.company.address,
     storeEmail: s.receiptEmail?.trim() || org.company.email,
     companyState: org.company.state,
+    applyVat: s.applyVat ?? current.applyVat,
     vatPercent: vat?.ratePercent ?? current.vatPercent,
     servicePercent: service?.ratePercent ?? current.servicePercent,
     applyServiceCharge: Boolean(service),
-    pricesIncludeVat: vat?.inclusive ?? s.pricesIncludeVat,
+    pricesIncludeVat: vat?.inclusive ?? s.pricesIncludeVat ?? current.pricesIncludeVat,
     includeVatBreakdown: showTax,
     receiptShowTax: showTax,
     receiptHeader: s.receiptHeader ?? "",
@@ -253,7 +331,17 @@ export function applyHqOrg(org: HqOrgSnapshot, till?: TillLocation | null) {
     payBankName: pay.find((row) => row.bankName)?.bankName || current.payBankName,
   };
 
-  saveStoreSettings(next);
+  const webTaxes: Record<string, unknown> = {
+    applyVat: s.applyVat,
+    vatPercent: vat?.ratePercent,
+    servicePercent: service?.ratePercent,
+    applyServiceCharge: Boolean(service),
+    pricesIncludeVat: vat?.inclusive ?? s.pricesIncludeVat,
+    includeVatBreakdown: s.receiptShowTax,
+    receiptShowTax: s.receiptShowTax,
+  };
+
+  saveStoreSettings(resolveTaxFields(current, next, webTaxes));
 }
 
 export function applyHqSettingsPatch(

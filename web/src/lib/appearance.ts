@@ -14,7 +14,8 @@ export type UiAccent =
   | "teal"
   | "blue"
   | "rose"
-  | "amber";
+  | "amber"
+  | "violet";
 export type UiDensity = "comfortable" | "compact";
 
 export const THEME_STORAGE_KEY = "pos.theme.v1";
@@ -71,6 +72,7 @@ export const ACCENT_OPTIONS: { id: UiAccent; label: string; color: string }[] = 
   { id: "blue", label: "Blue", color: "#2563eb" },
   { id: "amber", label: "Amber", color: "#d97706" },
   { id: "rose", label: "Rose", color: "#e11d48" },
+  { id: "violet", label: "Violet", color: "#7c3aed" },
 ];
 
 const ACCENT_VARS: Record<
@@ -155,6 +157,22 @@ const ACCENT_VARS: Record<
       "--pos-primary-muted": "#9f1239",
       "--pos-shadow-primary": "0 4px 14px rgb(251 113 133 / 0.22)",
       "--pos-scrollbar-hover": "rgb(251 113 133 / 0.42)",
+    },
+  },
+  violet: {
+    light: {
+      "--pos-primary": "#7c3aed",
+      "--pos-primary-soft": "#f5f3ff",
+      "--pos-primary-muted": "#c4b5fd",
+      "--pos-shadow-primary": "0 4px 14px rgb(124 58 237 / 0.24)",
+      "--pos-scrollbar-hover": "rgb(124 58 237 / 0.32)",
+    },
+    dark: {
+      "--pos-primary": "#a78bfa",
+      "--pos-primary-soft": "#2e1065",
+      "--pos-primary-muted": "#6d28d9",
+      "--pos-shadow-primary": "0 4px 14px rgb(167 139 250 / 0.22)",
+      "--pos-scrollbar-hover": "rgb(167 139 250 / 0.42)",
     },
   },
 };

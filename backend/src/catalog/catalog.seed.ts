@@ -23,4 +23,5 @@ export type CatalogItem = {
   active: boolean;
   updatedAt: string;
   expiresAt?: string;
+  taxPercent?: number;
 };

@@ -45,6 +45,8 @@ const CATALOG_CSV_VALUE: Record<string, (row: HqCatalogItem) => string> = {
   description: (row) => row.description ?? "",
   active: (row) => (row.active ? "yes" : "no"),
   expiresAt: (row) => row.expiresAt?.slice(0, 10) ?? "",
+  taxPercent: (row) =>
+    typeof row.taxPercent === "number" ? String(row.taxPercent) : "",
   trackBatches: (row) => (row.trackBatches ? "yes" : "no"),
   baseId: (row) => row.baseId ?? "",
   id: (row) => row.id,

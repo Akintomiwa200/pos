@@ -30,7 +30,7 @@ import { useLiveDirectoryRows } from "@/lib/live-directory-rows";
 import { unitCode } from "@/lib/hq-taxonomy";
 import { ManagerSkeleton } from "../Skeleton";
 import { PrimaryButton } from "./SetupChrome";
-import { ItemFormSheet, type ItemDraft } from "./ItemFormSheet";
+import { ItemFormSheet, type ItemDraft, taxPercentFromDraft } from "./ItemFormSheet";
 
 function stockTone(item: HqCatalogItem): "ok" | "low" | "out" {
   if (item.onHand <= 0) return "out";
@@ -122,6 +122,7 @@ function toDraft(item: HqCatalogItem): ItemDraft {
     active: item.active !== false,
     expiresAt: item.expiresAt ? item.expiresAt.slice(0, 10) : "",
     image: item.image,
+    taxPercent: typeof item.taxPercent === "number" ? String(item.taxPercent) : "",
   };
 }
 
@@ -270,6 +271,7 @@ export function ProductDetailsPage({ id }: { id: string }) {
           description: draft.description.trim() || "",
           active: draft.active,
           expiresAt: draft.expiresAt || "",
+          taxPercent: taxPercentFromDraft(draft),
         },
       ]);
 

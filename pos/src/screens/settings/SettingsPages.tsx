@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { CatalogItem } from "../../lib/types";
 import { computeTotals, formatMoney } from "../../lib/types";
@@ -7,6 +7,14 @@ import {
   type StoreSettings,
 } from "../../lib/store-settings";
 import { formatReceiptText, printReceipt, type SaleReceipt } from "../../lib/receipt";
+import {
+  applyHqOrg,
+  clearTaxOverrides,
+  getPinnedTaxFields,
+  loadCachedHqOrg,
+  pinTaxFields,
+} from "../../lib/hq-org";
+import { loadDeviceTill } from "../../lib/tills";
 import { ReceiptVisual } from "../../components/receipt/ReceiptVisual";
 import {
   detectPrinters,
@@ -118,6 +126,42 @@ export function BarcodeSettings() {
 
 export function TaxSettings() {
   const [settings, patch] = useSettings();
+  const pinned = getPinnedTaxFields();
+
+  const patchApplyVat = (applyVat: boolean) => {
+    pinTaxFields(["applyVat"]);
+    patch({ applyVat });
+  };
+  const patchVatPercent = (vatPercent: number) => {
+    pinTaxFields(["vatPercent"]);
+    patch({ vatPercent });
+  };
+  const patchIncludeVat = (pricesIncludeVat: boolean) => {
+    pinTaxFields(["pricesIncludeVat"]);
+    patch({ pricesIncludeVat });
+  };
+  const patchBreakdown = (includeVatBreakdown: boolean) => {
+    pinTaxFields(["includeVatBreakdown", "receiptShowTax"]);
+    patch({ includeVatBreakdown });
+  };
+  const patchServiceCharge = (applyServiceCharge: boolean) => {
+    pinTaxFields(["applyServiceCharge"]);
+    patch({ applyServiceCharge });
+  };
+  const patchServicePercent = (servicePercent: number) => {
+    pinTaxFields(["servicePercent"]);
+    patch({ servicePercent });
+  };
+
+  const restoreWebDefaults = () => {
+    clearTaxOverrides();
+    const cached = loadCachedHqOrg();
+    if (cached) {
+      applyHqOrg(cached, loadDeviceTill());
+    } else {
+      patch({});
+    }
+  };
 
   return (
     <>
@@ -126,17 +170,40 @@ export function TaxSettings() {
         receipt update as soon as you change a rate or toggle.
       </p>
       <LiveNote>
-        VAT at {settings.vatPercent}% is applied on every sale{settings.pricesIncludeVat ? " — prices already include VAT." : "."}{" "}
+        {settings.applyVat
+          ? `VAT is applied on every sale at the default ${settings.vatPercent}%.`
+          : "VAT is off on this terminal — sales leave VAT-free."}{" "}
+        Products with their own dashboard rate override the default; 0% items
+        are VAT-exempt.{" "}
         {settings.firs
           ? "FIRS e-invoice fields (TIN, legal name) go on the slip."
           : "FIRS e-invoicing is off."}
+        {pinned.size
+          ? " Changes you make here apply on this terminal at once and stay until the web dashboard changes that value."
+          : " Changes made on the web dashboard flow here in real time."}
       </LiveNote>
+      {pinned.size ? (
+        <SetRow
+          label="Held on this terminal"
+          hint="Your values stay until the web dashboard changes one of these fields"
+        >
+          <button type="button" className="set-text-btn" onClick={restoreWebDefaults}>
+            Take dashboard values now
+          </button>
+        </SetRow>
+      ) : null}
       <SetCard title="VAT">
-        <SetRow label="How much VAT should be added?" hint="FIRS standard rate is 7.5%">
+        <SetRow label="Apply VAT on sales?" hint="Off makes this till VAT-free. Products with their own dashboard rate are taxed only while this is on.">
+          <Toggle
+            on={settings.applyVat}
+            onChange={(applyVat) => patchApplyVat(applyVat)}
+          />
+        </SetRow>
+        <SetRow label="How much VAT should be added?" hint="FIRS standard rate is 7.5% — the default for products without their own rate">
           <NumField
             value={settings.vatPercent}
             step={0.5}
-            onChange={(vatPercent) => patch({ vatPercent: Math.max(0, vatPercent) })}
+            onChange={(vatPercent) => patchVatPercent(Math.max(0, vatPercent))}
           />
         </SetRow>
         <SetRow
@@ -145,13 +212,13 @@ export function TaxSettings() {
         >
           <Toggle
             on={settings.pricesIncludeVat}
-            onChange={(pricesIncludeVat) => patch({ pricesIncludeVat })}
+            onChange={(pricesIncludeVat) => patchIncludeVat(pricesIncludeVat)}
           />
         </SetRow>
         <SetRow label="Print the VAT breakdown on the receipt?">
           <Toggle
             on={settings.includeVatBreakdown}
-            onChange={(includeVatBreakdown) => patch({ includeVatBreakdown })}
+            onChange={(includeVatBreakdown) => patchBreakdown(includeVatBreakdown)}
           />
         </SetRow>
         <SetRow label="Show TIN on the receipt?">
@@ -168,7 +235,7 @@ export function TaxSettings() {
         <SetRow label="Add a service charge on every ticket?">
           <Toggle
             on={settings.applyServiceCharge}
-            onChange={(applyServiceCharge) => patch({ applyServiceCharge })}
+            onChange={(applyServiceCharge) => patchServiceCharge(applyServiceCharge)}
           />
         </SetRow>
         <SetRow label="How much service charge should be added?">
@@ -176,7 +243,7 @@ export function TaxSettings() {
             value={settings.servicePercent}
             step={0.5}
             onChange={(servicePercent) =>
-              patch({ servicePercent: Math.max(0, servicePercent) })
+              patchServicePercent(Math.max(0, servicePercent))
             }
           />
         </SetRow>
@@ -602,381 +669,6 @@ export function PaymentsSettings() {
           <AreaField
             value={settings.payWalletHint}
             onChange={(payWalletHint) => patch({ payWalletHint })}
-          />
-        </SetRow>
-      </SetCard>
-    </>
-  );
-}
-
-export function ItemsAdmin({
-  items,
-  onUpdateItem,
-}: {
-  items: CatalogItem[];
-  onUpdateItem: (
-    id: string,
-    patch: { priceMinor?: number; onHand?: number },
-  ) => Promise<void>;
-}) {
-  const [query, setQuery] = useState("");
-  const filtered = items.filter((item) => {
-    const q = query.trim().toLowerCase();
-    if (!q) return true;
-    return (
-      item.name.toLowerCase().includes(q) ||
-      item.sku.toLowerCase().includes(q) ||
-      item.barcode.toLowerCase().includes(q) ||
-      item.category.toLowerCase().includes(q)
-    );
-  });
-
-  return (
-    <>
-      <p className="set-lede">
-        Prices and on-hand here are the live catalogue. A price change shows on
-        Home and Items immediately. Stock changes affect sold-out hiding and
-        negative-stock blocks.
-      </p>
-      <LiveNote>
-        {items.length} products · showing {filtered.length}
-        {query.trim() ? ` matching “${query.trim()}”` : ""}.
-      </LiveNote>
-      <div className="set-items-search">
-        <TextField
-          value={query}
-          onChange={setQuery}
-          width={420}
-          placeholder="Search name, SKU, barcode, or category"
-        />
-      </div>
-      <SetCard title="Catalogue">
-        {filtered.length === 0 ? (
-          <SetRow label="No matching items">
-            <span className="set-muted">Clear the search</span>
-          </SetRow>
-        ) : (
-          filtered.map((item) => (
-            <SetRow
-              key={item.id}
-              label={item.name}
-              hint={`${item.sku} · ${item.barcode || "no barcode"} · ${item.category} · ${item.onHand} on hand`}
-            >
-              <span className="till-key-actions">
-                <span className="set-muted">Qty</span>
-                <NumField
-                  value={item.onHand}
-                  step={1}
-                  min={0}
-                  onChange={(onHand) => {
-                    void onUpdateItem(item.id, {
-                      onHand: Math.max(0, Math.round(onHand)),
-                    });
-                  }}
-                />
-                <span className="set-muted">₦</span>
-                <NumField
-                  value={item.priceMinor / 100}
-                  step={0.01}
-                  onChange={(naira) => {
-                    if (!Number.isFinite(naira)) return;
-                    void onUpdateItem(item.id, {
-                      priceMinor: Math.max(0, Math.round(naira * 100)),
-                    });
-                  }}
-                />
-              </span>
-            </SetRow>
-          ))
-        )}
-      </SetCard>
-    </>
-  );
-}
-
-export function CategoriesAdmin({ items }: { items: CatalogItem[] }) {
-  const [settings, patch] = useSettings();
-  const names = Array.from(new Set(items.map((item) => item.category)));
-
-  function setVisible(name: string, visible: boolean) {
-    const hidden = new Set(settings.hiddenCategories);
-    if (visible) hidden.delete(name);
-    else hidden.add(name);
-    patch({ hiddenCategories: [...hidden] });
-  }
-
-  const visible = names.filter((name) => !settings.hiddenCategories.includes(name));
-
-  return (
-    <>
-      <p className="set-lede">
-        Category chips on Items follow these rules immediately. Hidden categories
-        disappear from the chip row and their products are not listed there.
-      </p>
-      <LiveNote>
-        {visible.length} of {names.length} categories show on Items
-        {settings.sortCategoriesAz ? ", sorted A–Z" : ", in catalogue order"}.
-        {settings.hideEmptyCategories ? " Empty groups are hidden." : ""}
-      </LiveNote>
-      <SetCard title="Display">
-        <SetRow label="Hide empty categories on the till?">
-          <Toggle
-            on={settings.hideEmptyCategories}
-            onChange={(hideEmptyCategories) => patch({ hideEmptyCategories })}
-          />
-        </SetRow>
-        <SetRow label="Sort categories A–Z?">
-          <Toggle
-            on={settings.sortCategoriesAz}
-            onChange={(sortCategoriesAz) => patch({ sortCategoriesAz })}
-          />
-        </SetRow>
-        <SetRow label="Allow items without a category?">
-          <Toggle
-            on={settings.allowUncategorized}
-            onChange={(allowUncategorized) => patch({ allowUncategorized })}
-          />
-        </SetRow>
-        <SetRow label="Print the category on kitchen tickets?">
-          <Toggle
-            on={settings.showCategoryOnKitchen}
-            onChange={(showCategoryOnKitchen) => patch({ showCategoryOnKitchen })}
-          />
-        </SetRow>
-      </SetCard>
-      <SetCard title="Show on Items">
-        {names.map((name) => {
-          const count = items.filter((item) => item.category === name).length;
-          return (
-            <SetRow
-              key={name}
-              label={`Show ${name} on the till?`}
-              hint={`${count} item${count === 1 ? "" : "s"}`}
-            >
-              <Toggle
-                on={!settings.hiddenCategories.includes(name)}
-                onChange={(on) => setVisible(name, on)}
-              />
-            </SetRow>
-          );
-        })}
-      </SetCard>
-    </>
-  );
-}
-
-export function InvoicesAdmin() {
-  const [settings, patch] = useSettings();
-  const next = `${settings.invoicePrefix}-${String(settings.nextInvoiceNumber).padStart(4, "0")}`;
-
-  return (
-    <>
-      <p className="set-lede">
-        The next closed sale on this till takes this ticket number, then the
-        counter moves up by one.
-      </p>
-      <LiveNote>
-        Next ticket will be <strong>{next}</strong>
-        {settings.autoPrintInvoice ? " · an invoice copy prints after payment" : ""}.
-      </LiveNote>
-      <SetCard title="Numbering">
-        <SetRow label="Invoice number prefix">
-          <TextField
-            value={settings.invoicePrefix}
-            onChange={(invoicePrefix) => patch({ invoicePrefix })}
-            width={120}
-          />
-        </SetRow>
-        <SetRow label="Next invoice number">
-          <NumField
-            value={settings.nextInvoiceNumber}
-            step={1}
-            onChange={(nextInvoiceNumber) =>
-              patch({ nextInvoiceNumber: Math.max(1, Math.round(nextInvoiceNumber)) })
-            }
-          />
-        </SetRow>
-        <SetRow label="Auto-print an invoice when a sale closes?">
-          <Toggle
-            on={settings.autoPrintInvoice}
-            onChange={(autoPrintInvoice) => patch({ autoPrintInvoice })}
-          />
-        </SetRow>
-        <SetRow label="Email a copy to the customer?">
-          <Toggle
-            on={settings.emailInvoiceCopy}
-            onChange={(emailInvoiceCopy) => patch({ emailInvoiceCopy })}
-          />
-        </SetRow>
-        <SetRow label="Show a customer line on the invoice?">
-          <Toggle
-            on={settings.invoiceShowCustomer}
-            onChange={(invoiceShowCustomer) => patch({ invoiceShowCustomer })}
-          />
-        </SetRow>
-        <SetRow label="Mark the invoice paid when the till takes payment?">
-          <Toggle
-            on={settings.markPaidOnTill}
-            onChange={(markPaidOnTill) => patch({ markPaidOnTill })}
-          />
-        </SetRow>
-      </SetCard>
-    </>
-  );
-}
-
-export function HoldAdmin() {
-  const [settings, patch] = useSettings();
-  return (
-    <>
-      <p className="set-lede">
-        Held tickets on this till follow these rules. A name is required before
-        hold if that toggle is on.
-      </p>
-      <LiveNote>
-        Holds expire after <strong>{settings.holdExpiryMinutes} minutes</strong>
-        {settings.autoCancelExpiredHolds ? " and then cancel themselves" : ""}.{" "}
-        {settings.showHoldsOnAllTills
-          ? "Other tills at this branch can recall them."
-          : "Only this till can recall them."}
-      </LiveNote>
-      <SetCard title="Holds">
-        <SetRow label="How many minutes before a hold expires?">
-          <NumField
-            value={settings.holdExpiryMinutes}
-            step={1}
-            onChange={(holdExpiryMinutes) =>
-              patch({ holdExpiryMinutes: Math.max(1, Math.round(holdExpiryMinutes)) })
-            }
-          />
-        </SetRow>
-        <SetRow label="Auto-cancel expired holds?">
-          <Toggle
-            on={settings.autoCancelExpiredHolds}
-            onChange={(autoCancelExpiredHolds) => patch({ autoCancelExpiredHolds })}
-          />
-        </SetRow>
-        <SetRow label="Require a customer name to hold an order?">
-          <Toggle
-            on={settings.requireNameOnHold}
-            onChange={(requireNameOnHold) => patch({ requireNameOnHold })}
-          />
-        </SetRow>
-        <SetRow label="Show held tickets on every till?">
-          <Toggle
-            on={settings.showHoldsOnAllTills}
-            onChange={(showHoldsOnAllTills) => patch({ showHoldsOnAllTills })}
-          />
-        </SetRow>
-        <SetRow label="Play a sound when a hold is recalled?">
-          <Toggle
-            on={settings.soundOnHoldRecall}
-            onChange={(soundOnHoldRecall) => patch({ soundOnHoldRecall })}
-          />
-        </SetRow>
-      </SetCard>
-    </>
-  );
-}
-
-export function RefundsAdmin() {
-  const [settings, patch] = useSettings();
-  return (
-    <>
-      <p className="set-lede">
-        Refunds from the till follow these controls, including whether stock
-        comes back onto the shelf.
-      </p>
-      <LiveNote>
-        {settings.requireManagerPin ? "A supervisor PIN is required." : "Any signed-in cashier can refund."}{" "}
-        {settings.allowPartialRefunds ? "Partial refunds are allowed." : "Only full-ticket refunds."}{" "}
-        {settings.restockOnRefund ? "Refunded qty returns to on-hand." : "Stock is not restocked."}
-      </LiveNote>
-      <SetCard title="Refunds">
-        <SetRow label="Require a manager PIN to refund?">
-          <Toggle
-            on={settings.requireManagerPin}
-            onChange={(requireManagerPin) => patch({ requireManagerPin })}
-          />
-        </SetRow>
-        <SetRow label="Allow partial refunds?">
-          <Toggle
-            on={settings.allowPartialRefunds}
-            onChange={(allowPartialRefunds) => patch({ allowPartialRefunds })}
-          />
-        </SetRow>
-        <SetRow label="Auto-print the refund receipt?">
-          <Toggle
-            on={settings.autoPrintRefund}
-            onChange={(autoPrintRefund) => patch({ autoPrintRefund })}
-          />
-        </SetRow>
-        <SetRow label="Restock items when a refund is posted?">
-          <Toggle
-            on={settings.restockOnRefund}
-            onChange={(restockOnRefund) => patch({ restockOnRefund })}
-          />
-        </SetRow>
-        <SetRow label="Allow a refund without the original ticket?">
-          <Toggle
-            on={settings.refundWithoutTicket}
-            onChange={(refundWithoutTicket) => patch({ refundWithoutTicket })}
-          />
-        </SetRow>
-      </SetCard>
-    </>
-  );
-}
-
-export function AccountingAdmin() {
-  const [settings, patch] = useSettings();
-  const targets = [
-    settings.quickbooks && "QuickBooks",
-    settings.sage && "Sage",
-    settings.zoho && "Zoho Books",
-    settings.firs && "FIRS",
-  ].filter(Boolean);
-
-  return (
-    <>
-      <p className="set-lede">
-        Choose which ledgers receive closed sales from this till, and how often.
-      </p>
-      <LiveNote>
-        {targets.length
-          ? `Exporting to ${targets.join(", ")} · ${settings.syncMode === "realtime" ? "as each sale closes" : "once a day"}.`
-          : "No accounting export is on."}{" "}
-        Service charge {settings.includeServiceInExport ? "is" : "is not"} included.
-      </LiveNote>
-      <SetCard title="Ledgers">
-        <SetRow label="Send sales to QuickBooks?">
-          <Toggle on={settings.quickbooks} onChange={(quickbooks) => patch({ quickbooks })} />
-        </SetRow>
-        <SetRow label="Send sales to Sage?">
-          <Toggle on={settings.sage} onChange={(sage) => patch({ sage })} />
-        </SetRow>
-        <SetRow label="Send sales to Zoho Books?">
-          <Toggle on={settings.zoho} onChange={(zoho) => patch({ zoho })} />
-        </SetRow>
-        <SetRow label="Submit FIRS e-invoices?">
-          <Toggle on={settings.firs} onChange={(firs) => patch({ firs })} />
-        </SetRow>
-        <SetRow label="How often should we sync?">
-          <SelectField
-            value={settings.syncMode}
-            onChange={(syncMode) =>
-              patch({ syncMode: syncMode as StoreSettings["syncMode"] })
-            }
-            options={[
-              { value: "daily", label: "Daily" },
-              { value: "realtime", label: "Real time" },
-            ]}
-          />
-        </SetRow>
-        <SetRow label="Include service charge in the export?">
-          <Toggle
-            on={settings.includeServiceInExport}
-            onChange={(includeServiceInExport) => patch({ includeServiceInExport })}
           />
         </SetRow>
       </SetCard>

@@ -1,5 +1,5 @@
 import type { CartLine } from "../../lib/types";
-import { computeTotals, formatMoney } from "../../lib/types";
+import { computeLineTotals, formatMoney } from "../../lib/types";
 import { formatPricePer } from "../../lib/units";
 import { useStoreSettings } from "../../lib/use-store-settings";
 import type { StaffUser } from "../../lib/staff";
@@ -27,11 +27,7 @@ export function CurrentOrder({
   continueDisabled = false,
 }: Props) {
   const rates = useStoreSettings();
-  const subtotal = lines.reduce(
-    (sum, line) => sum + line.unitPriceMinor * line.quantity,
-    0,
-  );
-  const totals = computeTotals(subtotal, rates);
+  const totals = computeLineTotals(lines, rates);
 
   return (
     <aside className="order-wrap">
@@ -134,12 +130,14 @@ export function CurrentOrder({
               <span>{formatMoney(totals.serviceMinor)}</span>
             </div>
           ) : null}
-          {rates.includeVatBreakdown || !rates.pricesIncludeVat ? (
-            <div className="row">
-              <span>VAT ({rates.vatPercent}%)</span>
-              <span>{formatMoney(totals.vatMinor)}</span>
-            </div>
-          ) : null}
+          {rates.includeVatBreakdown || !rates.pricesIncludeVat
+            ? totals.vatSlices.map((slice) => (
+                <div className="row" key={slice.ratePercent}>
+                  <span>VAT ({slice.ratePercent}%)</span>
+                  <span>{formatMoney(slice.taxMinor)}</span>
+                </div>
+              ))
+            : null}
         </div>
 
         <div className="total-box">

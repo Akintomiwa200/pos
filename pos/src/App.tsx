@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { CartLine, CatalogItem, TenderType } from "./lib/types";
-import { computeTotals, formatMoney } from "./lib/types";
+import { computeLineTotals, formatMoney } from "./lib/types";
 import { formatStock, formatUnitLabel } from "./lib/units";
 import { Sidebar } from "./components/layout/Sidebar";
 import { ProfileMenu, type MenuAction } from "./components/layout/ProfileMenu";
@@ -54,6 +54,7 @@ import { RoomsScreen } from "./screens/rooms/RoomsScreen";
 import { KitchenHome } from "./screens/kitchen/KitchenHome";
 import { startHqOrgSync } from "./lib/hq-settings-sync";
 import { useHardwareHex } from "./lib/device-hex";
+import { getPrinterGeometry, loadPrinterConfig } from "./lib/printers";
 import {
   canAccessSettings,
   isSellOnly,
@@ -177,6 +178,18 @@ export default function App() {
 
   useEffect(() => startHqOrgSync(), []);
 
+  // Keep the receipt printer's geometry warm so the first receipt prints
+  // without paying a printer-detection scan (which used to add seconds).
+  useEffect(() => {
+    const warm = () => {
+      const name = loadPrinterConfig().receiptPrinter;
+      if (name) getPrinterGeometry(name).catch(() => undefined);
+    };
+    warm();
+    const timer = window.setInterval(warm, 600_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   const items = catalog.filter((item) => {
     const q = query.trim().toLowerCase();
     if (!q) return true;
@@ -186,7 +199,7 @@ export default function App() {
       item.barcode.toLowerCase().includes(q)
     );
   });
-  const totals = computeTotals(cartSubtotal(cart), settings);
+  const totals = computeLineTotals(cart, settings);
   const activeTill = tills[0] ?? findTill();
   const product = normalizeTillProduct(activeTill.product);
   const needsActivation = tillNeedsActivation(activeTill);
@@ -725,6 +738,7 @@ export default function App() {
           unit: item.unit,
           unitLabel: item.unitLabel,
           packSize: item.packSize,
+          taxPercent: item.taxPercent,
         },
       ];
     });
@@ -816,7 +830,7 @@ export default function App() {
 
   function completeSale(method: TenderType, loyalty = loyaltyNumber) {
     if (!session) return;
-    const totalMinor = computeTotals(cartSubtotal(cart), settings).totalMinor;
+    const totalMinor = computeLineTotals(cart, settings).totalMinor;
     const till = activeTill;
     const sale: SaleReceipt = {
       ticketId: takeNextTicketId(settings),
@@ -1132,9 +1146,7 @@ export default function App() {
         {screen === "settings" && (
           <SettingsScreen
             items={catalog}
-            onUpdateItem={updateItem}
             onBack={() => setScreen("home")}
-            onOpenTill={() => setScreen("home")}
           />
         )}
         {screen === "kds" && (

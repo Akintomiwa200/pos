@@ -73,6 +73,7 @@ const SETTINGS_DEFAULTS: HqOrgSettings = {
     "Payment is due within 7 days. Goods remain property of the seller until paid in full.",
   invoicePaymentNote: "Transfer to the account on your statement. Quote the invoice number.",
   pricesIncludeVat: false,
+  applyVat: true,
   idleLockMinutes: 0,
   requireOpenShift: true,
   lowStockQty: 5,

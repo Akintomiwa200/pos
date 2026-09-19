@@ -26,6 +26,7 @@ export type StoredSale = {
     quantity: number;
     unitPriceMinor: number;
     image: string;
+    taxPercent?: number;
   }>;
   receiptText?: string;
 };

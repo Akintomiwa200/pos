@@ -11,6 +11,8 @@ export type DetectedPrinter = {
   isDefault: boolean;
   offline: boolean;
   dpi?: number;
+  paperWidthMm?: number;
+  printableWidthMm?: number;
 };
 
 export type PrinterConfig = {
@@ -50,26 +52,45 @@ export async function detectPrinters(): Promise<DetectedPrinter[]> {
   return res.json();
 }
 
-let dpiCache: { name: string; dpi: number; at: number } | null = null;
+let infoCache: {
+  name: string;
+  dpi: number;
+  printableWidthMm: number;
+  paperWidthMm: number;
+  at: number;
+} | null = null;
+
+export type PrinterGeometry = {
+  dpi: number;
+  printableWidthMm: number;
+  paperWidthMm: number;
+};
 
 /**
- * Native resolution (DPI) of the assigned printer. The receipt image is rasterised
- * at this exact density so Windows prints it 1:1 with no re-sampling — otherwise
- * the driver's bicubic smoothing makes the text look blurry.
+ * Live driver geometry (native DPI + printable paper width) for the assigned
+ * printer, cached 10 min. The receipt is laid out to the *printable* width so
+ * nothing gets clipped, and the barcode source is rasterised near native DPI.
  */
-export async function getPrinterDpi(printerName: string): Promise<number> {
+export async function getPrinterGeometry(printerName: string): Promise<PrinterGeometry> {
   const now = Date.now();
-  if (dpiCache && dpiCache.name === printerName && now - dpiCache.at < 60_000) {
-    return dpiCache.dpi;
+  if (infoCache && infoCache.name === printerName && now - infoCache.at < 600_000) {
+    return {
+      dpi: infoCache.dpi,
+      printableWidthMm: infoCache.printableWidthMm,
+      paperWidthMm: infoCache.paperWidthMm,
+    };
   }
   try {
     const list = await detectPrinters();
     const hit = list.find((printer) => printer.name === printerName);
     const dpi = hit?.dpi && hit.dpi > 0 ? Math.round(hit.dpi) : 203;
-    dpiCache = { name: printerName, dpi, at: now };
-    return dpi;
+    const printableWidthMm =
+      hit?.printableWidthMm && hit.printableWidthMm > 20 ? hit.printableWidthMm : 0;
+    const paperWidthMm = hit?.paperWidthMm && hit.paperWidthMm > 20 ? hit.paperWidthMm : 0;
+    infoCache = { name: printerName, dpi, printableWidthMm, paperWidthMm, at: now };
+    return { dpi, printableWidthMm, paperWidthMm };
   } catch {
-    return 203;
+    return { dpi: 203, printableWidthMm: 0, paperWidthMm: 0 };
   }
 }
 

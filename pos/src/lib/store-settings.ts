@@ -11,6 +11,7 @@ export type GatewayId = "paystack" | "moniepoint" | "flutterwave";
 export type StoreSettings = {
   vatPercent: number;
   servicePercent: number;
+  applyVat: boolean;
   pricesIncludeVat: boolean;
   applyServiceCharge: boolean;
   showTinOnReceipt: boolean;
@@ -140,6 +141,7 @@ export function defaultStoreSettings(): StoreSettings {
   return {
     vatPercent: 7.5,
     servicePercent: 10,
+    applyVat: true,
     pricesIncludeVat: false,
     applyServiceCharge: true,
     showTinOnReceipt: true,

@@ -43,7 +43,17 @@ export type ItemDraft = {
   active: boolean;
   expiresAt: string;
   image?: string;
+  /** VAT % applied to future sales. Empty = store default; "0" = VAT-exempt. */
+  taxPercent: string;
 };
+
+/** Blank-form VAT value → API row. Empty/blank keeps the store default. */
+export function taxPercentFromDraft(draft: Pick<ItemDraft, "taxPercent">): number | undefined {
+  const raw = draft.taxPercent.trim();
+  if (raw === "") return undefined;
+  const n = Number(raw);
+  return Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : undefined;
+}
 
 type Props = {
   open: boolean;
@@ -543,6 +553,25 @@ export function ItemFormSheet({
                     />
                   </InputLabel>
                 )}
+              </div>
+
+              <div className="mt-4">
+                <InputLabel
+                  label="VAT rate (%)"
+                  hint="Blank uses the store default. Enter 0 for VAT-exempt products. This overrides the dashboard rate on till receipts."
+                >
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.5"
+                    className={fieldClass}
+                    placeholder="Store default"
+                    value={draft.taxPercent}
+                    disabled={busy}
+                    onChange={(event) => onChange({ taxPercent: event.target.value })}
+                  />
+                </InputLabel>
               </div>
 
               <div className="mt-4 rounded-xl border border-pos-border bg-pos-surface-muted px-4 py-3 text-sm">

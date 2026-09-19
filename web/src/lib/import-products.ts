@@ -25,6 +25,7 @@ export const CSV_FIELDS: ImportField[] = [
   { key: "packSize", label: "pack size", kind: "number", aliases: ["pack size", "packsize", "pack", "units per pack", "pieces per pack", "pack qty", "cartons"] },
   { key: "description", label: "description", kind: "text", aliases: ["description", "desc", "notes", "detail", "details", "product description", "comment"] },
   { key: "active", label: "active", kind: "boolean", aliases: ["active", "status", "enabled"] },
+  { key: "taxPercent", label: "vat rate", kind: "number", aliases: ["vat rate", "vat", "vat percent", "vat %", "tax rate", "tax percent"] },
   { key: "expiresAt", label: "expiry date", kind: "date", aliases: ["expiry date", "expires at", "expires", "expiration", "expiration date", "expiry", "exp date", "use by", "best before"] },
   { key: "trackBatches", label: "track batches", kind: "boolean", aliases: ["track batches", "track batch", "batched", "batch tracking", "serialized"] },
   { key: "baseId", label: "base id", kind: "id", aliases: ["base id", "base product", "parent id", "parent", "variation of"] },
@@ -62,6 +63,7 @@ export type ImportProductRow = {
   active: boolean;
   trackBatches: boolean;
   baseId: string;
+  taxPercent: string;
   errors: string[];
 };
 
@@ -320,6 +322,7 @@ export function parseImportCsv(text: string, opts: ParseOptions = {}): ParseResu
     const rawReorder = cellAt(cells, "reorderLevel");
     const rawPack = cellAt(cells, "packSize");
     const rawExpiry = cellAt(cells, "expiresAt");
+    const rawTax = cellAt(cells, "taxPercent");
 
     const cost = rawCost ? moneyToMinor(rawCost) : { value: 0, ok: true };
     const price = rawPrice ? moneyToMinor(rawPrice) : { value: 0, ok: true };
@@ -334,6 +337,12 @@ export function parseImportCsv(text: string, opts: ParseOptions = {}): ParseResu
     if (rawReorder && !reorder.ok) errors.push("Invalid reorder level");
     if (rawPack && !pack.ok) errors.push("Invalid pack size");
     if (rawExpiry && !expiry.ok) errors.push("Invalid expiry date");
+    if (rawTax) {
+      const taxNum = Number(rawTax);
+      if (!Number.isFinite(taxNum) || taxNum < 0 || taxNum > 100) {
+        errors.push("Invalid VAT rate (use 0–100, or leave blank for the store default)");
+      }
+    }
 
     const activeRaw = cellAt(cells, "active");
     const trackRaw = cellAt(cells, "trackBatches");
@@ -393,6 +402,7 @@ export function parseImportCsv(text: string, opts: ParseOptions = {}): ParseResu
       active,
       trackBatches,
       baseId,
+      taxPercent: rawTax,
       errors,
     };
   });
@@ -441,6 +451,10 @@ export function toApiRows(rows: ImportProductRow[]) {
     description: row.description || undefined,
     active: row.active,
     expiresAt: row.expiresIso || "",
+    taxPercent:
+      row.taxPercent.trim() === ""
+        ? undefined
+        : Math.max(0, Math.min(100, Number(row.taxPercent))),
   }));
 }
 

@@ -20,7 +20,7 @@ const UI_FONTS = new Set([
   "manrope",
   "space-grotesk",
 ]);
-const UI_ACCENTS = new Set(["macaron", "teal", "blue", "amber", "rose"]);
+const UI_ACCENTS = new Set(["macaron", "teal", "blue", "amber", "rose", "violet"]);
 const UI_DENSITIES = new Set(["comfortable", "compact"]);
 
 const HEX_COLOR = /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/;
@@ -354,6 +354,7 @@ export function validateOrgSettingsInput(
     "receiptShowDiscount",
     "invoiceShowLogo",
     "pricesIncludeVat",
+    "applyVat",
     "requireOpenShift",
     "blockNegativeStock",
     "printDuplicateReceipt",

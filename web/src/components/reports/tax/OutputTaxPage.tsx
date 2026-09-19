@@ -87,6 +87,22 @@ export function OutputTaxPage() {
         </article>
       </section>
 
+      {data.byRate.length > 0 ? (
+        <section className="mb-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {data.byRate.map((rate) => (
+            <div key={rate.ratePercent} className="rounded-[20px] bg-pos-surface p-5 shadow-pos-sm">
+              <p className="text-[11px] uppercase tracking-wide text-pos-ink-faint">
+                {rate.ratePercent === 0 ? "VAT-exempt" : `VAT ${rate.ratePercent}%`}
+              </p>
+              <p className="mt-2 text-xl font-bold tabular-nums text-pos-ink">
+                {naira(rate.taxMinor)}
+              </p>
+              <p className="mt-1 text-xs text-pos-ink-faint">on {naira(rate.netMinor)} net</p>
+            </div>
+          ))}
+        </section>
+      ) : null}
+
       <section className="overflow-hidden rounded-[20px] bg-pos-surface shadow-pos-md">
         <header className="flex items-center justify-between border-b border-pos-border px-5 py-4">
           <div>

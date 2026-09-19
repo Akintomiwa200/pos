@@ -619,6 +619,17 @@ export function SettingsManager() {
                 copy="How catalogue prices relate to VAT on tickets and invoices."
               >
                 <SettingRow
+                  title="Apply VAT to sales"
+                  description="Master switch for VAT. Off makes every till and dashboard sale VAT-free."
+                  control={
+                    <Switch
+                      checked={draft.applyVat}
+                      disabled={busy}
+                      onChange={(applyVat) => void toggle("applyVat", applyVat)}
+                    />
+                  }
+                />
+                <SettingRow
                   title="Prices include VAT"
                   description="When on, till prices already include tax."
                   control={

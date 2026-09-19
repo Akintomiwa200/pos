@@ -21,11 +21,6 @@ export function overlayReceiptIdentity(
   const branchAddress = branch ? formatBranchAddress(branch) : "";
   const branchPhone = branch?.phone?.trim() || "";
   const branchName = branch?.name?.trim() || "";
-  const service = org.taxes.find((row) => /service/i.test(row.name) && row.active);
-  const vat =
-    org.taxes.find((row) => row.isDefault && row.active) ??
-    org.taxes.find((row) => row.active);
-  const showTax = s.receiptShowTax ?? settings.receiptShowTax;
 
   return {
     ...settings,
@@ -41,12 +36,6 @@ export function overlayReceiptIdentity(
     companyLegalName: company.legalName || settings.companyLegalName,
     companyRc: company.rc || settings.companyRc,
     companyState: company.state || settings.companyState,
-    vatPercent: vat?.ratePercent ?? settings.vatPercent,
-    servicePercent: service?.ratePercent ?? settings.servicePercent,
-    applyServiceCharge: Boolean(service),
-    pricesIncludeVat: vat?.inclusive ?? s.pricesIncludeVat ?? settings.pricesIncludeVat,
-    includeVatBreakdown: showTax,
-    receiptShowTax: showTax,
     receiptHeader: s.receiptHeader ?? settings.receiptHeader,
     receiptFooter: s.receiptFooter ?? settings.receiptFooter,
     receiptPaper: s.receiptPaper ?? settings.receiptPaper,

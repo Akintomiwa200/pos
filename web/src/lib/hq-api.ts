@@ -368,6 +368,7 @@ export type HqCatalogItem = {
   active: boolean;
   image?: string;
   expiresAt?: string;
+  taxPercent?: number;
 };
 
 export async function listCatalog(): Promise<HqCatalogItem[]> {

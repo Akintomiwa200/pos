@@ -16,7 +16,7 @@ import { useLiveDirectoryRows } from "@/lib/live-directory-rows";
 import { categorySlug, unitCode } from "@/lib/hq-taxonomy";
 import { ManagerSkeleton } from "../Skeleton";
 import { PrimaryButton } from "./SetupChrome";
-import { ItemFormSheet, type ItemDraft } from "./ItemFormSheet";
+import { ItemFormSheet, type ItemDraft, taxPercentFromDraft } from "./ItemFormSheet";
 
 const blank: ItemDraft = {
   name: "",
@@ -38,6 +38,7 @@ const blank: ItemDraft = {
   description: "",
   active: true,
   expiresAt: "",
+  taxPercent: "",
 };
 
 function stockTone(item: HqCatalogItem): "ok" | "low" | "out" {
@@ -89,6 +90,7 @@ function downloadCsv(filename: string, rows: HqCatalogItem[]) {
     "unitLabel",
     "packSize",
     "expiresAt",
+    "taxPercent",
   ];
   const escapeCell = (value: unknown) => {
     const text = value === undefined || value === null ? "" : String(value);
@@ -113,6 +115,7 @@ function downloadCsv(filename: string, rows: HqCatalogItem[]) {
         row.unitLabel ?? "",
         row.packSize ?? 1,
         row.expiresAt ? row.expiresAt.slice(0, 10) : "",
+        typeof row.taxPercent === "number" ? String(row.taxPercent) : "",
       ]
         .map(escapeCell)
         .join(","),
@@ -150,6 +153,7 @@ function toDraft(item: HqCatalogItem): ItemDraft {
     active: item.active !== false,
     expiresAt: item.expiresAt ? item.expiresAt.slice(0, 10) : "",
     image: item.image,
+    taxPercent: typeof item.taxPercent === "number" ? String(item.taxPercent) : "",
   };
 }
 
@@ -268,6 +272,7 @@ export function CategoryProductsPage({ slug }: { slug: string }) {
           description: draft.description.trim() || "",
           active: draft.active,
           expiresAt: draft.expiresAt || "",
+          taxPercent: taxPercentFromDraft(draft),
         },
       ]);
 

@@ -117,6 +117,7 @@ export type HqOrgSettings = {
   invoiceTerms: string;
   invoicePaymentNote: string;
   pricesIncludeVat: boolean;
+  applyVat: boolean;
   idleLockMinutes: number;
   requireOpenShift: boolean;
   lowStockQty: number;
@@ -152,7 +153,7 @@ export type HqOrgSettings = {
     | "outfit"
     | "manrope"
     | "space-grotesk";
-  uiAccent: "macaron" | "teal" | "blue" | "amber" | "rose";
+  uiAccent: "macaron" | "teal" | "blue" | "amber" | "rose" | "violet";
   uiDensity: "comfortable" | "compact";
   uiReduceMotion: boolean;
 };
@@ -274,6 +275,7 @@ export async function importCatalogRows(
     active?: boolean;
     image?: string;
     expiresAt?: string;
+    taxPercent?: number;
   }>,
 ) {
   return api<{ created: number; updated: number; total: number }>("/api/console/setup/import/catalog", {

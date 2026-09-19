@@ -42,6 +42,17 @@ export function generateBarcode(existingBarcodes: Set<string>) {
   return `890${Date.now()}`.slice(0, 13);
 }
 
+export function normalizeTaxPercent(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.min(100, Math.max(0, value));
+  }
+  if (typeof value === "string") {
+    const n = Number(value);
+    if (Number.isFinite(n)) return Math.min(100, Math.max(0, n));
+  }
+  return 0;
+}
+
 export function normalizeCatalogItem(raw: Partial<CatalogItem> & Pick<CatalogItem, "id" | "name">): CatalogItem {
   const costMinor =
     typeof raw.costMinor === "number" && Number.isFinite(raw.costMinor)
@@ -90,6 +101,8 @@ export function normalizeCatalogItem(raw: Partial<CatalogItem> & Pick<CatalogIte
     active: raw.active !== false,
     updatedAt: raw.updatedAt || new Date().toISOString(),
     expiresAt: raw.expiresAt?.trim() ? new Date(raw.expiresAt).toISOString() : undefined,
+    taxPercent:
+      raw.taxPercent !== undefined ? normalizeTaxPercent(raw.taxPercent) : undefined,
   };
 }
 

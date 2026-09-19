@@ -1,7 +1,7 @@
 import JsBarcode from "jsbarcode";
 import type { StoreSettings } from "./store-settings";
 import type { TenderType } from "./types";
-import { computeTotals, formatMoney } from "./types";
+import { computeLineTotals, formatMoney } from "./types";
 import { formatLineQty } from "./units";
 import type { SaleReceipt } from "./receipt";
 
@@ -127,11 +127,7 @@ export function renderReceiptPrintImage(sale: SaleReceipt, settings: StoreSettin
   if (!measure) throw new Error("Your browser cannot render receipt images.");
   const helper: CanvasRenderingContext2D = measure;
 
-  const subtotal = sale.lines.reduce(
-    (sum, line) => sum + line.unitPriceMinor * line.quantity,
-    0,
-  );
-  const totals = computeTotals(subtotal, settings);
+  const totals = computeLineTotals(sale.lines, settings);
   const total = sale.totalMinor ?? totals.totalMinor;
   const tendered = sale.amountTenderedMinor ?? total;
   const change = sale.changeMinor ?? Math.max(0, tendered - total);
@@ -353,7 +349,9 @@ export function renderReceiptPrintImage(sale: SaleReceipt, settings: StoreSettin
     );
   }
   if (showTax) {
-    blocks.push(mutedRow(`VAT ${settings.vatPercent}%`, money(totals.vatMinor)));
+    for (const slice of totals.vatSlices) {
+      blocks.push(mutedRow(`VAT ${slice.ratePercent}%`, money(slice.taxMinor)));
+    }
   }
   if (
     settings.receiptShowLoyalty &&

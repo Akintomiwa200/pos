@@ -1,4 +1,4 @@
-import { computeTotals, formatMoney, type TenderType } from "../../lib/types";
+import { computeLineTotals, formatMoney, type TenderType } from "../../lib/types";
 import { TENDER_LABEL } from "../../lib/receipt";
 import type { StoreSettings } from "../../lib/store-settings";
 import { ReceiptBarcode } from "./ReceiptBarcode";
@@ -8,6 +8,7 @@ export type ReceiptLine = {
   quantity: number;
   unitPriceMinor: number;
   sku?: string;
+  taxPercent?: number;
 };
 
 type Props = {
@@ -82,7 +83,7 @@ export function ReceiptVisual({
     (sum, line) => sum + line.unitPriceMinor * line.quantity,
     0,
   );
-  const totals = computeTotals(subtotal, settings);
+  const totals = computeLineTotals(lines, settings);
   const total = totalMinor ?? totals.totalMinor;
   const tendered = tenderedMinor ?? total;
   const change = changeMinor ?? Math.max(0, tendered - total);
@@ -284,12 +285,14 @@ export function ReceiptVisual({
             <span style={tabular}>{money(totals.serviceMinor)}</span>
           </div>
         ) : null}
-        {showTax ? (
-          <div style={{ ...row, ...muted }}>
-            <span>VAT {settings.vatPercent}%</span>
-            <span style={tabular}>{money(totals.vatMinor)}</span>
-          </div>
-        ) : null}
+        {showTax
+          ? totals.vatSlices.map((slice) => (
+              <div key={slice.ratePercent} style={{ ...row, ...muted }}>
+                <span>VAT {slice.ratePercent}%</span>
+                <span style={tabular}>{money(slice.taxMinor)}</span>
+              </div>
+            ))
+          : null}
         {settings.receiptShowLoyalty &&
         settings.receiptShowLoyaltyRedeemed !== false &&
         loyaltyRedeemMinor &&

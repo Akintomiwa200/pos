@@ -33,7 +33,7 @@ import { unitCode } from "@/lib/hq-taxonomy";
 import { ManagerSkeleton } from "../Skeleton";
 import { RowMenu, useRowMenu } from "../RowMenu";
 import { PrimaryButton } from "./SetupChrome";
-import { ItemFormSheet, type ItemDraft } from "./ItemFormSheet";
+import { ItemFormSheet, type ItemDraft, taxPercentFromDraft } from "./ItemFormSheet";
 
 const blank: ItemDraft = {
   name: "",
@@ -55,6 +55,7 @@ const blank: ItemDraft = {
   description: "",
   active: true,
   expiresAt: "",
+  taxPercent: "",
 };
 
 const PAGE_SIZES = [10, 25, 50] as const;
@@ -84,6 +85,7 @@ function toDraft(item: HqCatalogItem): ItemDraft {
     active: item.active !== false,
     expiresAt: item.expiresAt ? item.expiresAt.slice(0, 10) : "",
     image: item.image,
+    taxPercent: typeof item.taxPercent === "number" ? String(item.taxPercent) : "",
   };
 }
 
@@ -370,6 +372,7 @@ export function ItemsManager() {
           description: draft.description.trim() || "",
           active: draft.active,
           expiresAt: draft.expiresAt || "",
+          taxPercent: taxPercentFromDraft(draft),
         },
       ]);
 

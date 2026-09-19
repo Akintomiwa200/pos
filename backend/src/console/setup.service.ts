@@ -333,6 +333,7 @@ export class SetupService implements OnModuleInit {
       this.taxes = this.taxes.map((row) => ({ ...row, isDefault: row.id === next.id }));
     }
     await this.persist();
+    this.publishSettings();
     return this.taxes.find((row) => row.id === next.id)!;
   }
 
@@ -340,6 +341,7 @@ export class SetupService implements OnModuleInit {
     if (!this.taxes.some((row) => row.id === id)) throw new NotFoundException("Tax not found");
     this.taxes = this.taxes.filter((row) => row.id !== id);
     await this.persist();
+    this.publishSettings();
     return { ok: true };
   }
 

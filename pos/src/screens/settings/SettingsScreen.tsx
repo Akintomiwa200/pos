@@ -1,7 +1,6 @@
 import { useState, type ReactNode } from "react";
 import {
   ArrowLeft,
-  Box,
   Boxes,
   CreditCard,
   FileText,
@@ -10,23 +9,15 @@ import {
   Percent,
   Printer,
   ScanBarcode,
-  Settings2,
 } from "lucide-react";
 import type { CatalogItem } from "../../lib/types";
 import { TillKeysSettings } from "./TillKeysSettings";
-import { OthersSettings } from "./OthersSettings";
 import { LoyaltyHub } from "./LoyaltyPages";
 import {
-  AccountingAdmin,
   BarcodeSettings,
-  CategoriesAdmin,
-  HoldAdmin,
-  InvoicesAdmin,
-  ItemsAdmin,
   PaymentsSettings,
   PrintingSettings,
   ReceiptSettings,
-  RefundsAdmin,
   StockSettings,
   TaxSettings,
 } from "./SettingsPages";
@@ -40,23 +31,11 @@ type Page =
   | "loyalty"
   | "printing"
   | "receipt"
-  | "payments"
-  | "others"
-  | "items"
-  | "categories"
-  | "invoices"
-  | "hold"
-  | "refunds"
-  | "accounting";
+  | "payments";
 
 type Props = {
   items: CatalogItem[];
-  onUpdateItem: (
-    id: string,
-    patch: { priceMinor?: number; onHand?: number },
-  ) => Promise<void>;
   onBack: () => void;
-  onOpenTill: () => void;
 };
 
 const TILES: { id: Page; label: string; icon: typeof Boxes }[] = [
@@ -68,8 +47,6 @@ const TILES: { id: Page; label: string; icon: typeof Boxes }[] = [
   { id: "printing", label: "Printing", icon: Printer },
   { id: "receipt", label: "Receipt", icon: FileText },
   { id: "payments", label: "Payments", icon: CreditCard },
-  { id: "items", label: "Items", icon: Box },
-  { id: "others", label: "Others", icon: Settings2 },
 ];
 
 const TITLES: Record<Page, string> = {
@@ -82,20 +59,11 @@ const TITLES: Record<Page, string> = {
   printing: "Printing",
   receipt: "Receipt",
   payments: "Payments",
-  others: "Others",
-  items: "Manage items",
-  categories: "Manage categories",
-  invoices: "Invoices",
-  hold: "On hold orders",
-  refunds: "Refund receipts",
-  accounting: "Accounting",
 };
 
 export function SettingsScreen({
   items,
-  onUpdateItem,
   onBack,
-  onOpenTill,
 }: Props) {
   const [page, setPage] = useState<Page>("hub");
 
@@ -125,7 +93,7 @@ export function SettingsScreen({
       ) : page === "loyalty" ? (
         <LoyaltyHub onBack={() => setPage("hub")} />
       ) : (
-        <PageShell title={TITLES[page]} onBack={() => setPage(pageFromNested(page))}>
+        <PageShell title={TITLES[page]} onBack={() => setPage("hub")}>
           {page === "keys" && <TillKeysSettings />}
           {page === "barcode" && <BarcodeSettings />}
           {page === "tax" && <TaxSettings />}
@@ -133,38 +101,10 @@ export function SettingsScreen({
           {page === "printing" && <PrintingSettings />}
           {page === "receipt" && <ReceiptSettings />}
           {page === "payments" && <PaymentsSettings />}
-          {page === "others" && (
-            <OthersSettings
-              onOpenTill={onOpenTill}
-              items={items}
-              onUpdateItem={onUpdateItem}
-            />
-          )}
-          {page === "items" && (
-            <ItemsAdmin items={items} onUpdateItem={onUpdateItem} />
-          )}
-          {page === "categories" && <CategoriesAdmin items={items} />}
-          {page === "invoices" && <InvoicesAdmin />}
-          {page === "hold" && <HoldAdmin />}
-          {page === "refunds" && <RefundsAdmin />}
-          {page === "accounting" && <AccountingAdmin />}
         </PageShell>
       )}
     </section>
   );
-}
-
-function pageFromNested(page: Page): Page {
-  if (
-    page === "categories" ||
-    page === "invoices" ||
-    page === "hold" ||
-    page === "refunds" ||
-    page === "accounting"
-  ) {
-    return "others";
-  }
-  return "hub";
 }
 
 function PageShell({

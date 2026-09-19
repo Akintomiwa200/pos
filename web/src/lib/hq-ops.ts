@@ -216,6 +216,7 @@ export type TaxSummary = {
   liabilityMinor: number;
   lines: Array<{ ref: string; at: string; netMinor: number; taxMinor: number; grossMinor: number }>;
   byCategory: Array<{ category: string; netMinor: number; taxMinor: number }>;
+  byRate: Array<{ ratePercent: number; netMinor: number; taxMinor: number }>;
 };
 
 export function taxSummary(day?: string) {

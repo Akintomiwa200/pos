@@ -81,6 +81,7 @@ export function PaidScreen({ sale, saveState = "saved", onNewOrder }: Props) {
             quantity: l.quantity,
             unitPriceMinor: l.unitPriceMinor,
             sku: l.sku,
+            taxPercent: l.taxPercent,
           }))}
           ticketId={sale.ticketId}
           paidAt={sale.paidAt}

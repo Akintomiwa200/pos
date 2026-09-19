@@ -33,6 +33,7 @@ export type TaxSummary = {
   liabilityMinor: number;
   lines: TaxLine[];
   byCategory: Array<{ category: string; netMinor: number; taxMinor: number }>;
+  byRate: Array<{ ratePercent: number; netMinor: number; taxMinor: number }>;
 };
 
 export type AuditCashier = {
@@ -234,47 +235,101 @@ export class ReportsService {
   }
 
   taxSummary(day?: string): TaxSummary {
-    const taxes = this.setup.snapshot().taxes.filter((tax) => tax.active && tax.isDefault);
+    const snap = this.setup.snapshot();
+    const taxes = snap.taxes.filter((tax) => tax.active && tax.isDefault);
     const vat = taxes[0] ?? { name: "VAT", ratePercent: 7.5, inclusive: false };
-    const rate = vat.ratePercent / 100;
-    const inclusive = vat.inclusive || this.setup.snapshot().settings.pricesIncludeVat;
+    const inclusive = vat.inclusive || snap.settings.pricesIncludeVat;
+    // Master switch: when VAT is off app-wide, every line is treated as exempt.
+    const vatOff = snap.settings.applyVat === false;
+    const defaultRate = vatOff ? 0 : vat.ratePercent;
 
-    const salesRows = day ? this.sales.list().filter((sale) => sameDay(sale.paidAt, day)) : this.sales.list();
-    const lines: TaxLine[] = salesRows.map((sale) => {
-      const gross = sale.totalMinor;
-      const net = inclusive ? Math.round(gross / (1 + rate)) : gross;
-      return {
-        ref: sale.ticketId,
-        at: sale.paidAt,
-        netMinor: net,
-        taxMinor: gross - net,
-        grossMinor: gross,
-      };
-    });
+    const netOf = (gross: number, rate: number) =>
+      inclusive && rate > 0 ? Math.round((gross * 100) / (100 + rate)) : gross;
+    const taxOf = (gross: number, rate: number) =>
+      inclusive && rate > 0
+        ? gross - netOf(gross, rate)
+        : Math.round(netOf(gross, rate) * (rate / 100));
 
-    const purchaseDocs = this.orders.list("purchase-invoice").filter((doc) => doc.status !== "cancelled");
-    const inputTaxMinor = purchaseDocs.reduce((sum, doc) => {
-      const net = inclusive ? Math.round(doc.totalMinor / (1 + rate)) : doc.totalMinor;
-      return sum + (doc.totalMinor - net);
-    }, 0);
+    const salesRows = day
+      ? this.sales.list().filter((sale) => sameDay(sale.paidAt, day))
+      : this.sales.list();
 
+    const lines: TaxLine[] = [];
+    const rateMap = new Map<number, { netMinor: number; taxMinor: number }>();
     const categoryOf = new Map(this.catalog.list().map((item) => [item.id, item.category] as const));
-    const catMap = new Map<string, { category: string; grossMinor: number }>();
+    const catMap = new Map<string, { category: string; netMinor: number; taxMinor: number }>();
+
     for (const sale of salesRows) {
       const saleLines = sale.lines ?? [];
+      const rateOf = (rate: number | undefined) =>
+        typeof rate === "number" && rate > 0 ? rate : defaultRate;
+
+      if (!saleLines.length) {
+        // Legacy sales without stored lines: one entry at the default rate.
+        const rate = defaultRate;
+        const gross = sale.totalMinor;
+        const net = netOf(gross, rate);
+        const tax = taxOf(gross, rate);
+        if (rate > 0) {
+          lines.push({ ref: sale.ticketId, at: sale.paidAt, netMinor: net, taxMinor: tax, grossMinor: gross });
+        }
+        const bucket = rateMap.get(rate) ?? { netMinor: 0, taxMinor: 0 };
+        bucket.netMinor += net;
+        bucket.taxMinor += tax;
+        rateMap.set(rate, bucket);
+        continue;
+      }
+
+      // One TaxLine per effective rate present in the sale.
+      const groups = new Map<number, { netMinor: number; taxMinor: number; grossMinor: number }>();
       for (const line of saleLines) {
-        const lineGross = line.unitPriceMinor * line.quantity;
-        if (!lineGross) continue;
+        const gross = line.unitPriceMinor * line.quantity;
+        if (!gross) continue;
+        const rate = vatOff ? 0 : rateOf(line.taxPercent);
+        const net = netOf(gross, rate);
+        const tax = taxOf(gross, rate);
+
+        const group = groups.get(rate) ?? { netMinor: 0, taxMinor: 0, grossMinor: 0 };
+        group.netMinor += net;
+        group.taxMinor += tax;
+        group.grossMinor += gross;
+        groups.set(rate, group);
+
+        const bucket = rateMap.get(rate) ?? { netMinor: 0, taxMinor: 0 };
+        bucket.netMinor += net;
+        bucket.taxMinor += tax;
+        rateMap.set(rate, bucket);
+
         const category = categoryOf.get(line.itemId ?? "") ?? "General";
-        const row = catMap.get(category) ?? { category, grossMinor: 0 };
-        row.grossMinor += lineGross;
+        const row = catMap.get(category) ?? { category, netMinor: 0, taxMinor: 0 };
+        row.netMinor += net;
+        row.taxMinor += tax;
         catMap.set(category, row);
       }
+      for (const [rate, g] of groups) {
+        if (rate <= 0) continue;
+        lines.push({ ref: sale.ticketId, at: sale.paidAt, netMinor: g.netMinor, taxMinor: g.taxMinor, grossMinor: g.grossMinor });
+      }
     }
-    const byCategory = [...catMap.values()].map((row) => {
-      const net = inclusive ? Math.round(row.grossMinor / (1 + rate)) : row.grossMinor;
-      return { category: row.category, netMinor: net, taxMinor: row.grossMinor - net };
-    });
+
+    const purchaseDocs = this.orders
+      .list("purchase-invoice")
+      .filter((doc) => doc.status !== "cancelled");
+    const inputTaxMinor = purchaseDocs.reduce((sum, doc) => {
+      // Purchase docs carry no per-line rates; recover VAT at the default rate.
+      const rate = vat.ratePercent / 100;
+      const net = inclusive
+        ? Math.round(doc.totalMinor / (1 + rate))
+        : doc.totalMinor;
+      return sum + (inclusive ? doc.totalMinor - net : Math.round(net * rate));
+    }, 0);
+
+    const byCategory = [...catMap.values()]
+      .map((row) => ({ category: row.category, netMinor: row.netMinor, taxMinor: row.taxMinor }))
+      .sort((a, b) => b.netMinor - a.netMinor);
+    const byRate = [...rateMap.entries()]
+      .map(([ratePercent, row]) => ({ ratePercent, netMinor: row.netMinor, taxMinor: row.taxMinor }))
+      .sort((a, b) => b.netMinor - a.netMinor);
 
     const outputTaxMinor = lines.reduce((sum, line) => sum + line.taxMinor, 0);
     return {
@@ -284,7 +339,8 @@ export class ReportsService {
       inputTaxMinor,
       liabilityMinor: outputTaxMinor - inputTaxMinor,
       lines,
-      byCategory: byCategory.sort((a, b) => b.netMinor - a.netMinor),
+      byCategory,
+      byRate,
     };
   }
 }

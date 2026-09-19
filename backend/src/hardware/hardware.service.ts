@@ -1,13 +1,22 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { promisify } from "node:util";
 import { mkdir, readFile, writeFile, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Injectable } from "@nestjs/common";
+import { Injectable, OnModuleDestroy } from "@nestjs/common";
 
 const execFileAsync = promisify(execFile);
 
 const PRINTER_CONFIG_FILE = join(process.cwd(), "data", "printer-config.json");
+/** Persistent PowerShell worker shipped with the backend (loads GDI+ once). */
+const WORKER_SCRIPT_PATH = join(
+  typeof __dirname === "string" ? __dirname : ".",
+  "..",
+  "..",
+  "scripts",
+  "pos-receipt-worker.ps1",
+);
+const WORKER_DIR = join(tmpdir(), "pos-print-worker");
 
 export type LabelPrintJob = {
   /** PNG raster of the label WITHOUT the data:image prefix (300 DPI recommended). */
@@ -50,7 +59,105 @@ function formatHardwareHex(raw: string) {
 }
 
 @Injectable()
-export class HardwareService {
+export class HardwareService implements OnModuleDestroy {
+  private worker: ChildProcess | null = null;
+  private printChain: Promise<unknown> = Promise.resolve();
+  private printersCache: { at: number; rows: DetectedPrinter[] } | null = null;
+
+  async onModuleDestroy() {
+    if (this.worker && this.worker.exitCode === null && !this.worker.killed) {
+      const proc = this.worker;
+      this.worker = null;
+      proc.kill();
+      // Give the worker a moment to die so a quick restart of the backend does
+      // not leave two workers polling the same folder.
+      const started = Date.now();
+      while (proc.exitCode === null && Date.now() - started < 3000) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+    }
+  }
+
+  /**
+   * A warm PowerShell worker prints by dropping a JSON job file into a folder the
+   * worker polls every ~60ms. No process spawn or Add-Type per receipt.
+   */
+  private ensureWorker() {
+    if (this.worker && this.worker.exitCode === null && !this.worker.killed) {
+      return;
+    }
+    try {
+      this.worker = spawn(
+        "powershell.exe",
+        [
+          "-NoProfile",
+          "-NonInteractive",
+          "-ExecutionPolicy",
+          "Bypass",
+          "-File",
+          WORKER_SCRIPT_PATH,
+          WORKER_DIR,
+          String(process.pid),
+        ],
+        { windowsHide: true, stdio: "ignore" },
+      );
+      this.worker.once("exit", () => {
+        this.worker = null;
+      });
+      this.worker.once("error", () => {
+        this.worker = null;
+      });
+    } catch {
+      this.worker = null;
+    }
+  }
+
+  private enqueue<T>(task: () => Promise<T>): Promise<T> {
+    const run = this.printChain.then(task, task);
+    this.printChain = run.catch(() => undefined);
+    return run;
+  }
+
+  private async runPrintJob(
+    kind: "rich" | "text",
+    payload: Record<string, unknown>,
+    waitMs = 60000,
+  ): Promise<{ ok: true }> {
+    await mkdir(WORKER_DIR, { recursive: true });
+    this.ensureWorker();
+    const id = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+    const jobFile = join(WORKER_DIR, `job-${id}.json`);
+    const doneFile = join(WORKER_DIR, `done-${id}.json`);
+    await writeFile(jobFile, JSON.stringify({ kind, ...payload }), "utf8");
+    const started = Date.now();
+    try {
+      while (Date.now() - started < waitMs) {
+        try {
+          const raw = await readFile(doneFile, "utf8");
+          const done = JSON.parse(raw.replace(/^\uFEFF/, "")) as {
+            id?: string;
+            ok?: boolean;
+            message?: string;
+          };
+          if (done.id === id) {
+            if (!done.ok) {
+              throw new Error(done.message || "The printer worker reported a failure.");
+            }
+            return { ok: true };
+          }
+        } catch (error) {
+          const code = (error as NodeJS.ErrnoException).code;
+          if (code !== "ENOENT") throw error;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      throw new Error("The printer worker did not finish in time.");
+    } finally {
+      await unlink(jobFile).catch(() => undefined);
+      await unlink(doneFile).catch(() => undefined);
+    }
+  }
+
   async readDeviceHex(): Promise<{ hex: string; source: string }> {
     if (process.platform === "win32") {
       try {
@@ -90,6 +197,10 @@ export class HardwareService {
     if (process.platform !== "win32") {
       return [];
     }
+    const now = Date.now();
+    if (this.printersCache && now - this.printersCache.at < 60_000) {
+      return this.printersCache.rows;
+    }
     try {
       const { stdout } = await execFileAsync(
         "powershell.exe",
@@ -99,7 +210,7 @@ export class HardwareService {
           "-ExecutionPolicy",
           "Bypass",
           "-Command",
-          "$cfg = @{}; Get-CimInstance Win32_PrinterConfiguration | ForEach-Object { $cfg[$_.Name] = New-Object PSObject -Property @{ H = $_.HorizontalResolution; V = $_.VerticalResolution } }; Get-CimInstance Win32_Printer | ForEach-Object { $c = $cfg[$_.Name]; [PSCustomObject]@{ Name = $_.Name; Default = $_.Default; DriverName = $_.DriverName; PortName = $_.PortName; WorkOffline = $_.WorkOffline; Dpi = if ($c) { [int][math]::Max([int]$c.H, [int]$c.V) } else { 0 } } } | ConvertTo-Json -Compress",
+          "Add-Type -AssemblyName System.Drawing; $cfg = @{}; Get-CimInstance Win32_PrinterConfiguration | ForEach-Object { $cfg[$_.Name] = New-Object PSObject -Property @{ H = $_.HorizontalResolution; V = $_.VerticalResolution } }; Get-CimInstance Win32_Printer | ForEach-Object { $c = $cfg[$_.Name]; $pwH = 0; $hwH = 0; try { $s = New-Object System.Drawing.Printing.PrinterSettings; $s.PrinterName = $_.Name; $d = $s.DefaultPageSettings; $pwH = [int]$d.PaperSize.Width; $hwH = [int]$d.HardMarginX } catch {}; $paperMm = 0; $printableMm = 0; if ($pwH -gt 0) { $paperMm = [math]::Round($pwH / 100.0 * 25.4, 1); $hw = [math]::Max(0, $hwH); $printableMm = [math]::Round([math]::Max(0, ($pwH - $hw * 2)) / 100.0 * 25.4, 1) }; [PSCustomObject]@{ Name = $_.Name; Default = $_.Default; DriverName = $_.DriverName; PortName = $_.PortName; WorkOffline = $_.WorkOffline; Dpi = if ($c) { [int][math]::Max([int]$c.H, [int]$c.V) } else { 0 }; PaperWmm = $paperMm; PrintableWmm = $printableMm } } | ConvertTo-Json -Compress",
         ],
         { windowsHide: true, timeout: 15000 },
       );
@@ -107,7 +218,7 @@ export class HardwareService {
         | Record<string, unknown>
         | Record<string, unknown>[];
       const rows = Array.isArray(parsed) ? parsed : [parsed];
-      return rows
+      const result = rows
         .filter((row) => typeof row.Name === "string")
         .map((row) => ({
           name: String(row.Name),
@@ -115,20 +226,45 @@ export class HardwareService {
           port: String(row.PortName ?? ""),
           isDefault: Boolean(row.Default),
           offline: Boolean(row.WorkOffline),
-          // Native print resolution (dots per inch). Used by the till to rasterise
-          // the receipt 1:1 so the driver never has to re-sample (the cause of
-          // soft, blurry text). Falls back to 203 DPI, the thermal-receipt norm.
+          // Real driver geometry so the till can size the receipt (and its
+          // barcode) to what the printer can actually print instead of the
+          // nominal paper width — the cause of clipped right-hand content.
+          paperWidthMm:
+            typeof row.PaperWmm === "number" && row.PaperWmm > 0
+              ? Math.round(row.PaperWmm)
+              : undefined,
+          printableWidthMm:
+            typeof row.PrintableWmm === "number" && row.PrintableWmm > 0
+              ? Math.round(row.PrintableWmm)
+              : undefined,
+          // Native print resolution (dots per inch).
           dpi:
             typeof row.Dpi === "number" && row.Dpi > 0
               ? Math.round(row.Dpi)
               : 203,
         }));
+      this.printersCache = { at: now, rows: result };
+      return result;
     } catch {
       return [];
     }
   }
 
   async print(printerName: string, content: string, widthMm = 80) {
+    if (process.platform !== "win32") {
+      throw new Error("Printing is available on the Windows POS terminal.");
+    }
+    try {
+      await this.enqueue(() =>
+        this.runPrintJob("text", { printer: printerName, widthMm, content }),
+      );
+      return { ok: true, printer: printerName, paper: `${widthMm}mm` };
+    } catch {
+      return this.printLegacy(printerName, content, widthMm);
+    }
+  }
+
+  private async printLegacy(printerName: string, content: string, widthMm = 80) {
     if (process.platform !== "win32") {
       throw new Error("Printing is available on the Windows POS terminal.");
     }
@@ -224,6 +360,34 @@ export class HardwareService {
     if (layout.length === 0) {
       throw new Error("No receipt lines to print.");
     }
+    const loop = Math.max(1, Math.min(99, Math.floor(copies)));
+    try {
+      await this.enqueue(() =>
+        this.runPrintJob("rich", {
+          printer: printerName,
+          widthMm,
+          copies: loop,
+          layout,
+        }),
+      );
+      return { ok: true, printer: printerName, paper: `${widthMm}mm`, copies: loop };
+    } catch {
+      return this.printRichLayoutLegacy(printerName, layout, widthMm, loop);
+    }
+  }
+
+  private async printRichLayoutLegacy(
+    printerName: string,
+    layout: Array<Record<string, unknown>>,
+    widthMm = 80,
+    copies = 1,
+  ) {
+    if (process.platform !== "win32") {
+      throw new Error("Printing is available on the Windows POS terminal.");
+    }
+    if (layout.length === 0) {
+      throw new Error("No receipt lines to print.");
+    }
     const layoutJson = JSON.stringify(layout);
     // Base64 keeps non-ASCII receipt text (₦, accented names) safe inside the
     // PowerShell source, whose encoding PowerShell 5.1 may otherwise misread.
@@ -244,7 +408,7 @@ export class HardwareService {
       `$widthPt = ${widthPt}`,
       `$padX = 6`,
       `$padTop = 8`,
-      `$padBottom = 8`,
+      `$padBottom = 14`,
       `$fontNormal = New-Object System.Drawing.Font('Consolas', 10, [System.Drawing.FontStyle]::Regular, [System.Drawing.GraphicsUnit]::Point)`,
       `$fontBold = New-Object System.Drawing.Font('Consolas', 10, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Point)`,
       `$fontTitle = New-Object System.Drawing.Font('Consolas', 13, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Point)`,
@@ -271,7 +435,7 @@ export class HardwareService {
       `$yy += [double]$padBottom`,
       `$g.Dispose()`,
       `$measure.Dispose()`,
-      `$heightHundredths = [int][math]::Max(220, [int][math]::Round($yy * 100.0 / 72.0))`,
+      `$heightHundredths = [int][math]::Max(220, [int][math]::Round($yy * 100.0 / 72.0) + 12)`,
       `$paper = New-Object System.Drawing.Printing.PaperSize('Receipt', ${widthHundredths}, $heightHundredths)`,
       `$doc = New-Object System.Drawing.Printing.PrintDocument`,
       `$doc.PrinterSettings.PrinterName = $printer`,
@@ -282,7 +446,14 @@ export class HardwareService {
       `  param($sender, $e)`,
       `  $gg = $e.Graphics`,
       `  $gg.PageUnit = [System.Drawing.GraphicsUnit]::Point`,
-      `  $xMax = $widthPt - $padX`,
+      `  $vb = $gg.VisibleClipBounds`,
+      `  $originX = [math]::Max(0, [double]$vb.X)`,
+      `  $useWpt = [double]$vb.Width - $originX`,
+      `  if ($useWpt -lt 60 -or $useWpt -gt ($widthPt + 80)) { $useWpt = $widthPt }`,
+      `  if ($useWpt -gt $widthPt) { $useWpt = $widthPt }`,
+      `  $rectX = $originX + $padX`,
+      `  $rectW = [math]::Max(1.0, $useWpt - 2 * $padX)`,
+      `  $xMax = $rectX + $rectW`,
       `  $yy = [double]$padTop`,
       `  foreach ($seg in $layout) {`,
       `    switch ([string]$seg.t) {`,
@@ -294,7 +465,7 @@ export class HardwareService {
       `        $sf.Alignment = [System.Drawing.StringAlignment]::Center`,
       `        $sf.LineAlignment = [System.Drawing.StringAlignment]::Near`,
       `        $sf.FormatFlags = $sf.FormatFlags -bor [System.Drawing.StringFormatFlags]::NoWrap`,
-      `        $rect = New-Object System.Drawing.RectangleF([single]$padX, [single]$yy, [single]($widthPt - 2 * $padX), [single]$lh)`,
+      `        $rect = New-Object System.Drawing.RectangleF([single]$rectX, [single]$yy, [single]$rectW, [single]$lh)`,
       `        $gg.DrawString([string]$seg.text, $f, $b, $rect, $sf)`,
       `        $yy += $lh + 2`,
       `        $sf.Dispose()`,
@@ -310,7 +481,7 @@ export class HardwareService {
       `        $sfR.Alignment = [System.Drawing.StringAlignment]::Far`,
       `        $sfR.Trimming = [System.Drawing.StringTrimming]::EllipsisCharacter`,
       `        $sfR.FormatFlags = $sfR.FormatFlags -bor [System.Drawing.StringFormatFlags]::NoWrap`,
-      `        $rect = New-Object System.Drawing.RectangleF([single]$padX, [single]$yy, [single]($widthPt - 2 * $padX), [single]$lh)`,
+      `        $rect = New-Object System.Drawing.RectangleF([single]$rectX, [single]$yy, [single]$rectW, [single]$lh)`,
       `        $gg.DrawString([string]$seg.l, $f, $b, $rect, $sfL)`,
       `        $gg.DrawString([string]$seg.r, $f, $b, $rect, $sfR)`,
       `        $yy += $lh + 1`,
@@ -318,7 +489,7 @@ export class HardwareService {
       `        $sfR.Dispose()`,
       `      }`,
       `      'd' {`,
-      `        $gg.DrawLine($dashPen, [single]$padX, [single]($yy + 3), [single]$xMax, [single]($yy + 3))`,
+      `        $gg.DrawLine($dashPen, [single]$rectX, [single]($yy + 3), [single]$xMax, [single]($yy + 3))`,
       `        $yy += 9`,
       `      }`,
       `      's' { $yy += [double]$seg.h }`,
@@ -331,7 +502,8 @@ export class HardwareService {
       `        $wPx = [int][math]::Round([double]$seg.wMm / 25.4 * $dpiX)`,
       `        $hPx = [int][math]::Round([double]$seg.hMm / 25.4 * $dpiY)`,
       `        $wPt = [double]$seg.wMm * 72.0 / 25.4`,
-      `        $oxPt = [math]::Max(0, (($widthPt - $wPt) / 2))`,
+      `        if ($wPt -gt $rectW) { $wPt = $rectW }`,
+      `        $oxPt = $rectX + [math]::Max(0, (($rectW - $wPt) / 2))`,
       `        $oxPx = [int][math]::Round([double]$oxPt / 72.0 * $dpiX)`,
       `        $oyPx = [int][math]::Round([double]$yy / 72.0 * $dpiY)`,
       `        $gg.PageUnit = [System.Drawing.GraphicsUnit]::Pixel`,

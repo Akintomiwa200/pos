@@ -75,11 +75,12 @@ function ReceiptPrintPreviewModal({
   }
 
   function printReceipt() {
-    const win = window.open("", "_blank", "noopener,noreferrer,width=420,height=720");
+    const win = window.open("", "_blank", "width=420,height=720");
     if (!win) {
       toast.error("Allow pop-ups to print the receipt preview.");
       return;
     }
+    win.opener = null;
     const escaped = text
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")

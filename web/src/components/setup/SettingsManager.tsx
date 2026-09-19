@@ -225,9 +225,13 @@ export function SettingsManager() {
     const next = { ...draft, [key]: value };
     const nextErrors = validateOrgSettings(next);
     setErrors(nextErrors);
-    if (firstSettingsError(nextErrors)) {
+
+    // A switch only affects its own field — never block it on unrelated
+    // validation errors elsewhere in the draft.
+    const ownError = nextErrors[key];
+    if (ownError) {
       setSettingsLocal(next);
-      toast.error(firstSettingsError(nextErrors)!);
+      toast.error(ownError);
       return;
     }
     try {

@@ -438,6 +438,8 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
       name: account.name,
       email: account.email,
       username: account.username,
+      groupId: account.groupId,
+      groupName: group?.name ?? "",
       scope: group?.scope ?? "tenant",
       privileges: group?.privileges ?? [],
     };

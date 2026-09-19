@@ -15,27 +15,38 @@ export type WebUserLike = {
   email: string;
   username?: string | null;
   scope?: string;
+  groupId?: string | null;
+  groupName?: string | null;
   privileges?: string[] | null;
 };
 
+/**
+ * Console privileges that imply a till supervisor. Deliberately excludes the
+ * transactional privileges every selling role holds (`pos-hub`, `payments`,
+ * `sales-return-list`, `customer`) so a "Cashier" group is not upgraded to a
+ * supervisor on the till.
+ */
 const SUPERVISOR_PRIVS = new Set([
   "audit",
   "staff",
-  "payments",
-  "pos-hub",
   "setup",
   "settings",
   "manager",
   "supervisor",
 ]);
 
+const ADMIN_GROUPS = new Set(["g-admin", "g-super-admin"]);
+const SUPERVISOR_GROUPS = new Set(["g-store-manager", "g-supervisor"]);
+
 export function fromConsoleUser(u: WebUserLike): StaffUser | null {
   if (!u || !u.id || !u.name) return null;
   const privs = new Set(u.privileges ?? []);
+  const groupId = (u.groupId ?? "").trim().toLowerCase();
   let role: StaffRole;
-  if (privs.has("*") || u.scope === "producer") {
+  if (privs.has("*") || u.scope === "producer" || ADMIN_GROUPS.has(groupId)) {
     role = "admin";
   } else if (
+    SUPERVISOR_GROUPS.has(groupId) ||
     [...SUPERVISOR_PRIVS].some((p) => privs.has(p))
   ) {
     role = "supervisor";

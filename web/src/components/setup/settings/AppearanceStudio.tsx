@@ -100,7 +100,7 @@ export function AppearanceStudio() {
 
       <SettingsCard
         title="Accent colour"
-        copy="Five accents for buttons, active nav, toggles, and focus rings — updates live."
+        copy="Six accents for buttons, active nav, toggles, and focus rings — updates live."
       >
         <div className="grid grid-cols-2 gap-2.5 px-5 py-5 sm:grid-cols-5 sm:px-6">
           {ACCENT_OPTIONS.map((accent) => {

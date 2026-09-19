@@ -176,7 +176,7 @@ export function validateOrgSettingsInput(
 
   if (input.receiptBarcodeValue !== undefined) {
     const receiptBarcodeValue = asTrimmed(input.receiptBarcodeValue);
-    if (!/^[A-Za-z0-9-]{4,32}$/.test(receiptBarcodeValue)) {
+    if (receiptBarcodeValue && !/^[A-Za-z0-9-]{4,32}$/.test(receiptBarcodeValue)) {
       errors.push({
         field: "receiptBarcodeValue",
         message: "Barcode value must be 4–32 letters, numbers, or hyphens",

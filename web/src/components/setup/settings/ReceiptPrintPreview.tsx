@@ -111,10 +111,17 @@ function ReceiptPrintPreviewModal({
 </head>
 <body>
   <pre>${escaped}</pre>
+  <button id="pp-print" style="position:fixed;right:12px;top:12px;z-index:9;border:0;border-radius:9999px;background:#065f46;color:#fff;padding:8px 16px;font:600 13px/1 system-ui;cursor:pointer">Print receipt</button>
+  <button id="pp-close" style="position:fixed;right:96px;top:12px;z-index:9;border:0;border-radius:9999px;background:#111827;color:#fff;padding:8px 16px;font:600 13px/1 system-ui;cursor:pointer">Close</button>
   <script>
     window.onload = function () {
       window.focus();
-      window.print();
+      document.getElementById("pp-print").addEventListener("click", function () {
+        window.print();
+      });
+      document.getElementById("pp-close").addEventListener("click", function () {
+        window.close();
+      });
     };
   </script>
 </body>

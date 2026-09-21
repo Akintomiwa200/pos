@@ -15,12 +15,16 @@ import { canScanCamera, startCameraScan } from "./lib/scan";
 import { formatMoney } from "./lib/types";
 import { formatPricePer, formatStock } from "./lib/units";
 import { productImageSrc } from "./lib/product-image";
+import AdsScreen from "./AdsScreen";
+
+// How long a matched product stays on screen before the kiosk falls back to
+// the ad rotation. Any new scan resets this.
+const RESULT_DISPLAY_MS = 15000;
 
 export default function App() {
   const { items, live, error, reconnect } = useLiveCatalog();
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [missing, setMissing] = useState("");
   const [flash, setFlash] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -53,18 +57,27 @@ export default function App() {
     if (error) toast.error(`${error} Open Settings to set the POS server.`);
   }, [error]);
 
+  // Idle timeout: after a match is shown, fall back to the ad rotation on
+  // its own so the kiosk never gets stuck sitting on one product.
+  useEffect(() => {
+    if (!selectedId) return;
+    const timer = window.setTimeout(() => setSelectedId(null), RESULT_DISPLAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [selectedId]);
+
   function lookup(raw: string) {
     const value = raw.trim();
     if (!value) return;
     const match = findItem(items, value);
     if (match) {
       setSelectedId(match.id);
-      setMissing("");
       setQuery("");
     } else {
+      // No match: never leave the ad screen for a "not found" page. Just
+      // toast the error and make sure we're back on (or still on) ads.
       setSelectedId(null);
-      setMissing(value);
-      toast.error(`No match for ${value}`);
+      setQuery("");
+      toast.error(`No match for "${value}"`);
     }
   }
 
@@ -81,104 +94,80 @@ export default function App() {
   }
 
   return (
-    <div className="pc">
-      <header className="pc-top">
-        <div>
-          <p className="pc-kicker">Price Check</p>
-          <h1>Price Check</h1>
-        </div>
-        <div className="pc-top-actions">
-          <span className={`pc-live ${live ? "on" : "off"}`}>
-            {live ? <Wifi size={16} /> : <WifiOff size={16} />}
-            {live ? "Live" : "Offline"}
-          </span>
-          <button
-            className="pc-icon-btn"
-            onClick={() => setSettingsOpen(true)}
-            aria-label="Settings"
-          >
-            <Settings size={20} />
-          </button>
-        </div>
-      </header>
-
-      <form className="pc-search" onSubmit={onSubmit}>
-        <ScanBarcode size={22} />
+    <div className="pc-fullscreen">
+      <form
+        className="pc-search-hidden"
+        onSubmit={onSubmit}
+      >
         <input
           ref={inputRef}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Scan barcode or type name / SKU"
           autoComplete="off"
           inputMode="search"
           autoFocus
+          onBlur={() => {
+            setTimeout(() => inputRef.current?.focus(), 10);
+          }}
         />
-        <button type="submit" className="pc-icon-btn" aria-label="Search">
-          <Search size={20} />
-        </button>
-        {canScanCamera() && (
-          <button
-            type="button"
-            className="pc-camera"
-            onClick={() => setCameraOpen(true)}
-          >
-            <Camera size={18} /> Scan
-          </button>
-        )}
       </form>
 
-      {error && <p className="pc-banner">{error} Open Settings to set the POS server.</p>}
+      <div className="pc-settings-corner">
+        <button
+          className="pc-icon-btn pc-settings-btn"
+          onClick={() => setSettingsOpen(true)}
+          aria-label="Settings"
+        >
+          <Settings size={20} />
+        </button>
+        {error && <span className="pc-error-dot" title={`${error} Open Settings to set the POS server.`} />}
+      </div>
 
       {item ? (
-        <article className="pc-card">
-          <img src={productImageSrc(item.id, item.image)} alt="" />
-          <div className="pc-card-body">
-            <p className="pc-cat">{item.category}</p>
-            <h2>{item.name}</h2>
-            <p className="pc-meta">
-              {item.sku} · {item.barcode}
-            </p>
-            <p className={`pc-price ${flash ? "flash" : ""}`}>
-              {formatMoney(item.priceMinor, item.currency)}
-              <span className="pc-price-unit">
-                {" "}
-                {formatPricePer(item.unit ?? "each", item.unitLabel)}
-              </span>
-            </p>
-            <p className={`pc-stock ${item.onHand > 0 ? "in" : "out"}`}>
-              {item.onHand > 0
-                ? `${formatStock(item.onHand, item.unit ?? "each", item.packSize ?? 1, item.unitLabel)} in stock`
-                : "Out of stock"}
-            </p>
+        <div className="pc-result-fullscreen">
+          <div className="pc-result-layout">
+            <div className="pc-result-left">
+              <div className="pc-result-image-card">
+                <img src={productImageSrc(item.id, item.image)} alt="" />
+              </div>
+            </div>
+            <div className="pc-result-right">
+              <div className="pc-result-header">
+                <h1>Today&apos;s Price</h1>
+                <p>Please scan the barcode</p>
+              </div>
+
+              <div className="pc-result-info-card">
+                <h2>{item.name}</h2>
+                <div className={`pc-result-price ${flash ? "flash" : ""}`}>
+                  {formatMoney(item.priceMinor, item.currency)}
+                </div>
+                <div className="pc-result-meta">
+                  Stock: {item.onHand} {item.unitLabel || "PCS"} | PVP IVA INCLUIDO {item.barcode}
+                </div>
+              </div>
+
+              <div className="pc-result-footer">
+                <div className="pc-result-scan-icon">
+                  <ScanBarcode size={48} />
+                </div>
+                <div className="pc-result-footer-text">
+                  PROVIDE YOU WITH THE MOST<br />FAVORABLE PRICE
+                </div>
+              </div>
+            </div>
           </div>
-        </article>
-      ) : missing ? (
-        <div className="pc-empty">
-          <h2>No item found</h2>
-          <p>Nothing matches “{missing}”. Try the barcode, SKU, or name.</p>
+          <button
+            type="button"
+            className="pc-result-close"
+            onClick={() => setSelectedId(null)}
+            aria-label="Back to ads"
+          >
+            <X size={24} />
+          </button>
         </div>
       ) : (
-        <div className="pc-empty">
-          <ScanBarcode size={48} />
-          <h2>Ready to scan</h2>
-          <p>
-            USB scanners work on Windows. On a phone, tap Scan or type a SKU.
-          </p>
-          {items.length > 0 && (
-            <div className="pc-samples">
-              {items.slice(0, 4).map((sample) => (
-                <button
-                  key={sample.id}
-                  type="button"
-                  onClick={() => lookup(sample.barcode)}
-                >
-                  {sample.name}
-                  <span>{sample.barcode}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        <AdsScreen />
       )}
 
       {cameraOpen && (
@@ -238,9 +227,6 @@ function CameraSheet({
     const video = videoRef.current;
     if (!video) return;
     let stop: (() => void) | undefined;
-    // Guard against the race where the sheet unmounts before the camera
-    // promise settles (StrictMode remount / quick close) — otherwise the
-    // cleanup below runs while `stop` is still undefined and the stream leaks.
     let cancelled = false;
     startCameraScan(video, (code) => onCodeRef.current(code))
       .then((cleanup) => {

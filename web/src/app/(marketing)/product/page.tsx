@@ -1,135 +1,140 @@
+import { ProductHero } from "../../../components/site/ProductHero";
 import {
-  ArrowLeftRight,
-  BarChart3,
-  ScanBarcode,
-  Server,
-  ShieldCheck,
-  Store,
-} from "lucide-react";
-import {
-  MarketingCard,
   MarketingCtaBand,
-  MarketingHero,
-  MarketingPrimaryLink,
   MarketingSecondaryLink,
-  MarketingSection,
-  MarketingStat,
 } from "../../../components/site/MarketingChrome";
 
-const apps = [
+const APPS = [
   {
-    icon: Store,
     name: "Till",
     badge: "Windows · Android",
-    href: "/download",
     cta: "Download till",
+    href: "/download",
     copy: "Cashier terminal for supermarket, food service, and hotel. One device per till code. Staff sign in after HQ activation — licence runs one year from first use.",
-    featured: true,
   },
   {
-    icon: BarChart3,
     name: "HQ console",
     badge: "Browser",
-    href: "/login",
     cta: "Open HQ",
+    href: "/login",
     copy: "Reports, catalog, purchase orders, users, tills, and billing. Sidebar menus follow group privileges across Report, Transaction, and Setup.",
   },
   {
-    icon: ScanBarcode,
     name: "Price check",
     badge: "Handheld",
-    href: "/download",
     cta: "Get price check",
+    href: "/download",
     copy: "Floor staff scan a barcode and see live name and price from the same catalog the till sells — no duplicate database.",
   },
   {
-    icon: Server,
     name: "API",
     badge: "Port 3001",
-    href: "/support",
     cta: "Read setup docs",
+    href: "/support",
     copy: "NestJS service for catalog, sales, staff shifts, till activate/heartbeat, CRM, chat, and hardware. Run beside HQ or as a Windows service.",
   },
-];
+] as const;
 
-const flows = [
+const FLOWS = [
   {
-    icon: ShieldCheck,
     title: "Issue & activate",
     copy: "HQ creates a till and copies the 16-character code. The device binds on first activation.",
   },
   {
-    icon: ArrowLeftRight,
     title: "Sell & sync",
     copy: "Tickets close on the till and land in HQ for reports, tax, and inventory without a second spreadsheet.",
   },
   {
-    icon: BarChart3,
     title: "Run the business",
     copy: "Managers use Analytics, Workspace, and Settings — from Item Sales to Support and Chat.",
   },
-];
+] as const;
+
+function SplitTitle({ kicker, rest }: { kicker: string; rest: string }) {
+  return (
+    <header className="flex items-center gap-4 sm:gap-6">
+      <h2 className="shrink-0 text-[clamp(1.35rem,3.2vw,2.15rem)] font-semibold tracking-[-0.02em] text-pos-ink">
+        {kicker}
+      </h2>
+      <div
+        className="relative h-px min-w-0 flex-1 bg-pos-ink/55 dark:bg-pos-ink/70"
+        aria-hidden
+      >
+        <span className="absolute left-1/2 top-1/2 size-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-pos-ink" />
+      </div>
+      <h2 className="shrink-0 text-[clamp(1.35rem,3.2vw,2.15rem)] font-semibold tracking-[-0.02em] text-pos-ink">
+        {rest}
+      </h2>
+    </header>
+  );
+}
 
 export default function ProductPage() {
   return (
     <>
-      <MarketingHero
-        kicker="Product"
-        title="Four apps. One catalog. One store."
-        copy="The till sells at the counter. HQ runs purchasing, users, and reports. Price check keeps the floor aligned. The API keeps every client on the same data."
-      >
-        <MarketingPrimaryLink href="/register">Sign up company</MarketingPrimaryLink>
-        <MarketingSecondaryLink href="/download">Download apps</MarketingSecondaryLink>
-      </MarketingHero>
+      <ProductHero />
 
-      <MarketingSection
-        title="The stack"
-        subtitle="Each app has a clear job. Together they cover front-of-house and back-office without duplicate product data."
-      >
-        <div className="grid gap-4 sm:grid-cols-2">
-          {apps.map((app) => (
-            <MarketingCard key={app.name} {...app} title={app.name} />
-          ))}
-        </div>
-      </MarketingSection>
+      {/* Four apps */}
+      <section className="bg-pos-bg px-5 py-16 sm:px-8 sm:py-20 lg:px-12 lg:py-24">
+        <div className="mx-auto max-w-6xl">
+          <div className="flex items-center gap-4 sm:gap-6">
+            <p className="shrink-0 text-[13px] font-semibold uppercase tracking-[0.12em] text-pos-ink-muted sm:text-[14px]">
+              Four apps
+            </p>
+            <div className="h-px min-w-0 flex-1 bg-pos-ink/55 dark:bg-pos-ink/70" aria-hidden />
+          </div>
 
-      <MarketingSection className="bg-pos-surface-muted/60">
-        <div className="grid gap-4 sm:grid-cols-3">
-          <MarketingStat label="Till licence" value="1 year" hint="From first device activation" />
-          <MarketingStat label="HQ access" value="By group" hint="Report · Transaction · Setup" />
-          <MarketingStat label="Catalog" value="Shared" hint="Till, HQ, and price check" />
-        </div>
-      </MarketingSection>
-
-      <MarketingSection
-        title="How operators use it"
-        subtitle="From issuing a till code to closing the day — one predictable flow."
-      >
-        <div className="grid gap-4 md:grid-cols-3">
-          {flows.map((item) => (
-            <MarketingCard key={item.title} {...item} />
-          ))}
-        </div>
-      </MarketingSection>
-
-      <MarketingSection>
-        <div className="overflow-hidden rounded-[32px] border border-pos-border/80 bg-pos-surface p-8 text-center shadow-pos-md sm:p-12">
-          <h2 className="text-[clamp(1.5rem,3vw,2rem)] font-semibold tracking-tight text-pos-ink">
-            Ready to issue your first till?
-          </h2>
-          <p className="mx-auto mt-3 max-w-lg text-[15px] leading-7 text-pos-ink-muted">
-            Create an HQ account, add products, then generate a till code under Point of Sales.
-          </p>
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-            <MarketingPrimaryLink href="/register">Get started</MarketingPrimaryLink>
-            <MarketingSecondaryLink href="/pricing">View pricing</MarketingSecondaryLink>
+          <div className="mt-12 grid gap-4 sm:grid-cols-2 md:mt-16">
+            {APPS.map((app) => (
+              <article
+                key={app.name}
+                className="flex flex-col rounded-[24px] border border-pos-border/80 bg-pos-surface p-7 shadow-pos-md sm:p-8"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <h3 className="text-[16px] font-semibold tracking-[-0.02em] text-pos-ink sm:text-[18px]">
+                    {app.name}
+                  </h3>
+                  <span className="shrink-0 rounded-full bg-pos-surface-muted px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-pos-ink-muted">
+                    {app.badge}
+                  </span>
+                </div>
+                <p className="mt-4 flex-1 text-[13px] font-normal leading-[1.7] text-pos-ink-muted sm:text-[14px] sm:leading-[1.75]">
+                  {app.copy}
+                </p>
+                <div className="mt-6">
+                  <MarketingSecondaryLink href={app.href}>{app.cta}</MarketingSecondaryLink>
+                </div>
+              </article>
+            ))}
           </div>
         </div>
-      </MarketingSection>
+      </section>
+
+      {/* How operators use it */}
+      <section className="bg-pos-bg px-5 py-16 sm:px-8 sm:py-20 lg:px-12 lg:py-24">
+        <div className="mx-auto max-w-6xl">
+          <SplitTitle kicker="How" rest="operators use it" />
+          <div className="mt-12 grid gap-4 md:mt-16 md:grid-cols-3">
+            {FLOWS.map((flow) => (
+              <article
+                key={flow.title}
+                className="rounded-[24px] border border-pos-border/80 bg-pos-surface p-7 shadow-pos-md sm:p-8"
+              >
+                <h3 className="text-[14px] font-semibold tracking-[-0.01em] text-pos-ink sm:text-[15px]">
+                  {flow.title}
+                </h3>
+                <p className="mt-3 text-[13px] font-normal italic leading-[1.7] text-pos-ink-muted sm:text-[14px] sm:leading-[1.75]">
+                  {flow.copy}
+                </p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
 
       <MarketingCtaBand
-        title="Ready to run the till without sharing a PC?"
-        copy="Create an HQ account. Issue a till. No pressure. No second spreadsheet."
+        title="Ready to issue your first till?"
+        copy="Create an HQ account, add products, then generate a till code under Point of Sales."
       />
     </>
   );

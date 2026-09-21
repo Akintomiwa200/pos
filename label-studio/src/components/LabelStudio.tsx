@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import {
   Check,
   ChevronDown,
@@ -9,9 +9,10 @@ import {
   ScanBarcode,
   Search,
   Sparkles,
-  Trash2,
+  Download,
   Wifi,
   WifiOff,
+  Settings as SettingsIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
@@ -59,16 +60,21 @@ function matchesQuery(item: HqCatalogItem, query: string) {
 export default function LabelStudio() {
   const [items, setItems] = useState<HqCatalogItem[]>([]);
   const [loading, setLoading] = useState(true);
+  
   const [query, setQuery] = useState("");
-  const [onlyActive, setOnlyActive] = useState(true);
-  const [queuedIds, setQueuedIds] = useState<string[]>([]);
-  const [copies, setCopies] = useState<Record<string, number>>({});
-  const [showPrice, setShowPrice] = useState(true);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<HqCatalogItem | null>(null);
+  const [copies, setCopies] = useState(1);
   const [presetKey, setPresetKey] = useState<LabelPreset["key"]>("40x30");
+  const [orientation, setOrientation] = useState<"landscape" | "portrait">("landscape");
+  
   const [printers, setPrinters] = useState<DetectedPrinter[]>([]);
   const [labelPrinter, setLabelPrinter] = useState("");
   const [busy, setBusy] = useState(false);
   const [connected, setConnected] = useState(false);
+  const [history, setHistory] = useState<{ date: string; item: HqCatalogItem; preset: string; orientation: string }[]>([]);
+
+  const searchRef = useRef<HTMLDivElement>(null);
 
   const preset = LABEL_PRESETS.find((row) => row.key === presetKey)!;
 
@@ -99,74 +105,44 @@ export default function LabelStudio() {
     };
   }, []);
 
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+        setSearchOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return [];
+    if (!q) return items.slice(0, 10);
     return items
-      .filter((item) => {
-        if (onlyActive && item.active === false) return false;
-        return matchesQuery(item, q);
-      })
-      .slice(0, 8);
-  }, [items, query, onlyActive]);
+      .filter((item) => item.active !== false && matchesQuery(item, q))
+      .slice(0, 10);
+  }, [items, query]);
 
-  const queuedItems = useMemo(
-    () =>
-      queuedIds
-        .map((id) => items.find((item) => item.id === id))
-        .filter((item): item is HqCatalogItem => Boolean(item)),
-    [queuedIds, items],
-  );
+  const currentItemCode = selectedItem?.barcode?.trim();
 
-  const missingQueued = queuedItems.filter((item) => !item.barcode?.trim());
-  const totalLabels = queuedItems.reduce(
-    (sum, item) => sum + Math.max(1, copies[item.id] ?? 1),
-    0,
-  );
-
-  const previews = useMemo(
-    () =>
-      queuedItems.map((item) => {
-        try {
-          return {
-            item,
-            image: renderLabelDataUrl({
-              barcode: item.barcode?.trim() ?? "",
-              name: item.name,
-              price: naira(item.priceMinor),
-              showPrice,
-              widthMm: preset.widthMm,
-              heightMm: preset.heightMm,
-            }),
-          };
-        } catch {
-          return { item, image: null };
-        }
-      }),
-    [queuedItems, preset, showPrice],
-  );
-
-  function addToQueue(id: string) {
-    if (queuedIds.includes(id)) return;
-    setQueuedIds((current) => [...current, id]);
-    setCopies((current) => ({ ...current, [id]: 1 }));
-  }
-
-  function removeFromQueue(id: string) {
-    setQueuedIds((current) => current.filter((queuedId) => queuedId !== id));
-    setCopies((current) => {
-      const next = { ...current };
-      delete next[id];
-      return next;
-    });
-  }
-
-  function changeCopies(id: string, delta: number) {
-    setCopies((current) => ({
-      ...current,
-      [id]: Math.max(1, Math.min(99, (current[id] ?? 1) + delta)),
-    }));
-  }
+  const previewImage = useMemo(() => {
+    if (!selectedItem) return null;
+    try {
+      const w = orientation === "landscape" ? preset.widthMm : preset.heightMm;
+      const h = orientation === "landscape" ? preset.heightMm : preset.widthMm;
+      
+      return renderLabelDataUrl({
+        barcode: currentItemCode || "1234567890", // placeholder if none
+        name: selectedItem.name,
+        price: naira(selectedItem.priceMinor),
+        showPrice: true,
+        widthMm: w,
+        heightMm: h,
+      });
+    } catch {
+      return null;
+    }
+  }, [selectedItem, currentItemCode, preset, orientation]);
 
   async function pickPrinter(name: string) {
     setLabelPrinter(name);
@@ -181,438 +157,348 @@ export default function LabelStudio() {
     }
   }
 
-  async function generateFor(item: HqCatalogItem) {
-    try {
-      const used = items.map((row) => row.barcode).filter(Boolean) as string[];
-      const barcode = makeValidBarcode(used);
-      if (!barcode) {
-        toast.error("Could not allocate a free barcode.");
+  async function handleGenerateOrPrint() {
+    if (!selectedItem) {
+      toast.error("Please select a product first.");
+      return;
+    }
+    
+    let targetItem = selectedItem;
+
+    if (!currentItemCode) {
+      // Generate barcode first
+      try {
+        setBusy(true);
+        const used = items.map((row) => row.barcode).filter(Boolean) as string[];
+        const barcode = makeValidBarcode(used);
+        if (!barcode) throw new Error("Could not allocate a free barcode.");
+        
+        await api("/api/console/setup/import/catalog", {
+          method: "POST",
+          body: JSON.stringify({
+            rows: [{ id: targetItem.id, name: targetItem.name, barcode }],
+          }),
+        });
+        
+        const updatedItem = { ...targetItem, barcode };
+        setItems((current) =>
+          current.map((row) => (row.id === updatedItem.id ? updatedItem : row)),
+        );
+        setSelectedItem(updatedItem);
+        targetItem = updatedItem;
+        toast.success(`Barcode ${barcode} created for ${updatedItem.name}.`);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Could not generate the barcode.");
+        setBusy(false);
         return;
       }
-      await api("/api/console/setup/import/catalog", {
+    }
+
+    // Now Print
+    if (!labelPrinter) {
+      toast.error("Pick a label printer first.");
+      setBusy(false);
+      return;
+    }
+
+    try {
+      setBusy(true);
+      const w = orientation === "landscape" ? preset.widthMm : preset.heightMm;
+      const h = orientation === "landscape" ? preset.heightMm : preset.widthMm;
+      
+      const { dataUrl } = renderLabelDataUrl({
+        barcode: targetItem.barcode!.trim(),
+        name: targetItem.name,
+        price: naira(targetItem.priceMinor),
+        showPrice: true,
+        widthMm: w,
+        heightMm: h,
+      });
+
+      await api<{ ok: true; printer: string; labels: number }>("/api/hardware/print-labels", {
         method: "POST",
         body: JSON.stringify({
-          rows: [{ id: item.id, name: item.name, barcode }],
+          printerName: labelPrinter,
+          labels: [{
+            imageBase64: dataUrl.split(",")[1] ?? dataUrl,
+            widthMm: w,
+            heightMm: h,
+            copies: Math.max(1, copies),
+          }]
         }),
       });
-      setItems((current) =>
-        current.map((row) => (row.id === item.id ? { ...row, barcode } : row)),
-      );
-      toast.success(`Barcode ${barcode} created for ${item.name}.`);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not generate the barcode.");
-    }
-  }
 
-  async function generateMissing() {
-    const targets = missingQueued;
-    if (targets.length === 0) return;
-    setBusy(true);
-    try {
-      const used = new Set(items.map((row) => row.barcode).filter(Boolean));
-      const rows = targets.map((item) => {
-        const barcode = makeValidBarcode([...used]);
-        if (barcode) used.add(barcode);
-        return { id: item.id, name: item.name, barcode };
-      });
-      const result = await api<{ created: number; updated: number; total: number }>(
-        "/api/console/setup/import/catalog",
-        { method: "POST", body: JSON.stringify({ rows }) },
-      );
-      setTimeout(() => {
-        void api<HqCatalogItem[]>("/api/catalog/items")
-          .then(setItems)
-          .catch(() => undefined);
-      }, 400);
-      toast.success(`Generated ${result.updated || rows.length} barcode${rows.length === 1 ? "" : "s"}.`);
+      toast.success(`Printed ${copies} label${copies === 1 ? "" : "s"} to ${labelPrinter}.`);
+      
+      // Add to history
+      setHistory(curr => [{
+        date: new Date().toLocaleString(),
+        item: targetItem,
+        preset: preset.label,
+        orientation: orientation === "landscape" ? "Landscape" : "Portrait",
+      }, ...curr].slice(0, 10));
+
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not generate barcodes.");
+      toast.error(err instanceof Error ? err.message : "Could not print the label.");
     } finally {
       setBusy(false);
     }
   }
 
-  async function handlePrint() {
-    if (!labelPrinter) {
-      toast.error("Pick a label printer first, then print.");
-      return;
-    }
-    const printable = queuedItems.filter((item) => item.barcode?.trim());
-    if (printable.length === 0) {
-      toast.error("Nothing printable in the queue yet.");
-      return;
-    }
-    setBusy(true);
-    try {
-      const labels = printable.map((item) => {
-        const { dataUrl } = renderLabelDataUrl({
-          barcode: item.barcode!.trim(),
-          name: item.name,
-          price: naira(item.priceMinor),
-          showPrice,
-          widthMm: preset.widthMm,
-          heightMm: preset.heightMm,
-        });
-        return {
-          imageBase64: dataUrl.split(",")[1] ?? dataUrl,
-          widthMm: preset.widthMm,
-          heightMm: preset.heightMm,
-          copies: Math.max(1, copies[item.id] ?? 1),
-        };
-      });
-      const result = await api<{ ok: true; printer: string; labels: number }>(
-        "/api/hardware/print-labels",
-        { method: "POST", body: JSON.stringify({ printerName: labelPrinter, labels }) },
-      );
-      toast.success(`Sent ${result.labels} label${result.labels === 1 ? "" : "s"} to ${result.printer}.`);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not print the labels.");
-    } finally {
-      setBusy(false);
-    }
+  function downloadPNG() {
+    if (!previewImage) return;
+    const a = document.createElement("a");
+    a.href = previewImage.dataUrl;
+    a.download = `${selectedItem?.sku || "label"}.png`;
+    a.click();
+  }
+
+  if (loading) {
+    return <div className="ls-full-center">Connecting to the POS backend…</div>;
   }
 
   return (
-    <div className="app">
-      <header className="topbar">
-        <div className="topbar-inner">
-          <div className="brand">
-            <ScanBarcode size={18} />
-            <span>Label Studio</span>
+    <div className="ls-app">
+      <header className="ls-topbar">
+        <div className="ls-brand">
+          <div className="ls-brand-icon"><ScanBarcode size={22} color="#fff" /></div>
+          <h1>Label Studio</h1>
+        </div>
+        <div className="ls-topbar-right">
+          <div className={`ls-status ${connected ? "connected" : "offline"}`}>
+            <div className="ls-status-dot" />
+            {connected ? "Connected" : "Offline"}
           </div>
-          <span className={`status ${connected ? "ok" : "warn"}`}>
-            {connected ? <Wifi size={13} /> : <WifiOff size={13} />}
-            {connected ? "Backend connected" : "Backend offline"}
-          </span>
+          <div className="ls-printer-quick">
+            <select
+              value={labelPrinter}
+              onChange={(e) => pickPrinter(e.target.value)}
+              disabled={printers.length === 0}
+              className="ls-select-minimal"
+            >
+              <option value="">{printers.length ? "Select Printer..." : "No printers"}</option>
+              {printers.map((p) => (
+                <option key={p.name} value={p.name}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+          <button className="ls-icon-btn"><SettingsIcon size={20} /></button>
         </div>
       </header>
 
-      <main className="main">
-        {loading ? (
-          <div className="empty">Connecting to the POS backend…</div>
-        ) : (
-          <>
-            <div className="header">
-              <div className="header-copy">
-                <h1>Print labels</h1>
-                <p>
-                  Search for a product, add it to the queue, then print straight to the thermal
-                  label printer. No browser print dialog — the labels are rasterized{" "}
-                  {LABEL_DPI} DPI and sent to the printer driver at the exact label size.
-                </p>
+      <main className="ls-main">
+        <div className="ls-col ls-col-left">
+          <div className="ls-panel">
+            <h2>Barcode Details</h2>
+            
+            <div className="ls-form">
+              <div className="ls-form-group full-width" ref={searchRef}>
+                <label>Product / Item</label>
+                <div className="ls-search-wrap">
+                  <Search size={16} className="ls-search-icon" />
+                  <input
+                    className="ls-input"
+                    value={query}
+                    onChange={(e) => {
+                      setQuery(e.target.value);
+                      setSearchOpen(true);
+                    }}
+                    onFocus={() => setSearchOpen(true)}
+                    placeholder="Search product (name or SKU)..."
+                  />
+                </div>
+                {searchOpen && (
+                  <div className="ls-dropdown">
+                    {results.length > 0 ? (
+                      results.map(item => (
+                        <div
+                          key={item.id}
+                          className="ls-dropdown-item"
+                          onClick={() => {
+                            setSelectedItem(item);
+                            setQuery(item.name);
+                            setSearchOpen(false);
+                          }}
+                        >
+                          <div className="ls-di-name">{item.name}</div>
+                          <div className="ls-di-meta">{item.sku} {item.barcode && `· ${item.barcode}`}</div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="ls-dropdown-empty">No products found</div>
+                    )}
+                  </div>
+                )}
               </div>
-              <button
-                type="button"
-                className="btn-primary"
-                disabled={busy || !labelPrinter}
-                onClick={() => void handlePrint()}
+
+              <div className="ls-form-group">
+                <label>Barcode Type</label>
+                <div className="ls-select-wrap">
+                  <select className="ls-select" disabled>
+                    <option>Code 128</option>
+                    <option>EAN-13</option>
+                  </select>
+                  <ChevronDown size={16} className="ls-select-icon" />
+                </div>
+              </div>
+
+              <div className="ls-form-group">
+                <label>Label Size</label>
+                <div className="ls-select-wrap">
+                  <select 
+                    className="ls-select"
+                    value={presetKey}
+                    onChange={(e) => setPresetKey(e.target.value as LabelPreset["key"])}
+                  >
+                    {LABEL_PRESETS.map((row) => (
+                      <option key={row.key} value={row.key}>{row.label}</option>
+                    ))}
+                  </select>
+                  <ChevronDown size={16} className="ls-select-icon" />
+                </div>
+              </div>
+
+              <div className="ls-form-group">
+                <label>Orientation</label>
+                <div className="ls-select-wrap">
+                  <select 
+                    className="ls-select"
+                    value={orientation}
+                    onChange={(e) => setOrientation(e.target.value as any)}
+                  >
+                    <option value="landscape">Landscape</option>
+                    <option value="portrait">Portrait</option>
+                  </select>
+                  <ChevronDown size={16} className="ls-select-icon" />
+                </div>
+              </div>
+
+              <div className="ls-form-group">
+                <label>Quantity</label>
+                <div className="ls-stepper">
+                  <button onClick={() => setCopies(Math.max(1, copies - 1))}><Minus size={16}/></button>
+                  <input type="number" value={copies} readOnly />
+                  <button onClick={() => setCopies(Math.min(999, copies + 1))}><Plus size={16}/></button>
+                </div>
+              </div>
+
+              <div className="ls-form-group">
+                <label>Printer</label>
+                <div className="ls-select-wrap">
+                  <select 
+                    className="ls-select"
+                    value={labelPrinter}
+                    onChange={(e) => pickPrinter(e.target.value)}
+                  >
+                    <option value="">Select Printer</option>
+                    {printers.map((p) => (
+                      <option key={p.name} value={p.name}>{p.name}</option>
+                    ))}
+                  </select>
+                  <ChevronDown size={16} className="ls-select-icon" />
+                </div>
+              </div>
+
+              <div className="ls-form-group full-width">
+                <label>Label Template</label>
+                <div className="ls-select-wrap">
+                  <select className="ls-select" disabled>
+                    <option>Standard Label ({preset.label})</option>
+                  </select>
+                  <ChevronDown size={16} className="ls-select-icon" />
+                </div>
+              </div>
+            </div>
+
+            <button 
+              className="ls-btn-primary ls-generate-btn" 
+              onClick={handleGenerateOrPrint}
+              disabled={busy || !selectedItem}
+            >
+              {busy ? <Loader2 size={20} className="ls-spin" /> : <ScanBarcode size={20} />}
+              {selectedItem && !currentItemCode ? "Generate & Print Barcode" : "Print Barcode"}
+            </button>
+          </div>
+        </div>
+
+        <div className="ls-col ls-col-right">
+          <div className="ls-panel">
+            <h2>Preview</h2>
+            <div className="ls-preview-box">
+              {previewImage ? (
+                <div className="ls-preview-render">
+                  <img src={previewImage.dataUrl} alt="Label Preview" />
+                </div>
+              ) : (
+                <div className="ls-preview-empty">
+                  Select a product to preview
+                </div>
+              )}
+            </div>
+
+            <div className="ls-preview-meta">
+              <div className="ls-pm-item">
+                <div className="ls-pm-label">Type</div>
+                <div className="ls-pm-value">Code 128</div>
+              </div>
+              <div className="ls-pm-item">
+                <div className="ls-pm-label">Size</div>
+                <div className="ls-pm-value">{preset.label}</div>
+              </div>
+              <div className="ls-pm-item">
+                <div className="ls-pm-label">Orientation</div>
+                <div className="ls-pm-value">{orientation === "landscape" ? "Landscape" : "Portrait"}</div>
+              </div>
+            </div>
+
+            <div className="ls-preview-actions">
+              <button 
+                className="ls-btn-primary" 
+                onClick={handleGenerateOrPrint}
+                disabled={busy || !selectedItem}
               >
-                {busy ? <Loader2 size={15} className="spin" /> : <Printer size={15} />}
-                {busy ? "Sending…" : `Print ${totalLabels} label${totalLabels === 1 ? "" : "s"}`}
+                <Printer size={18} /> Print Label
+              </button>
+              <button 
+                className="ls-btn-secondary"
+                onClick={downloadPNG}
+                disabled={!previewImage}
+              >
+                <Download size={18} /> Download PNG
               </button>
             </div>
+          </div>
 
-            <div className="stats">
-              <div className="stat">
-                <span>In queue</span>
-                <strong>{queuedItems.length}</strong>
-                <small>Products to label</small>
+          <div className="ls-panel">
+            <h2>Recent Barcodes</h2>
+            {history.length > 0 ? (
+              <div className="ls-table-wrap">
+                <table className="ls-table">
+                  <thead>
+                    <tr>
+                      <th>Date & Time</th>
+                      <th>Product / SKU</th>
+                      <th>Size</th>
+                      <th>Orientation</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {history.map((h, i) => (
+                      <tr key={i}>
+                        <td>{h.date}</td>
+                        <td>{h.item.name}</td>
+                        <td>{h.preset}</td>
+                        <td>{h.orientation}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-              <div className="stat">
-                <span>Labels to print</span>
-                <strong>{totalLabels}</strong>
-                <small>
-                  {preset.label} · {preset.hint.toLowerCase()}
-                </small>
-              </div>
-              <div className="stat accent">
-                <span>No barcode</span>
-                <strong>{missingQueued.length}</strong>
-                <small>{missingQueued.length ? "Generate before printing" : "Every label scans"}</small>
-              </div>
-              <div className="stat">
-                <span>Label printer</span>
-                <strong className="truncate" title={labelPrinter}>
-                  {labelPrinter || "Not set"}
-                </strong>
-                <small>{labelPrinter ? "Ready to print" : "Pick one below"}</small>
-              </div>
-            </div>
-
-            <section className="card">
-              <div className="card-head">
-                <div>
-                  <h2>Add products</h2>
-                  <p>Nothing is listed until you search, so you never print the whole store.</p>
-                </div>
-                <label className="toggle">
-                  <input
-                    type="checkbox"
-                    checked={onlyActive}
-                    onChange={(event) => setOnlyActive(event.target.checked)}
-                  />
-                  Active only
-                </label>
-              </div>
-              <div className="search">
-                <Search size={16} />
-                <input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  autoFocus
-                  placeholder="Type a product name, SKU, or barcode…"
-                />
-              </div>
-              {query.trim() ? (
-                <ul className="results">
-                  {results.length === 0 ? (
-                    <li className="row empty-row">No products match “{query.trim()}”.</li>
-                  ) : (
-                    results.map((item) => {
-                      const queued = queuedIds.includes(item.id);
-                      const code = item.barcode?.trim() ?? "";
-                      return (
-                        <li key={item.id} className="row">
-                          <div className="row-copy">
-                            <strong>{item.name}</strong>
-                            <span>
-                              <code>{item.sku}</code>
-                              {code ? <code>{code}</code> : <em className="missing">missing code</em>}
-                              <b>{naira(item.priceMinor)}</b>
-                            </span>
-                          </div>
-                          {!code ? (
-                            <button
-                              type="button"
-                              className="btn-ghost"
-                              disabled={busy}
-                              onClick={() => void generateFor(item)}
-                            >
-                              <Sparkles size={13} />
-                              Generate code
-                            </button>
-                          ) : queued ? (
-                            <span className="queued">
-                              <Check size={13} />
-                              In queue
-                            </span>
-                          ) : (
-                            <button
-                              type="button"
-                              className="btn-primary"
-                              onClick={() => addToQueue(item.id)}
-                            >
-                              <Plus size={14} />
-                              Add label
-                            </button>
-                          )}
-                        </li>
-                      );
-                    })
-                  )}
-                </ul>
-              ) : (
-                <div className="empty">
-                  <ScanBarcode size={30} />
-                  <p>Search above to add the products you actually need labels for.</p>
-                </div>
-              )}
-            </section>
-
-            <section className="card">
-              <div className="card-head">
-                <div>
-                  <h2>Label queue</h2>
-                  <p>
-                    {queuedItems.length} product{queuedItems.length === 1 ? "" : "s"} · {totalLabels}{" "}
-                    label{totalLabels === 1 ? "" : "s"}
-                  </p>
-                </div>
-                <div className="actions">
-                  {missingQueued.length > 0 ? (
-                    <button
-                      type="button"
-                      className="btn-primary"
-                      disabled={busy}
-                      onClick={() => void generateMissing()}
-                    >
-                      <Sparkles size={14} />
-                      {busy ? "Generating…" : `Generate ${missingQueued.length} missing`}
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    className="btn-ghost"
-                    disabled={queuedItems.length === 0}
-                    onClick={() => {
-                      setQueuedIds([]);
-                      setCopies({});
-                    }}
-                  >
-                    <Trash2 size={14} />
-                    Clear
-                  </button>
-                </div>
-              </div>
-
-              {queuedItems.length === 0 ? (
-                <div className="empty">Nothing in the queue yet.</div>
-              ) : (
-                <ul className="queue">
-                  {queuedItems.map((item) => {
-                    const code = item.barcode?.trim() ?? "";
-                    const count = copies[item.id] ?? 1;
-                    return (
-                      <li key={item.id} className="row">
-                        <div className="row-copy">
-                          <strong>{item.name}</strong>
-                          <span>
-                            {code ? (
-                              <code>{code}</code>
-                            ) : (
-                              <em className="missing">missing code — generate before printing</em>
-                            )}
-                            <b>{naira(item.priceMinor)}</b>
-                          </span>
-                        </div>
-                        {!code ? (
-                          <button
-                            type="button"
-                            className="btn-ghost"
-                            disabled={busy}
-                            onClick={() => void generateFor(item)}
-                          >
-                            <Sparkles size={13} />
-                            Generate
-                          </button>
-                        ) : (
-                          <div className="stepper">
-                            <button
-                              type="button"
-                              disabled={count <= 1}
-                              onClick={() => changeCopies(item.id, -1)}
-                              aria-label="Fewer copies"
-                            >
-                              <Minus size={14} />
-                            </button>
-                            <span>{count}</span>
-                            <button
-                              type="button"
-                              disabled={count >= 99}
-                              onClick={() => changeCopies(item.id, 1)}
-                              aria-label="More copies"
-                            >
-                              <Plus size={14} />
-                            </button>
-                          </div>
-                        )}
-                        <button
-                          type="button"
-                          className="icon-btn"
-                          onClick={() => removeFromQueue(item.id)}
-                          aria-label="Remove"
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-
-              <div className="settings">
-                <label className="field grow">
-                  <span>Label printer</span>
-                  <div className="select-wrap">
-                    <select
-                      value={labelPrinter}
-                      onChange={(event) => void pickPrinter(event.target.value)}
-                      disabled={printers.length === 0}
-                    >
-                      <option value="">
-                        {printers.length ? "Choose the label printer…" : "No printers detected"}
-                      </option>
-                      {printers.map((printer) => (
-                        <option key={printer.name} value={printer.name}>
-                          {printer.name}
-                          {printer.isDefault ? " · default" : ""}
-                          {printer.offline ? " · offline" : ""}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown size={14} />
-                  </div>
-                </label>
-                <label className="field">
-                  <span>Label size</span>
-                  <div className="select-wrap">
-                    <select
-                      value={presetKey}
-                      onChange={(event) => setPresetKey(event.target.value as LabelPreset["key"])}
-                    >
-                      {LABEL_PRESETS.map((row) => (
-                        <option key={row.key} value={row.key}>
-                          {row.label} · {row.hint}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown size={14} />
-                  </div>
-                </label>
-                <label className="toggle field">
-                  <input
-                    type="checkbox"
-                    checked={showPrice}
-                    onChange={(event) => setShowPrice(event.target.checked)}
-                  />
-                  Show price
-                </label>
-              </div>
-            </section>
-
-            <section className="card">
-              <div className="card-head">
-                <div>
-                  <h2>Output preview</h2>
-                  <p>
-                    Exactly the {preset.label} raster that will be printed on the thermal printer.
-                  </p>
-                </div>
-              </div>
-              {previews.length === 0 ? (
-                <div className="empty">Add a product above to preview the label.</div>
-              ) : (
-                <div className="preview-wall">
-                  {previews.map(({ item, image }) => (
-                    <div key={item.id} className="preview-tile">
-                      {image ? (
-                        <img
-                          src={image.dataUrl}
-                          alt={`Label preview for ${item.name}`}
-                          style={{
-                            width: `${Math.round((preset.widthMm / preset.heightMm) * 130)}px`,
-                          }}
-                        />
-                      ) : (
-                        <div className="preview-missing">
-                          {item.barcode?.trim() ? "Barcode not renderable" : "Missing barcode"}
-                        </div>
-                      )}
-                      <strong>{item.name}</strong>
-                      <small>×{Math.max(1, copies[item.id] ?? 1)}</small>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
-
-            <p className="footnote">
-              <Check size={13} />
-              Sends the raster straight to <b>{labelPrinter || "the chosen printer"}</b> on this PC —
-              nothing opens in a browser.
-            </p>
-          </>
-        )}
+            ) : (
+              <div className="ls-empty-text">No recent barcodes.</div>
+            )}
+          </div>
+        </div>
       </main>
     </div>
   );

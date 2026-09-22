@@ -1,12 +1,15 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   AtSign,
   Briefcase,
+  Eye,
+  EyeOff,
+  KeyRound,
   Mail,
   Pencil,
   Shield,
@@ -18,14 +21,23 @@ import {
   validateAccountDraft,
   type AccountDraft,
 } from "@/lib/account-validation";
-import { deleteAccount, saveAccount } from "@/lib/hq-api";
+import {
+  clearStaffPin,
+  deleteAccount,
+  listTillStaff,
+  saveAccount,
+  setStaffPin,
+  type TillStaffMember,
+} from "@/lib/hq-api";
 import { useLiveDirectory } from "@/lib/live-directory";
 import { useAuth } from "@/components/AuthProvider";
 import { ManagerSkeleton } from "@/components/Skeleton";
 import {
   PrimaryButton,
   SetupHeader,
+  fieldClass,
   secondaryButtonClass,
+  selectClass,
 } from "@/components/setup/SetupChrome";
 import { AccountFormSheet } from "./AccountFormSheet";
 import {
@@ -53,6 +65,33 @@ export function AccountProfile({ accountId }: { accountId: string }) {
   const [draft, setDraft] = useState<AccountDraft>(blank());
   const [sheetOpen, setSheetOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [pinRoster, setPinRoster] = useState<TillStaffMember[]>([]);
+  const [pinTarget, setPinTarget] = useState("");
+  const [pinValue, setPinValue] = useState("");
+  const [pinConfirm, setPinConfirm] = useState("");
+  const [pinVisible, setPinVisible] = useState(false);
+  const [pinBusy, setPinBusy] = useState(false);
+
+  const canManagePin =
+    session?.groupId === "g-admin" ||
+    (session?.username && session.username.toLowerCase() === (account?.username ?? "").toLowerCase());
+
+  useEffect(() => {
+    let cancelled = false;
+    void listTillStaff()
+      .then((rows) => {
+        if (cancelled) return;
+        setPinRoster(rows);
+        const self = rows.find(
+          (row) => row.username.toLowerCase() === (account?.username ?? "").toLowerCase(),
+        );
+        setPinTarget(self?.id ?? (rows.length > 0 ? rows[0].id : ""));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [account?.username]);
 
   const group = account
     ? groups.find((row) => row.id === account.groupId)
@@ -113,6 +152,46 @@ export function AccountProfile({ accountId }: { accountId: string }) {
     } catch (err) {
       toast.error(err, "Could not delete account");
       setBusy(false);
+    }
+  }
+
+  async function onPinSave(event: FormEvent) {
+    event.preventDefault();
+    if (!session?.token || pinTarget === "") return;
+    const value = pinValue.trim();
+    if (!/^\d{4,10}$/.test(value)) {
+      toast.error("Cashier PIN must be 4 to 10 digits.");
+      return;
+    }
+    if (value !== pinConfirm) {
+      toast.error("The PINs do not match.");
+      return;
+    }
+    setPinBusy(true);
+    try {
+      await setStaffPin(session.token, pinTarget, value);
+      setPinValue("");
+      setPinConfirm("");
+      toast.success("Cashier PIN saved.");
+    } catch (err) {
+      toast.error(err, "Could not save PIN");
+    } finally {
+      setPinBusy(false);
+    }
+  }
+
+  async function onPinForget() {
+    if (!session?.token || pinTarget === "") return;
+    setPinBusy(true);
+    try {
+      await clearStaffPin(session.token, pinTarget);
+      setPinValue("");
+      setPinConfirm("");
+      toast.success("Cashier PIN cleared.");
+    } catch (err) {
+      toast.error(err, "Could not clear PIN");
+    } finally {
+      setPinBusy(false);
     }
   }
 
@@ -277,6 +356,123 @@ export function AccountProfile({ accountId }: { accountId: string }) {
                 </Link>
               </div>
             </div>
+
+            {canManagePin ? (
+              <div className="rounded-[22px] bg-pos-surface-muted/50 p-4">
+                <div className="flex items-start gap-3">
+                  <span className="grid size-9 shrink-0 place-items-center rounded-full bg-pos-surface text-pos-ink-muted shadow-pos-sm">
+                    <KeyRound size={16} />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-[12px] text-pos-ink-faint">POS access</p>
+                    <p className="mt-0.5 font-semibold text-pos-ink">Cashier PIN</p>
+                    <p className="mt-1 text-[13px] leading-relaxed text-pos-ink-muted">
+                      Set the PIN this staff member uses to sign in on the till. 4–10
+                      digits. Tills pick it up on their next sync.
+                    </p>
+                  </div>
+                </div>
+
+                <form
+                  className="mt-4 space-y-3"
+                  onSubmit={(event) => void onPinSave(event)}
+                >
+                  <label className="block">
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-pos-ink-muted">
+                      Till staff
+                    </span>
+                    <select
+                      className={selectClass}
+                      value={pinTarget}
+                      onChange={(event) => setPinTarget(event.target.value)}
+                      disabled={!canManagePin || pinRoster.length === 0}
+                    >
+                      {pinRoster.length === 0 ? (
+                        <option value="">No till staff on roster</option>
+                      ) : (
+                        pinRoster.map((row) => (
+                          <option key={row.id} value={row.id}>
+                            {row.name} (@{row.username})
+                          </option>
+                        ))
+                      )}
+                    </select>
+                  </label>
+
+                  <div className="flex gap-2">
+                    <label className="block flex-1">
+                      <span className="text-[11px] font-semibold uppercase tracking-wide text-pos-ink-muted">
+                        PIN
+                      </span>
+                      <span className="relative block">
+                        <input
+                          type={pinVisible ? "text" : "password"}
+                          className={`${fieldClass} pr-10`}
+                          value={pinValue}
+                          onChange={(event) =>
+                            setPinValue(
+                              event.target.value.replace(/[^\d]/g, "").slice(0, 10),
+                            )
+                          }
+                          inputMode="numeric"
+                          maxLength={10}
+                          placeholder={pinTarget ? "4–10 digits" : "Select staff first"}
+                          disabled={!canManagePin || pinTarget === "" || pinBusy}
+                          aria-label="Cashier PIN"
+                        />
+                        <button
+                          type="button"
+                          className="absolute right-2 top-1/2 grid size-7 -translate-y-1/2 place-items-center rounded-full text-pos-ink-faint hover:bg-pos-surface hover:text-pos-ink"
+                          onClick={() => setPinVisible((value) => !value)}
+                          aria-label={pinVisible ? "Hide PIN" : "Show PIN"}
+                        >
+                          {pinVisible ? <EyeOff size={15} /> : <Eye size={15} />}
+                        </button>
+                      </span>
+                    </label>
+
+                    <label className="block flex-1">
+                      <span className="text-[11px] font-semibold uppercase tracking-wide text-pos-ink-muted">
+                        Confirm
+                      </span>
+                      <input
+                        type={pinVisible ? "text" : "password"}
+                        className={fieldClass}
+                        value={pinConfirm}
+                        onChange={(event) =>
+                          setPinConfirm(
+                            event.target.value.replace(/[^\d]/g, "").slice(0, 10),
+                          )
+                        }
+                        inputMode="numeric"
+                        maxLength={10}
+                        placeholder="Repeat PIN"
+                        disabled={!canManagePin || pinTarget === "" || pinBusy}
+                        aria-label="Confirm cashier PIN"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="flex gap-2 pt-1">
+                    <PrimaryButton
+                      type="submit"
+                      className="flex-1"
+                      disabled={!canManagePin || pinTarget === "" || pinBusy}
+                    >
+                      {pinBusy ? "Saving…" : "Save PIN"}
+                    </PrimaryButton>
+                    <button
+                      type="button"
+                      className={secondaryButtonClass}
+                      disabled={!canManagePin || pinTarget === "" || pinBusy}
+                      onClick={onPinForget}
+                    >
+                      Forget PIN
+                    </button>
+                  </div>
+                </form>
+              </div>
+            ) : null}
           </div>
         </div>
       </section>

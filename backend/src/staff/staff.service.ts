@@ -1,4 +1,9 @@
-import { Injectable, UnauthorizedException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from "@nestjs/common";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -141,6 +146,68 @@ export class StaffService {
       throw new UnauthorizedException("This staff member cannot authorise that action.");
     }
     return publicStaff(user);
+  }
+
+  private bearer(authorization: string | undefined) {
+    if (!authorization) return "";
+    const match = /^Bearer\s+(.+)$/i.exec(authorization);
+    return match ? match[1].trim() : "";
+  }
+
+  private async saveRoster(roster: DirectoryRecord[]) {
+    await mkdir(join(this.dataDir, "directories"), { recursive: true });
+    await writeFile(
+      join(this.dataDir, "directories", "staff.json"),
+      JSON.stringify(roster, null, 2),
+      "utf8",
+    );
+  }
+
+  async managePin(
+    staffId: string,
+    pin: string | null | undefined,
+    authorization: string | undefined,
+  ) {
+    let actor: { id?: string; username?: string; groupId?: string; name?: string } = {};
+    try {
+      actor = (await this.console.me(this.bearer(authorization)))?.user ?? {};
+    } catch {
+      actor = {};
+    }
+    const isAdmin = actor.groupId === "g-admin";
+    const roster = await this.roster();
+    const index = roster.findIndex((row) => row.id === staffId);
+    if (index < 0) {
+      throw new NotFoundException("That staff member is not on the till roster.");
+    }
+    const row = roster[index];
+    const ownUsername = String(row.extra?.tillUsername || "").toLowerCase();
+    const actorUsername = String(actor.username || "").toLowerCase();
+    const isSelf = ownUsername !== "" && ownUsername === actorUsername;
+    if (!isAdmin && !isSelf) {
+      throw new UnauthorizedException("Only an admin or the staff member themselves can set this PIN.");
+    }
+    const value = pin === null || pin === undefined ? "" : String(pin).trim();
+    const extras: Record<string, string | number | boolean | null> = {
+      ...(row.extra ?? {}),
+    };
+    if (value === "") {
+      delete extras.tillPin;
+    } else {
+      if (!/^\d{4,10}$/.test(value)) {
+        throw new BadRequestException("PIN must be 4 to 10 digits.");
+      }
+      extras.tillPin = value;
+    }
+    const next: DirectoryRecord = { ...row, extra: extras };
+    const updated = [...roster];
+    updated[index] = next;
+    await this.saveRoster(updated);
+    return {
+      id: row.id,
+      name: row.name,
+      hasPin: Boolean(extras.tillPin),
+    };
   }
 
   private async loadShifts() {

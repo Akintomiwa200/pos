@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Query } from "@nestjs/common";
+import { Body, Controller, Get, Headers, Post, Query } from "@nestjs/common";
 import { StaffService } from "./staff.service";
 
 @Controller("staff")
@@ -8,6 +8,18 @@ export class StaffController {
   @Get()
   list() {
     return this.staff.list();
+  }
+
+  @Post("pin")
+  pin(
+    @Body() body: { staffId?: string; pin?: string | null },
+    @Headers("authorization") authorization?: string,
+  ) {
+    return this.staff.managePin(
+      body.staffId ?? "",
+      body.pin === undefined ? null : body.pin,
+      authorization,
+    );
   }
 
   @Post("unlock")

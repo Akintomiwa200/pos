@@ -428,6 +428,47 @@ export async function deleteGroup(id: string) {
   await api(`/api/console/groups/${id}`, { method: "DELETE" });
 }
 
+export type TillStaffPinState = {
+  id: string;
+  name: string;
+  hasPin: boolean;
+};
+
+export type TillStaffMember = {
+  id: string;
+  name: string;
+  username: string;
+  email: string;
+  role: string;
+};
+
+export async function listTillStaff(): Promise<TillStaffMember[]> {
+  return api<TillStaffMember[]>("/api/staff");
+}
+
+export async function setStaffPin(
+  token: string,
+  staffId: string,
+  pin: string,
+): Promise<TillStaffPinState> {
+  return api<TillStaffPinState>("/api/staff/pin", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ staffId, pin }),
+  });
+}
+
+export async function clearStaffPin(
+  token: string,
+  staffId: string,
+): Promise<TillStaffPinState> {
+  return api<TillStaffPinState>("/api/staff/pin", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ staffId, pin: null }),
+  });
+}
+
 export async function listAccounts(): Promise<Omit<ConsoleAccount, "password">[]> {
   return api<Omit<ConsoleAccount, "password">[]>("/api/console/accounts");
 }

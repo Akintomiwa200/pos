@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+﻿import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { ChevronRight, Filter, Plus, Search, X } from "lucide-react";
 import type { CatalogItem } from "../../lib/types";
-import { formatMoney } from "../../lib/types";
+import { formatMoney, sellPrice } from "../../lib/types";
 import { formatPricePer, formatStock } from "../../lib/units";
 import { findCatalogByCode } from "../../lib/catalog";
 import { normalizeBarcode } from "../../lib/store-settings";
@@ -20,14 +20,14 @@ const STOCK_OPTIONS: { id: StockFilter; label: string }[] = [
 
 const PRICE_OPTIONS: { id: PriceFilter; label: string }[] = [
   { id: "all", label: "Any price" },
-  { id: "under2", label: "Under ₦2,000" },
-  { id: "mid", label: "₦2,000 – ₦5,000" },
-  { id: "over5", label: "Over ₦5,000" },
+  { id: "under2", label: "Under â‚¦2,000" },
+  { id: "mid", label: "â‚¦2,000 â€“ â‚¦5,000" },
+  { id: "over5", label: "Over â‚¦5,000" },
 ];
 
 const SORT_OPTIONS: { id: SortFilter; label: string }[] = [
   { id: "default", label: "Default" },
-  { id: "name", label: "Name A–Z" },
+  { id: "name", label: "Name Aâ€“Z" },
   { id: "price-asc", label: "Price: low to high" },
   { id: "price-desc", label: "Price: high to low" },
   { id: "stock", label: "Stock on hand" },
@@ -47,9 +47,9 @@ type Props = {
 };
 
 function matchesPrice(item: CatalogItem, price: PriceFilter) {
-  if (price === "under2") return item.priceMinor < 200_000;
-  if (price === "mid") return item.priceMinor >= 200_000 && item.priceMinor <= 500_000;
-  if (price === "over5") return item.priceMinor > 500_000;
+  if (price === "under2") return sellPrice(item) < 200_000;
+  if (price === "mid") return sellPrice(item) >= 200_000 && sellPrice(item) <= 500_000;
+  if (price === "over5") return sellPrice(item) > 500_000;
   return true;
 }
 
@@ -128,9 +128,9 @@ export function ItemsScreen({
     if (sort === "name") {
       ordered.sort((a, b) => a.name.localeCompare(b.name));
     } else if (sort === "price-asc") {
-      ordered.sort((a, b) => a.priceMinor - b.priceMinor);
+      ordered.sort((a, b) => sellPrice(a) - sellPrice(b));
     } else if (sort === "price-desc") {
-      ordered.sort((a, b) => b.priceMinor - a.priceMinor);
+      ordered.sort((a, b) => sellPrice(b) - sellPrice(a));
     } else if (sort === "stock") {
       ordered.sort((a, b) => b.onHand - a.onHand);
     }
@@ -441,7 +441,7 @@ export function ItemsScreen({
           </h2>
           <p>
             {query.trim()
-              ? `Nothing in the till matches “${query.trim()}”. Try the product name, SKU, or barcode.`
+              ? `Nothing in the till matches â€œ${query.trim()}â€. Try the product name, SKU, or barcode.`
               : filteredOut
                 ? "Change stock, price, or category, or clear the filters to see the catalogue again."
                 : mode === "items"
@@ -494,7 +494,7 @@ export function ItemsScreen({
                 <div className="card-body">
                   <strong className="card-name">{item.name}</strong>
                   <div className="price">
-                    {formatMoney(item.priceMinor)}
+                    {formatMoney(sellPrice(item))}
                     <span className="price-unit">
                       {" "}
                       {formatPricePer(item.unit ?? "each", item.unitLabel)}

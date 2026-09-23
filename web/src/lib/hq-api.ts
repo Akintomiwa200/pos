@@ -359,6 +359,8 @@ export type HqCatalogItem = {
   baseId?: string;
   costMinor: number;
   priceMinor: number;
+  branchPriceMinor?: number;
+  pricingSystem?: "main" | "branch";
   onHand: number;
   reorderLevel: number;
   unit: string;

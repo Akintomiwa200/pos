@@ -3,6 +3,13 @@ export function marginPercent(costMinor: number, priceMinor: number) {
   return Math.round(((priceMinor - costMinor) / priceMinor) * 1000) / 10;
 }
 
+export function multiPricingFromItem(item: {
+  branchPriceMinor?: number;
+  pricingSystem?: "main" | "branch";
+}): boolean {
+  return Boolean(item.branchPriceMinor) || item.pricingSystem === "branch";
+}
+
 export function parseNairaInput(value: string) {
   const n = parseFloat(value);
   if (!Number.isFinite(n) || n < 0) return 0;

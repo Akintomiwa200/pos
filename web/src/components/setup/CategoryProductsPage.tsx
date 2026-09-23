@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Archive, ArchiveRestore, Download, Pencil, Plus, Search, Trash2 } from "lucide-react";
-import { nairaInputFromMinor, parseNairaInput, resolveSellPriceMinor } from "@/lib/catalog";
+import { nairaInputFromMinor, multiPricingFromItem, parseNairaInput, resolveSellPriceMinor } from "@/lib/catalog";
 import { deleteCatalogItem, type HqCatalogItem } from "@/lib/hq-api";
 import { setProductsActive } from "@/lib/catalog-bulk";
 import { naira } from "@/lib/hq-ops";
@@ -29,8 +29,13 @@ const blank: ItemDraft = {
   brand: "",
   cost: "",
   price: "",
+  branchPrice: "",
+  pricingSystem: "main",
+  multiPricing: false,
   pricingMode: "direct",
   marginInput: "",
+  branchPricingMode: "direct",
+  branchMarginInput: "",
   onHand: "",
   reorderLevel: "5",
   unit: "each",
@@ -143,8 +148,13 @@ function toDraft(item: HqCatalogItem): ItemDraft {
     brand: item.brand ?? "",
     cost: nairaInputFromMinor(item.costMinor ?? 0),
     price: nairaInputFromMinor(item.priceMinor),
+    branchPrice: item.branchPriceMinor != null ? nairaInputFromMinor(item.branchPriceMinor) : "",
+    pricingSystem: item.pricingSystem === "branch" ? "branch" : "main",
+    multiPricing: multiPricingFromItem(item),
     pricingMode: "direct",
     marginInput: "",
+    branchPricingMode: "direct",
+    branchMarginInput: "",
     onHand: String(item.onHand),
     reorderLevel: String(item.reorderLevel ?? 5),
     unit: item.unit || "each",
@@ -264,6 +274,15 @@ export function CategoryProductsPage({ slug }: { slug: string }) {
             priceMinor: parseNairaInput(draft.price),
             marginInput: draft.marginInput,
           }),
+          branchPriceMinor: draft.multiPricing && (draft.branchPrice.trim() || draft.branchMarginInput.trim())
+            ? resolveSellPriceMinor({
+                pricingMode: draft.branchPricingMode,
+                costMinor,
+                priceMinor: parseNairaInput(draft.branchPrice),
+                marginInput: draft.branchMarginInput,
+              })
+            : undefined,
+          pricingSystem: draft.pricingSystem,
           onHand: Math.max(0, Math.round(parseFloat(draft.onHand) || 0)),
           reorderLevel: Math.max(0, Math.round(parseFloat(draft.reorderLevel) || 0)),
           unit: draft.unit || "each",

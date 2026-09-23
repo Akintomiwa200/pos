@@ -8,6 +8,9 @@ export type CatalogItem = {
   subcategory?: string;
   costMinor?: number;
   priceMinor: number;
+  branchPriceMinor?: number;
+  pricingSystem?: "main" | "branch";
+  effectivePriceMinor?: number;
   currency: string;
   image: string;
   onHand: number;
@@ -19,6 +22,11 @@ export type CatalogItem = {
   updatedAt?: string;
   expiresAt?: string;
 };
+
+/** Live selling price for a product: the resolved effective price, else the main price. */
+export function sellPrice(item: CatalogItem): number {
+  return item.effectivePriceMinor ?? item.priceMinor;
+}
 
 export function formatMoney(amountMinor: number, currency = "NGN"): string {
   return new Intl.NumberFormat("en-NG", {

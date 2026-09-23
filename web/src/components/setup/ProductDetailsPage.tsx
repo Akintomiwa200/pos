@@ -17,7 +17,7 @@ import {
   TrendingUp,
   Wallet,
 } from "lucide-react";
-import { marginPercent, nairaInputFromMinor, parseNairaInput, resolveSellPriceMinor } from "@/lib/catalog";
+import { marginPercent, multiPricingFromItem, nairaInputFromMinor, parseNairaInput, resolveSellPriceMinor } from "@/lib/catalog";
 import { deleteCatalogItem, listSales, type HqCatalogItem, type HqSale } from "@/lib/hq-api";
 import { setProductsActive } from "@/lib/catalog-bulk";
 import { listMovements, naira, prettyDay, type StockMovement } from "@/lib/hq-ops";
@@ -112,8 +112,13 @@ function toDraft(item: HqCatalogItem): ItemDraft {
     brand: item.brand ?? "",
     cost: nairaInputFromMinor(item.costMinor ?? 0),
     price: nairaInputFromMinor(item.priceMinor),
+    branchPrice: item.branchPriceMinor != null ? nairaInputFromMinor(item.branchPriceMinor) : "",
+    pricingSystem: item.pricingSystem === "branch" ? "branch" : "main",
+    multiPricing: multiPricingFromItem(item),
     pricingMode: "direct",
     marginInput: "",
+    branchPricingMode: "direct",
+    branchMarginInput: "",
     onHand: String(item.onHand),
     reorderLevel: String(item.reorderLevel ?? 5),
     unit: item.unit || "each",
@@ -263,6 +268,15 @@ export function ProductDetailsPage({ id }: { id: string }) {
             priceMinor: parseNairaInput(draft.price),
             marginInput: draft.marginInput,
           }),
+          branchPriceMinor: draft.multiPricing && (draft.branchPrice.trim() || draft.branchMarginInput.trim())
+            ? resolveSellPriceMinor({
+                pricingMode: draft.branchPricingMode,
+                costMinor,
+                priceMinor: parseNairaInput(draft.branchPrice),
+                marginInput: draft.branchMarginInput,
+              })
+            : undefined,
+          pricingSystem: draft.pricingSystem,
           onHand: Math.max(0, Math.round(parseFloat(draft.onHand) || 0)),
           reorderLevel: Math.max(0, Math.round(parseFloat(draft.reorderLevel) || 0)),
           unit: draft.unit || "each",

@@ -34,6 +34,8 @@ export type CatalogRow = {
   baseId?: string;
   costMinor?: number;
   priceMinor?: number;
+  branchPriceMinor?: number;
+  pricingSystem?: "main" | "branch";
   onHand?: number;
   reorderLevel?: number;
   unit?: string;
@@ -48,6 +50,8 @@ export type CatalogRow = {
 
 export type CatalogPatch = {
   priceMinor?: number;
+  branchPriceMinor?: number;
+  pricingSystem?: "main" | "branch";
   costMinor?: number;
   onHand?: number;
   reorderLevel?: number;
@@ -153,6 +157,16 @@ export class CatalogService implements OnModuleInit {
         typeof patch.priceMinor === "number" && Number.isFinite(patch.priceMinor)
           ? patch.priceMinor
           : current.priceMinor,
+      branchPriceMinor:
+        patch.branchPriceMinor === null
+          ? undefined
+          : typeof patch.branchPriceMinor === "number" && Number.isFinite(patch.branchPriceMinor)
+            ? patch.branchPriceMinor
+            : current.branchPriceMinor,
+      pricingSystem:
+        patch.pricingSystem === "branch" || patch.pricingSystem === "main"
+          ? patch.pricingSystem
+          : current.pricingSystem ?? "main",
       onHand:
         typeof patch.onHand === "number" && Number.isFinite(patch.onHand)
           ? patch.onHand

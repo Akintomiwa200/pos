@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+﻿import { useEffect, useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import {
   Camera,
@@ -12,7 +12,7 @@ import {
 import { getApiBase, setApiBase } from "./lib/api";
 import { findItem, useLiveCatalog } from "./lib/catalog";
 import { canScanCamera, startCameraScan } from "./lib/scan";
-import { formatMoney } from "./lib/types";
+import { formatMoney, sellPrice } from "./lib/types";
 import { formatPricePer, formatStock } from "./lib/units";
 import { productImageSrc } from "./lib/product-image";
 import AdsScreen from "./AdsScreen";
@@ -44,13 +44,13 @@ export default function App() {
 
   useEffect(() => {
     if (!item) return;
-    if (lastPrice.current != null && lastPrice.current !== item.priceMinor) {
+    if (lastPrice.current != null && lastPrice.current !== sellPrice(item)) {
       setFlash(true);
       const timer = window.setTimeout(() => setFlash(false), 900);
-      lastPrice.current = item.priceMinor;
+      lastPrice.current = sellPrice(item);
       return () => window.clearTimeout(timer);
     }
-    lastPrice.current = item.priceMinor;
+    lastPrice.current = sellPrice(item);
   }, [item]);
 
   useEffect(() => {
@@ -140,7 +140,7 @@ export default function App() {
               <div className="pc-result-info-card">
                 <h2>{item.name}</h2>
                 <div className={`pc-result-price ${flash ? "flash" : ""}`}>
-                  {formatMoney(item.priceMinor, item.currency)}
+                  {formatMoney(sellPrice(item), item.currency)}
                 </div>
                 <div className="pc-result-meta">
                   Stock: {item.onHand} {item.unitLabel || "PCS"} | PVP IVA INCLUIDO {item.barcode}

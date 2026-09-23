@@ -62,6 +62,10 @@ export function normalizeCatalogItem(raw: Partial<CatalogItem> & Pick<CatalogIte
     typeof raw.priceMinor === "number" && Number.isFinite(raw.priceMinor)
       ? Math.max(0, Math.round(raw.priceMinor))
       : 0;
+  const branchPriceMinor =
+    typeof raw.branchPriceMinor === "number" && Number.isFinite(raw.branchPriceMinor)
+      ? Math.max(0, Math.round(raw.branchPriceMinor))
+      : undefined;
   const onHand =
     typeof raw.onHand === "number" && Number.isFinite(raw.onHand)
       ? Math.max(0, Math.round(raw.onHand))
@@ -87,6 +91,15 @@ export function normalizeCatalogItem(raw: Partial<CatalogItem> & Pick<CatalogIte
     baseId: raw.baseId?.trim() || undefined,
     costMinor,
     priceMinor,
+    branchPriceMinor,
+    pricingSystem: raw.pricingSystem === "branch" ? "branch" : "main",
+    /** Price a till/price-check should actually charge or show for this item, live. */
+    effectivePriceMinor:
+      raw.pricingSystem === "branch" &&
+      typeof raw.branchPriceMinor === "number" &&
+      Number.isFinite(raw.branchPriceMinor)
+        ? Math.max(0, Math.round(raw.branchPriceMinor))
+        : priceMinor,
     currency: "NGN",
     image: raw.image?.trim() || "",
     onHand,

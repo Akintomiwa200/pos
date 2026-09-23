@@ -18,6 +18,10 @@ export type CatalogItem = {
   subcategory?: string;
   costMinor?: number;
   priceMinor: number;
+  branchPriceMinor?: number;
+  pricingSystem?: "main" | "branch";
+  /** Resolved selling price for the active pricing system. Prefer this when present. */
+  effectivePriceMinor?: number;
   currency: string;
   image: string;
   onHand: number;
@@ -32,6 +36,11 @@ export type CatalogItem = {
   /** Per-product VAT percent. Unset = store default; 0 = VAT-exempt. */
   taxPercent?: number;
 };
+
+/** Live selling price for a product: the resolved effective price, else the main price. */
+export function sellPrice(item: CatalogItem): number {
+  return item.effectivePriceMinor ?? item.priceMinor;
+}
 
 export type CartLine = {
   id: string;

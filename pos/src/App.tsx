@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { CartLine, CatalogItem, TenderType } from "./lib/types";
-import { computeLineTotals, formatMoney } from "./lib/types";
+import { computeLineTotals, formatMoney, sellPrice } from "./lib/types";
 import { formatStock, formatUnitLabel } from "./lib/units";
 import { Sidebar } from "./components/layout/Sidebar";
 import { ProfileMenu, type MenuAction } from "./components/layout/ProfileMenu";
@@ -732,7 +732,7 @@ export default function App() {
           itemId: item.id,
           name: item.name,
           quantity: 1,
-          unitPriceMinor: item.priceMinor,
+          unitPriceMinor: sellPrice(item),
           image: item.image,
           sku: item.sku,
           unit: item.unit,

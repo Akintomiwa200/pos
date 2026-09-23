@@ -29,6 +29,7 @@ import {
   type KitchenTicket,
 } from "./lib/tickets";
 import { findCatalogByCode, lookupCatalog, useCatalog } from "./lib/catalog";
+import { useCombos, type ComboView } from "./lib/combos";
 import { TENDER_LABEL, type SaleReceipt } from "./lib/receipt";
 import { archiveSale, flushSalesOutbox } from "./lib/sales";
 import {
@@ -135,6 +136,7 @@ const GATE_COPY: Record<Gate, { title: string; subtitle: string; confirm: string
 
 export default function App() {
   const { items: catalog, updateItem, applySaleDeltas } = useCatalog();
+  const { combos } = useCombos();
   const settings = useStoreSettings();
   const { tills } = useTills();
   const { hex: hardwareHex } = useHardwareHex();
@@ -201,6 +203,7 @@ export default function App() {
   });
   const totals = computeLineTotals(cart, settings);
   const activeTill = tills[0] ?? findTill();
+  const branchId = activeTill.branchId || null;
   const product = normalizeTillProduct(activeTill.product);
   const needsActivation = tillNeedsActivation(activeTill);
   const tillClosed = needsActivation || !activeTill.paired || !activeTill.active;
@@ -732,13 +735,66 @@ export default function App() {
           itemId: item.id,
           name: item.name,
           quantity: 1,
-          unitPriceMinor: sellPrice(item),
+          unitPriceMinor: sellPrice(item, branchId),
           image: item.image,
           sku: item.sku,
           unit: item.unit,
           unitLabel: item.unitLabel,
           packSize: item.packSize,
           taxPercent: item.taxPercent,
+        },
+      ];
+    });
+  }
+
+  function addCombo(combo: ComboView) {
+    if (screen === "paid" || shiftLocked) {
+      if (tillClosed) {
+        setLookupNotice(
+          activeTill.paired
+            ? "This till is closed on this device."
+            : "This device is not licensed. Enter the till code from HQ to activate.",
+        );
+      }
+      return;
+    }
+    const already =
+      cart.find((line) => line.itemId === combo.id)?.quantity ?? 0;
+    if (settings.blockNegativeStock && already + 1 > combo.availableSets) {
+      setLookupNotice(
+        combo.availableSets <= 0
+          ? `${combo.name} is out of stock.`
+          : `Only ${combo.availableSets} ${combo.availableSets === 1 ? "set" : "sets"} of ${combo.name} left.`,
+      );
+      return;
+    }
+    if (settings.lowStockAlert && combo.availableSets <= settings.lowStockQty) {
+      setLookupNotice(
+        `${combo.name} is low — ${combo.availableSets} ${combo.availableSets === 1 ? "set" : "sets"} available (alert at ${settings.lowStockQty}).`,
+      );
+    } else {
+      setLookupNotice("");
+    }
+    setCart((current) => {
+      const existing = current.find((line) => line.itemId === combo.id);
+      if (existing) {
+        return current.map((line) =>
+          line.id === existing.id
+            ? { ...line, quantity: line.quantity + 1 }
+            : line,
+        );
+      }
+      return [
+        ...current,
+        {
+          id: crypto.randomUUID(),
+          itemId: combo.id,
+          name: combo.name,
+          quantity: 1,
+          unitPriceMinor: combo.priceMinor,
+          image: "",
+          unit: "each",
+          isCombo: true,
         },
       ];
     });
@@ -784,6 +840,15 @@ export default function App() {
     if (screen === "paid" || paying || shiftLocked) return;
     const line = cart.find((row) => row.id === id);
     if (line && delta > 0 && settings.blockNegativeStock) {
+      if (line.isCombo) {
+        const combo = combos.find((row) => row.id === line.itemId);
+        if (combo && line.quantity + delta > combo.availableSets) {
+          setLookupNotice(
+            `Only ${combo.availableSets} ${combo.availableSets === 1 ? "set" : "sets"} of ${combo.name} available.`,
+          );
+          return;
+        }
+      }
       const item = catalog.find((row) => row.id === line.itemId);
       if (item && line.quantity + delta > item.onHand) {
         setLookupNotice(
@@ -847,7 +912,9 @@ export default function App() {
     };
     if (settings.trackStockOnTill) {
       applySaleDeltas(
-        cart.map((line) => ({ itemId: line.itemId, delta: -line.quantity })),
+        cart
+          .filter((line) => !line.isCombo)
+          .map((line) => ({ itemId: line.itemId, delta: -line.quantity })),
       );
     }
     setReceipt(sale);
@@ -1048,6 +1115,9 @@ export default function App() {
             category={category}
             onCategory={setCategory}
             onAdd={addItem}
+            combos={combos}
+            onAddCombo={addCombo}
+            branchId={branchId}
             query={query}
             onQuery={(value) => {
               setQuery(value);
@@ -1097,6 +1167,9 @@ export default function App() {
             category={category}
             onCategory={setCategory}
             onAdd={addItem}
+            combos={combos}
+            onAddCombo={addCombo}
+            branchId={branchId}
             query={query}
             onQuery={(value) => {
               setQuery(value);

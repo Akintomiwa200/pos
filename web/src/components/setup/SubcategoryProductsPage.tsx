@@ -3,12 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Archive, ArchiveRestore, Download, Pencil, Plus, Search, Trash2 } from "lucide-react";
-import { nairaInputFromMinor, multiPricingFromItem, parseNairaInput, resolveSellPriceMinor } from "@/lib/catalog";
+import { branchPricesFromDraft, nairaInputFromMinor, parseNairaInput, resolveSellPriceMinor } from "@/lib/catalog";
 import { deleteCatalogItem, type HqCatalogItem } from "@/lib/hq-api";
 import { setProductsActive } from "@/lib/catalog-bulk";
 import { naira } from "@/lib/hq-ops";
 import { productImageFor } from "@/lib/product-image";
 import { importCatalogRows } from "@/lib/hq-setup";
+import { useBranches } from "@/lib/use-branches";
 import { toast } from "@/lib/toast";
 import { formatStock, inferUnitKind } from "@/lib/units";
 import { useLiveCatalog } from "@/lib/live-catalog";
@@ -33,13 +34,9 @@ const blank: ItemDraft = {
   brand: "",
   cost: "",
   price: "",
-  branchPrice: "",
-  pricingSystem: "main",
-  multiPricing: false,
+  branchPrices: {},
   pricingMode: "direct",
   marginInput: "",
-  branchPricingMode: "direct",
-  branchMarginInput: "",
   onHand: "",
   reorderLevel: "5",
   unit: "each",
@@ -152,13 +149,14 @@ function toDraft(item: HqCatalogItem): ItemDraft {
     brand: item.brand ?? "",
     cost: nairaInputFromMinor(item.costMinor ?? 0),
     price: nairaInputFromMinor(item.priceMinor),
-    branchPrice: item.branchPriceMinor != null ? nairaInputFromMinor(item.branchPriceMinor) : "",
-    pricingSystem: item.pricingSystem === "branch" ? "branch" : "main",
-    multiPricing: multiPricingFromItem(item),
+    branchPrices: Object.fromEntries(
+      Object.entries(item.branchPrices ?? {}).map(([branchId, minor]) => [
+        branchId,
+        { price: nairaInputFromMinor(minor), mode: "direct", marginInput: "" },
+      ]),
+    ),
     pricingMode: "direct",
     marginInput: "",
-    branchPricingMode: "direct",
-    branchMarginInput: "",
     onHand: String(item.onHand),
     reorderLevel: String(item.reorderLevel ?? 5),
     unit: item.unit || "each",
@@ -177,6 +175,7 @@ export function SubcategoryProductsPage({ slug }: { slug: string }) {
   const { rows: subcategories, ready: subsReady } = useLiveDirectoryRows("item-subgroups");
   const { rows: units, ready: unitReady } = useLiveDirectoryRows("units");
   const { rows: brands, ready: brandReady } = useLiveDirectoryRows("manufacturers");
+  const branches = useBranches();
   const [search, setSearch] = useState("");
   const [draft, setDraft] = useState<ItemDraft>(blank);
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -279,15 +278,7 @@ export function SubcategoryProductsPage({ slug }: { slug: string }) {
             priceMinor: parseNairaInput(draft.price),
             marginInput: draft.marginInput,
           }),
-          branchPriceMinor: draft.multiPricing && (draft.branchPrice.trim() || draft.branchMarginInput.trim())
-            ? resolveSellPriceMinor({
-                pricingMode: draft.branchPricingMode,
-                costMinor,
-                priceMinor: parseNairaInput(draft.branchPrice),
-                marginInput: draft.branchMarginInput,
-              })
-            : undefined,
-          pricingSystem: draft.pricingSystem,
+          branchPrices: branchPricesFromDraft(draft, costMinor),
           onHand: Math.max(0, Math.round(parseFloat(draft.onHand) || 0)),
           reorderLevel: Math.max(0, Math.round(parseFloat(draft.reorderLevel) || 0)),
           unit: draft.unit || "each",
@@ -557,6 +548,7 @@ export function SubcategoryProductsPage({ slug }: { slug: string }) {
         subcategories={subcategories}
         units={units}
         brands={brands}
+        branches={branches}
         onClose={() => setFormOpen(false)}
         onChange={(patch) => setDraft((current) => ({ ...current, ...patch }))}
         onImageChange={setImageFile}

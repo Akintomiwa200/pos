@@ -18,9 +18,11 @@ export type CatalogItem = {
   subcategory?: string;
   costMinor?: number;
   priceMinor: number;
-  branchPriceMinor?: number;
-  pricingSystem?: "main" | "branch";
-  /** Resolved selling price for the active pricing system. Prefer this when present. */
+  /** Per-branch selling prices keyed by branch id. A branch without an entry
+   *  falls back to `priceMinor`. Tills resolve this via their own branch id. */
+  branchPrices?: Record<string, number>;
+  /** Resolved selling price for branchless consumers (base price). Prefer this
+   *  when present for consumers that have no branch context. */
   effectivePriceMinor?: number;
   currency: string;
   image: string;
@@ -29,6 +31,8 @@ export type CatalogItem = {
   unit?: string;
   unitLabel?: string;
   packSize?: number;
+  /** Pack/carton variant: larger unit of this base product. */
+  baseId?: string;
   description?: string;
   active?: boolean;
   updatedAt?: string;
@@ -37,8 +41,14 @@ export type CatalogItem = {
   taxPercent?: number;
 };
 
-/** Live selling price for a product: the resolved effective price, else the main price. */
-export function sellPrice(item: CatalogItem): number {
+/** Live selling price for a product: the branch override, else the base price. */
+export function sellPrice(
+  item: CatalogItem,
+  branchId?: string | null,
+): number {
+  if (branchId && item.branchPrices?.[branchId] != null) {
+    return item.branchPrices[branchId]!;
+  }
   return item.effectivePriceMinor ?? item.priceMinor;
 }
 
@@ -55,6 +65,8 @@ export type CartLine = {
   packSize?: number;
   /** VAT rate snapshot at add time. Unset = store default; 0 = exempt. */
   taxPercent?: number;
+  /** Line is a combo sold by combo id; stock deducts per component on HQ. */
+  isCombo?: boolean;
 };
 
 export const VAT_BPS = 750;

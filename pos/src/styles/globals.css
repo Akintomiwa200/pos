@@ -351,6 +351,16 @@ button {
   background: #ede9fe;
 }
 
+.line-thumb-fallback {
+  width: 52px;
+  height: 52px;
+  aspect-ratio: auto;
+  min-height: 0;
+  border-radius: 12px;
+  font-size: 15px;
+  letter-spacing: 0.04em;
+}
+
 .line-body {
   min-width: 0;
   display: flex;
@@ -884,6 +894,85 @@ button {
 
 .card-stock.low {
   color: #b45309;
+}
+
+.card-stock.out {
+  color: #dc2626;
+}
+
+.combo-section {
+  flex: 0 0 auto;
+}
+
+.combo-section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 2px 0 12px;
+}
+
+.combo-section-head h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #1c1c1e;
+}
+
+.combo-section-head span {
+  font-size: 12px;
+  font-weight: 600;
+  color: #8e8e93;
+}
+
+.combo-grid {
+  flex: 0 0 auto;
+  overflow: visible;
+  padding-bottom: 4px;
+}
+
+.variant-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 12px 0;
+  background: #fff;
+}
+
+.variant-chips .chip {
+  padding: 5px 10px;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.combo-fallback {
+  position: relative;
+  background: linear-gradient(135deg, #fce7f3, #ede9fe);
+}
+
+.combo-badge {
+  display: inline-block;
+  background: #ec4899;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 4px 8px;
+  border-radius: 999px;
+}
+
+.card-combo .combo-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  line-height: 1.2;
+}
+
+.line-name .combo-badge {
+  margin-right: 6px;
+  padding: 2px 6px;
+  font-size: 9px;
+  vertical-align: baseline;
 }
 
 .add {

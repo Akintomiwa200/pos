@@ -53,6 +53,19 @@ export function normalizeTaxPercent(value: unknown) {
   return 0;
 }
 
+function sanitizeBranchPrices(raw: unknown): Record<string, number> | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const result: Record<string, number> = {};
+  for (const [branchId, value] of Object.entries(raw)) {
+    const id = branchId.trim();
+    if (!id) continue;
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric) || numeric < 0) continue;
+    result[id] = Math.round(numeric);
+  }
+  return Object.keys(result).length ? result : undefined;
+}
+
 export function normalizeCatalogItem(raw: Partial<CatalogItem> & Pick<CatalogItem, "id" | "name">): CatalogItem {
   const costMinor =
     typeof raw.costMinor === "number" && Number.isFinite(raw.costMinor)
@@ -62,10 +75,7 @@ export function normalizeCatalogItem(raw: Partial<CatalogItem> & Pick<CatalogIte
     typeof raw.priceMinor === "number" && Number.isFinite(raw.priceMinor)
       ? Math.max(0, Math.round(raw.priceMinor))
       : 0;
-  const branchPriceMinor =
-    typeof raw.branchPriceMinor === "number" && Number.isFinite(raw.branchPriceMinor)
-      ? Math.max(0, Math.round(raw.branchPriceMinor))
-      : undefined;
+  const branchPrices = sanitizeBranchPrices(raw.branchPrices);
   const onHand =
     typeof raw.onHand === "number" && Number.isFinite(raw.onHand)
       ? Math.max(0, Math.round(raw.onHand))
@@ -91,15 +101,9 @@ export function normalizeCatalogItem(raw: Partial<CatalogItem> & Pick<CatalogIte
     baseId: raw.baseId?.trim() || undefined,
     costMinor,
     priceMinor,
-    branchPriceMinor,
-    pricingSystem: raw.pricingSystem === "branch" ? "branch" : "main",
-    /** Price a till/price-check should actually charge or show for this item, live. */
-    effectivePriceMinor:
-      raw.pricingSystem === "branch" &&
-      typeof raw.branchPriceMinor === "number" &&
-      Number.isFinite(raw.branchPriceMinor)
-        ? Math.max(0, Math.round(raw.branchPriceMinor))
-        : priceMinor,
+    branchPrices,
+    /** Base selling price. Tills resolve per-branch overrides themselves. */
+    effectivePriceMinor: priceMinor,
     currency: "NGN",
     image: raw.image?.trim() || "",
     onHand,

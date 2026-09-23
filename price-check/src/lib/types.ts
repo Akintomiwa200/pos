@@ -8,8 +8,8 @@ export type CatalogItem = {
   subcategory?: string;
   costMinor?: number;
   priceMinor: number;
-  branchPriceMinor?: number;
-  pricingSystem?: "main" | "branch";
+  /** Per-branch prices; a price-check has no branch context, so it reads base. */
+  branchPrices?: Record<string, number>;
   effectivePriceMinor?: number;
   currency: string;
   image: string;
@@ -23,7 +23,7 @@ export type CatalogItem = {
   expiresAt?: string;
 };
 
-/** Live selling price for a product: the resolved effective price, else the main price. */
+/** Base selling price; branch overrides need a till with a branch context. */
 export function sellPrice(item: CatalogItem): number {
   return item.effectivePriceMinor ?? item.priceMinor;
 }

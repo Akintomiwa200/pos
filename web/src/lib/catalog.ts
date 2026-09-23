@@ -3,11 +3,35 @@ export function marginPercent(costMinor: number, priceMinor: number) {
   return Math.round(((priceMinor - costMinor) / priceMinor) * 1000) / 10;
 }
 
-export function multiPricingFromItem(item: {
-  branchPriceMinor?: number;
-  pricingSystem?: "main" | "branch";
-}): boolean {
-  return Boolean(item.branchPriceMinor) || item.pricingSystem === "branch";
+export type BranchPriceDraft = {
+  price: string;
+  mode: "direct" | "margin";
+  marginInput: string;
+};
+
+/**
+ * Collapse the per-branch draft rows into a resolved minor-unit price map
+ * (branch id → selling price). Branches without a value are dropped, so they
+ * fall back to the main selling price on the till.
+ */
+export function branchPricesFromDraft(
+  draft: { branchPrices?: Record<string, BranchPriceDraft> },
+  costMinor: number,
+): Record<string, number> | undefined {
+  const result: Record<string, number> = {};
+  for (const [branchId, row] of Object.entries(draft.branchPrices ?? {})) {
+    if (!row) continue;
+    const hasValue = row.price.trim() !== "" || row.marginInput.trim() !== "";
+    if (!hasValue) continue;
+    const minor = resolveSellPriceMinor({
+      pricingMode: row.mode,
+      costMinor,
+      priceMinor: parseNairaInput(row.price),
+      marginInput: row.marginInput,
+    });
+    if (minor > 0) result[branchId] = minor;
+  }
+  return Object.keys(result).length ? result : undefined;
 }
 
 export function parseNairaInput(value: string) {

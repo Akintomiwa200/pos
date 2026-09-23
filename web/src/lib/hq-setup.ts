@@ -266,8 +266,8 @@ export async function importCatalogRows(
     baseId?: string;
     costMinor?: number;
     priceMinor?: number;
-    branchPriceMinor?: number;
-    pricingSystem?: "main" | "branch";
+    /** Per-branch selling prices keyed by branch id (imports replace wholesale). */
+    branchPrices?: Record<string, number>;
     onHand?: number;
     reorderLevel?: number;
     unit?: string;

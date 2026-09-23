@@ -4,6 +4,9 @@ import type { CatalogItem } from "../../lib/types";
 import { formatMoney, sellPrice } from "../../lib/types";
 import { formatPricePer, formatStock } from "../../lib/units";
 import { findCatalogByCode } from "../../lib/catalog";
+import type { ComboView } from "../../lib/combos";
+import { memberLabel } from "../../lib/variants";
+import { groupIntoFamilies } from "../../lib/variants";
 import { normalizeBarcode } from "../../lib/store-settings";
 import { useStoreSettings } from "../../lib/use-store-settings";
 
@@ -40,16 +43,20 @@ type Props = {
   category: string;
   onCategory: (value: string) => void;
   onAdd: (item: CatalogItem) => void;
+  combos: ComboView[];
+  onAddCombo: (combo: ComboView) => void;
+  /** Branch id of the active till; resolves per-branch selling prices. */
+  branchId?: string | null;
   query: string;
   onQuery: (value: string) => void;
   onCommitQuery: (value: string) => void;
   notice?: string;
 };
 
-function matchesPrice(item: CatalogItem, price: PriceFilter) {
-  if (price === "under2") return sellPrice(item) < 200_000;
-  if (price === "mid") return sellPrice(item) >= 200_000 && sellPrice(item) <= 500_000;
-  if (price === "over5") return sellPrice(item) > 500_000;
+function matchesPrice(item: CatalogItem, price: PriceFilter, branchId?: string | null) {
+  if (price === "under2") return sellPrice(item, branchId) < 200_000;
+  if (price === "mid") return sellPrice(item, branchId) >= 200_000 && sellPrice(item, branchId) <= 500_000;
+  if (price === "over5") return sellPrice(item, branchId) > 500_000;
   return true;
 }
 
@@ -71,6 +78,9 @@ export function ItemsScreen({
   category,
   onCategory,
   onAdd,
+  combos,
+  onAddCombo,
+  branchId,
   query,
   onQuery,
   onCommitQuery,
@@ -84,6 +94,7 @@ export function ItemsScreen({
   const [stock, setStock] = useState<StockFilter>("all");
   const [price, setPrice] = useState<PriceFilter>("all");
   const [sort, setSort] = useState<SortFilter>("default");
+  const [picks, setPicks] = useState<Record<string, string>>({});
 
   const chips = useMemo(() => {
     const names = Array.from(
@@ -118,7 +129,7 @@ export function ItemsScreen({
         return false;
       }
       if (!matchesStock(item, stock, lowQty)) return false;
-      if (!matchesPrice(item, price)) return false;
+      if (!matchesPrice(item, price, branchId)) return false;
       if (stock !== "out" && !settings.showOutOfStock && item.onHand <= 0) {
         return false;
       }
@@ -128,14 +139,35 @@ export function ItemsScreen({
     if (sort === "name") {
       ordered.sort((a, b) => a.name.localeCompare(b.name));
     } else if (sort === "price-asc") {
-      ordered.sort((a, b) => sellPrice(a) - sellPrice(b));
+      ordered.sort((a, b) => sellPrice(a, branchId) - sellPrice(b, branchId));
     } else if (sort === "price-desc") {
-      ordered.sort((a, b) => sellPrice(b) - sellPrice(a));
+      ordered.sort((a, b) => sellPrice(b, branchId) - sellPrice(a, branchId));
     } else if (sort === "stock") {
       ordered.sort((a, b) => b.onHand - a.onHand);
     }
     return ordered;
-  }, [items, settings, activeCategory, stock, price, sort]);
+  }, [items, settings, activeCategory, stock, price, sort, branchId]);
+
+  const families = useMemo(() => groupIntoFamilies(visibleItems), [visibleItems]);
+
+  function chooseVariant(familyKey: string, memberId: string) {
+    setPicks((current) => ({ ...current, [familyKey]: memberId }));
+  }
+
+  const matchingCombos = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return combos.filter((combo) => {
+      if (combo.active === false) return false;
+      if (!q) return true;
+      return (
+        combo.name.toLowerCase().includes(q) ||
+        (combo.description ?? "").toLowerCase().includes(q) ||
+        combo.components.some((component) =>
+          component.name.toLowerCase().includes(q),
+        )
+      );
+    });
+  }, [combos, query]);
 
   const activeFilters = useMemo(() => {
     const rows: { key: string; label: string; clear: () => void }[] = [];
@@ -303,7 +335,7 @@ export function ItemsScreen({
                 <div>
                   <h2>Filter</h2>
                   <p>
-                    {visibleItems.length} of {items.length} item
+                    {families.length} of {items.length} item
                     {items.length === 1 ? "" : "s"}
                   </p>
                 </div>
@@ -384,7 +416,7 @@ export function ItemsScreen({
                 className="continue filter-apply"
                 onClick={() => setFilterOpen(false)}
               >
-                Show {visibleItems.length} item{visibleItems.length === 1 ? "" : "s"}
+                Show {families.length} item{families.length === 1 ? "" : "s"}
               </button>
             </div>
           ) : null}
@@ -425,7 +457,7 @@ export function ItemsScreen({
           ))}
         </div>
       )}
-      {visibleItems.length === 0 ? (
+      {visibleItems.length === 0 && matchingCombos.length === 0 ? (
         <div className="catalog-empty">
           <div className="catalog-empty-icon" aria-hidden="true">
             <Search size={26} strokeWidth={1.8} />
@@ -466,63 +498,147 @@ export function ItemsScreen({
           ) : null}
         </div>
       ) : (
-        <div className="grid">
-          {visibleItems.map((item) => (
-            <article className="card" key={item.id}>
-              <button
-                type="button"
-                className="card-hit"
-                onClick={() => onAdd(item)}
-              >
-                {item.image ? (
-                  <img
-                    src={item.image}
-                    alt=""
-                    onError={(event) => {
-                      const target = event.currentTarget;
-                      target.onerror = null;
-                      target.src = "";
-                    }}
-                  />
-                ) : (
-                  <div className="card-img-fallback">
-                    {item.name.slice(0, 2).toUpperCase()}
-                  </div>
-                )}
-              </button>
-              <div className="card-foot">
-                <div className="card-body">
-                  <strong className="card-name">{item.name}</strong>
-                  <div className="price">
-                    {formatMoney(sellPrice(item))}
-                    <span className="price-unit">
-                      {" "}
-                      {formatPricePer(item.unit ?? "each", item.unitLabel)}
-                    </span>
-                  </div>
-                  {item.onHand <= settings.lowStockQty && item.onHand > 0 ? (
-                    <div className="card-stock low">
-                      {formatStock(
-                        item.onHand,
-                        item.unit ?? "each",
-                        item.packSize ?? 1,
-                        item.unitLabel,
-                      )}
-                    </div>
-                  ) : null}
-                </div>
-                <button
-                  className="add"
-                  type="button"
-                  onClick={() => onAdd(item)}
-                  aria-label={`Add ${item.name}`}
-                >
-                  <Plus size={16} strokeWidth={2.4} />
-                </button>
+        <>
+          {matchingCombos.length > 0 ? (
+            <div className="combo-section">
+              <div className="combo-section-head">
+                <h2>Combos</h2>
+                <span>
+                  {matchingCombos.length} set
+                  {matchingCombos.length === 1 ? "" : "s"}
+                </span>
               </div>
-            </article>
-          ))}
-        </div>
+              <div className="grid combo-grid">
+                {matchingCombos.map((combo) => (
+                  <article className="card card-combo" key={combo.id}>
+                    <button
+                      type="button"
+                      className="card-hit"
+                      onClick={() => onAddCombo(combo)}
+                    >
+                      <div className="card-img-fallback combo-fallback">
+                        {combo.name.slice(0, 2).toUpperCase()}
+                        <span className="combo-badge">COMBO</span>
+                      </div>
+                    </button>
+                    <div className="card-foot">
+                      <div className="card-body">
+                        <strong className="card-name">{combo.name}</strong>
+                        <div className="price">
+                          {formatMoney(combo.priceMinor)}
+                        </div>
+                        <div
+                          className={`card-stock${
+                            combo.availableSets <= 0
+                              ? " out"
+                              : combo.availableSets <= settings.lowStockQty
+                                ? " low"
+                                : ""
+                          }`}
+                        >
+                          {combo.components.length} product
+                          {combo.components.length === 1 ? "" : "s"} in set
+                          {combo.availableSets > 0
+                            ? ` · ${combo.availableSets} available`
+                            : " · Out of stock"}
+                        </div>
+                      </div>
+                      <button
+                        className="add"
+                        type="button"
+                        onClick={() => onAddCombo(combo)}
+                        aria-label={`Add ${combo.name}`}
+                      >
+                        <Plus size={16} strokeWidth={2.4} />
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          {visibleItems.length > 0 && (
+            <div className="grid">
+              {families.map((family) => {
+                const members = family.members;
+                const multi = members.length > 1;
+                const item = multi
+                  ? members.find((row) => row.id === picks[family.key]) ??
+                    family.base
+                  : members[0]!;
+                return (
+                  <article className="card" key={family.key}>
+                    <button
+                      type="button"
+                      className="card-hit"
+                      onClick={() => onAdd(item)}
+                    >
+                      {item.image ? (
+                        <img
+                          src={item.image}
+                          alt=""
+                          onError={(event) => {
+                            const target = event.currentTarget;
+                            target.onerror = null;
+                            target.src = "";
+                          }}
+                        />
+                      ) : (
+                        <div className="card-img-fallback">
+                          {item.name.slice(0, 2).toUpperCase()}
+                        </div>
+                      )}
+                    </button>
+                    {multi ? (
+                      <div className="variant-chips">
+                        {members.map((member) => (
+                          <button
+                            type="button"
+                            key={member.id}
+                            className={`chip ${member.id === item.id ? "active" : ""}`}
+                            onClick={() => chooseVariant(family.key, member.id)}
+                          >
+                            {memberLabel(member)}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                    <div className="card-foot">
+                      <div className="card-body">
+                        <strong className="card-name">{item.name}</strong>
+                        <div className="price">
+                          {formatMoney(sellPrice(item, branchId))}
+                          <span className="price-unit">
+                            {" "}
+                            {formatPricePer(item.unit ?? "each", item.unitLabel)}
+                          </span>
+                        </div>
+                        {item.onHand <= settings.lowStockQty && item.onHand > 0 ? (
+                          <div className="card-stock low">
+                            {formatStock(
+                              item.onHand,
+                              item.unit ?? "each",
+                              item.packSize ?? 1,
+                              item.unitLabel,
+                            )}
+                          </div>
+                        ) : null}
+                      </div>
+                      <button
+                        className="add"
+                        type="button"
+                        onClick={() => onAdd(item)}
+                        aria-label={`Add ${item.name}`}
+                      >
+                        <Plus size={16} strokeWidth={2.4} />
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
     </section>
   );

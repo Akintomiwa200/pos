@@ -1,8 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, type FormEvent, type ReactNode } from "react";
-import { Barcode, Boxes, Package, Plus, Tag, Wallet, X } from "lucide-react";
-import { marginPercent, nairaInputFromMinor } from "@/lib/catalog";
+import { Barcode, Boxes, Package, Tag, Wallet, X } from "lucide-react";
+import {
+  marginPercent,
+  nairaInputFromMinor,
+  resolveSellPriceMinor,
+  type BranchPriceDraft,
+} from "@/lib/catalog";
 import { naira } from "@/lib/hq-ops";
 import { currencySymbol, useOrgLocale } from "@/lib/org-locale";
 import {
@@ -33,13 +38,10 @@ export type ItemDraft = {
   brand: string;
   cost: string;
   price: string;
-  branchPrice: string;
-  pricingSystem: "main" | "branch";
-  multiPricing: boolean;
+  /** Per-branch selling price overrides keyed by branch id. */
+  branchPrices: Record<string, BranchPriceDraft>;
   pricingMode: "direct" | "margin";
   marginInput: string;
-  branchPricingMode: "direct" | "margin";
-  branchMarginInput: string;
   onHand: string;
   reorderLevel: string;
   unit: string;
@@ -68,6 +70,8 @@ type Props = {
   subcategories: TaxonomyRecord[];
   units: TaxonomyRecord[];
   brands?: TaxonomyRecord[];
+  /** Active branches for per-branch price overrides. */
+  branches?: { id: string; name: string }[];
   onClose: () => void;
   onChange: (patch: Partial<ItemDraft>) => void;
   onImageChange: (file: File | null) => void;
@@ -156,6 +160,7 @@ export function ItemFormSheet({
   subcategories,
   units,
   brands = [],
+  branches = [],
   onClose,
   onChange,
   onImageChange,
@@ -163,7 +168,6 @@ export function ItemFormSheet({
 }: Props) {
   const { currency } = useOrgLocale();
   const mark = currencySymbol(currency);
-  const multiPricing = draft.multiPricing;
   useEffect(() => {
     if (!open) return;
     function onKey(event: KeyboardEvent) {
@@ -205,29 +209,6 @@ export function ItemFormSheet({
     return sell;
   }, [draft.pricingMode, draft.marginInput, cost, sell]);
 
-  const branchSell = useMemo(
-    () => Math.round((parseFloat(draft.branchPrice) || 0) * 100),
-    [draft.branchPrice],
-  );
-
-  const branchMargin = useMemo(() => {
-    if (draft.branchPricingMode === "margin") {
-      const input = parseFloat(draft.branchMarginInput);
-      if (Number.isFinite(input)) return Math.max(-9999, Math.min(100, input));
-    }
-    return marginPercent(cost, branchSell);
-  }, [draft.branchPricingMode, draft.branchMarginInput, cost, branchSell]);
-
-  const branchEffectiveSell = useMemo(() => {
-    if (draft.branchPricingMode === "margin") {
-      const pct = Number.isFinite(parseFloat(draft.branchMarginInput))
-        ? Math.max(-9999, Math.min(100, parseFloat(draft.branchMarginInput)))
-        : 0;
-      return pct >= 100 ? 0 : Math.round(cost / (1 - pct / 100));
-    }
-    return branchSell;
-  }, [draft.branchPricingMode, draft.branchMarginInput, cost, branchSell]);
-
   const activeCategories = useMemo(
     () => categories.filter((row) => row.active),
     [categories],
@@ -254,6 +235,41 @@ export function ItemFormSheet({
     const fromRecord = unitKindFromRecord(selectedUnit);
     return (fromRecord as UnitKind | null) ?? inferUnitKind(unitCode(selectedUnit));
   }, [selectedUnit, draft.unit]);
+
+  function branchMinor(row: BranchPriceDraft) {
+    return Math.round((parseFloat(row.price) || 0) * 100);
+  }
+
+  function resolveBranch(row: BranchPriceDraft) {
+    if (row.mode === "margin") {
+      const pct = Number.isFinite(parseFloat(row.marginInput))
+        ? Math.max(-9999, Math.min(99.9, parseFloat(row.marginInput)))
+        : 0;
+      return pct >= 100 ? 0 : Math.max(0, Math.round(cost / (1 - pct / 100)));
+    }
+    return branchMinor(row);
+  }
+
+  function patchBranch(id: string, patch: Partial<BranchPriceDraft>) {
+    const current = draft.branchPrices[id] ?? {
+      price: "",
+      mode: "direct" as const,
+      marginInput: "",
+    };
+    onChange({
+      branchPrices: { ...draft.branchPrices, [id]: { ...current, ...patch } },
+    });
+  }
+
+  function setBranchOverride(id: string, on: boolean) {
+    const next = { ...draft.branchPrices };
+    if (on) {
+      next[id] = { price: "", mode: "direct", marginInput: "" };
+    } else {
+      delete next[id];
+    }
+    onChange({ branchPrices: next });
+  }
 
   if (!open) return null;
 
@@ -655,185 +671,144 @@ export function ItemFormSheet({
                 )}
               </div>
 
-              {multiPricing ? (
-                <div className="mt-4 rounded-xl border border-pos-border bg-pos-surface-muted/60 p-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-medium text-pos-ink">Pricing System 2 · Branch</p>
-                      <p className="mt-0.5 text-[12px] text-pos-ink-faint">
-                        Branches sold under System 2 use this price. The main system (System 1) is set above.
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => onChange({ multiPricing: false, pricingSystem: "main" })}
-                      className="inline-flex items-center gap-1 rounded-full border border-pos-border px-3 py-1.5 text-[12px] font-medium text-pos-ink-muted transition hover:text-pos-ink disabled:opacity-60"
-                    >
-                      <X size={14} /> Remove
-                    </button>
-                  </div>
-
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => onChange({ branchPricingMode: "direct" })}
-                      className={`flex-1 rounded-full px-4 py-2 text-sm font-medium transition ${
-                        draft.branchPricingMode === "direct"
-                          ? "bg-pos-primary text-white shadow-pos-primary"
-                          : "bg-pos-surface text-pos-ink-muted hover:text-pos-ink"
-                      }`}
-                    >
-                      Set selling price directly
-                    </button>
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => onChange({ branchPricingMode: "margin" })}
-                      className={`flex-1 rounded-full px-4 py-2 text-sm font-medium transition ${
-                        draft.branchPricingMode === "margin"
-                          ? "bg-pos-primary text-white shadow-pos-primary"
-                          : "bg-pos-surface text-pos-ink-muted hover:text-pos-ink"
-                      }`}
-                    >
-                      Set by margin
-                    </button>
-                  </div>
-
-                  <div className="mt-3 grid gap-4 sm:grid-cols-2">
-                    <div className="rounded-lg border border-pos-border bg-pos-surface px-3 py-2">
-                      <p className="text-[12px] text-pos-ink-faint">
-                        Cost price ({mark}) · shared with System 1
-                      </p>
-                      <p className="text-sm font-medium text-pos-ink">{naira(cost)}</p>
-                    </div>
-                    <InputLabel
-                      label={`Branch selling price (${mark})`}
-                      hint={
-                        draft.branchPricingMode === "margin"
-                          ? `Computed as Cost ÷ (1 − margin) — ${naira(branchEffectiveSell)}.`
-                          : `Branches sold under System 2 pay ${formatPricePer(draft.unit, selectedUnit?.name)}.`
-                      }
-                    >
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        className={fieldClass}
-                        placeholder="0.00"
-                        value={
-                          draft.branchPricingMode === "margin"
-                            ? nairaInputFromMinor(branchEffectiveSell)
-                            : draft.branchPrice
-                        }
-                        disabled={busy || draft.branchPricingMode === "margin"}
-                        onChange={(event) => onChange({ branchPrice: event.target.value })}
-                      />
-                    </InputLabel>
-                  </div>
-
-                  {draft.branchPricingMode === "margin" ? (
-                    <div className="mt-4">
-                      <InputLabel
-                        label="Branch margin (%)"
-                        hint="Change the margin and the branch selling price recalculates from the shared cost."
-                      >
-                        <input
-                          type="number"
-                          step="0.1"
-                          min={-999}
-                          max={99.9}
-                          className={fieldClass}
-                          placeholder="e.g. 30"
-                          value={draft.branchMarginInput}
-                          disabled={busy}
-                          onChange={(event) => onChange({ branchMarginInput: event.target.value })}
-                        />
-                      </InputLabel>
-                    </div>
-                  ) : null}
-
-                  <div className="mt-3 rounded-xl border border-pos-border bg-pos-surface-muted px-4 py-3 text-sm">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-pos-ink-muted">Gross margin</span>
-                      <span className="font-semibold text-pos-ink">{branchMargin}%</span>
-                    </div>
-                    <div className="mt-1 flex items-center justify-between gap-3 text-xs text-pos-ink-faint">
-                      <span>
-                        {draft.branchPricingMode === "margin"
-                          ? "Computed selling price"
-                          : "Markup per unit"}
-                      </span>
-                      <span>{naira(branchEffectiveSell)}</span>
-                    </div>
-                    {draft.branchPricingMode === "margin" ? (
-                      <p className="mt-2 text-[11px] leading-snug text-pos-ink-faint">
-                        Selling price is computed as Cost ÷ (1 − margin). Change the cost or margin to
-                        recalculate.
-                      </p>
-                    ) : (
-                      <p className="mt-2 text-[11px] leading-snug text-pos-ink-faint">
-                        Branch selling price is entered independently of cost.
-                      </p>
-                    )}
-                  </div>
+              <div className="mt-4 rounded-xl border border-pos-border bg-pos-surface-muted/60 p-3">
+                <div>
+                  <p className="text-sm font-medium text-pos-ink">Branch prices</p>
+                  <p className="mt-0.5 text-[12px] text-pos-ink-faint">
+                    Optional. Give any branch its own selling price. A branch without an override
+                    uses the main price above ({naira(effectiveSell)}), so one price assumes all others.
+                  </p>
                 </div>
-              ) : (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => onChange({ multiPricing: true })}
-                  className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-pos-border px-4 py-3 text-sm font-medium text-pos-ink-muted transition hover:border-pos-primary hover:text-pos-primary disabled:opacity-60"
-                >
-                  <Plus size={16} /> Add pricing system{" "}
-                  <span className="text-[12px] font-normal text-pos-ink-faint">
-                    branches that opt into System 2 charge this price
-                  </span>
-                </button>
-              )}
 
-              <div className="mt-4">
-                <InputLabel
-                  label="Sell under"
-                  hint="Which pricing system this product is live on for now. Change anytime, real time."
-                >
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => onChange({ pricingSystem: "main" })}
-                      className={`flex-1 rounded-full px-4 py-2 text-sm font-medium transition ${
-                        draft.pricingSystem === "main"
-                          ? "bg-pos-primary text-white shadow-pos-primary"
-                          : "bg-pos-surface-muted text-pos-ink-muted hover:text-pos-ink"
-                      }`}
-                    >
-                      Pricing System 1 · Main
-                    </button>
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => onChange({ pricingSystem: "branch" })}
-                      className={`flex-1 rounded-full px-4 py-2 text-sm font-medium transition ${
-                        draft.pricingSystem === "branch"
-                          ? "bg-pos-primary text-white shadow-pos-primary"
-                          : "bg-pos-surface-muted text-pos-ink-muted hover:text-pos-ink"
-                      }`}
-                    >
-                      Pricing System 2 · Branch
-                    </button>
-                  </div>
-                  {draft.pricingSystem === "branch" && !multiPricing ? (
-                    <button
-                      type="button"
-                      className="mt-2 inline-flex text-[12px] font-medium text-pos-primary hover:underline"
-                      onClick={() => onChange({ multiPricing: true })}
-                    >
-                      Enable multi pricing to set the branch price
-                    </button>
-                  ) : null}
-                </InputLabel>
+                {branches.length === 0 ? (
+                  <p className="mt-3 rounded-lg border border-dashed border-pos-border px-3 py-2.5 text-[12px] text-pos-ink-faint">
+                    No branches yet. Add branches under Setup, then set per-branch prices here.
+                  </p>
+                ) : null}
+
+                <div className="mt-3 space-y-2.5">
+                  {branches.map((branch) => {
+                    const row = draft.branchPrices[branch.id];
+                    const on = Boolean(row);
+                    const resolved = on
+                      ? resolveBranch(row!)
+                      : effectiveSell;
+                    const gm = on ? marginPercent(cost, resolved) : margin;
+                    return (
+                      <div
+                        key={branch.id}
+                        className="rounded-xl border border-pos-border bg-pos-surface px-3 py-2.5"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium text-pos-ink">
+                              {branch.name}
+                            </p>
+                            <p className="mt-0.5 text-[12px] text-pos-ink-faint">
+                              {on
+                                ? `Custom price · ${naira(resolved)}`
+                                : `Uses main price · ${naira(effectiveSell)}`}
+                            </p>
+                          </div>
+                          <Toggle
+                            checked={on}
+                            disabled={busy}
+                            onChange={(value) => setBranchOverride(branch.id, value)}
+                          />
+                        </div>
+
+                        {on ? (
+                          <div className="mt-3">
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                disabled={busy}
+                                onClick={() => patchBranch(branch.id, { mode: "direct" })}
+                                className={`flex-1 rounded-full px-4 py-2 text-sm font-medium transition ${
+                                  row!.mode === "direct"
+                                    ? "bg-pos-primary text-white shadow-pos-primary"
+                                    : "bg-pos-surface-muted text-pos-ink-muted hover:text-pos-ink"
+                                }`}
+                              >
+                                Set price directly
+                              </button>
+                              <button
+                                type="button"
+                                disabled={busy}
+                                onClick={() => patchBranch(branch.id, { mode: "margin" })}
+                                className={`flex-1 rounded-full px-4 py-2 text-sm font-medium transition ${
+                                  row!.mode === "margin"
+                                    ? "bg-pos-primary text-white shadow-pos-primary"
+                                    : "bg-pos-surface-muted text-pos-ink-muted hover:text-pos-ink"
+                                }`}
+                              >
+                                Set by margin
+                              </button>
+                            </div>
+
+                            {row!.mode === "margin" ? (
+                              <div className="mt-3">
+                                <InputLabel
+                                  label="Margin (%)"
+                                  hint={`Selling price computed from the shared cost — ${naira(resolved)}.`}
+                                >
+                                  <input
+                                    type="number"
+                                    step="0.1"
+                                    min={-999}
+                                    max={99.9}
+                                    className={fieldClass}
+                                    placeholder="e.g. 30"
+                                    value={row!.marginInput}
+                                    disabled={busy}
+                                    onChange={(event) =>
+                                      patchBranch(branch.id, { marginInput: event.target.value })
+                                    }
+                                  />
+                                </InputLabel>
+                              </div>
+                            ) : (
+                              <div className="mt-3">
+                                <InputLabel
+                                  label={`Selling price (${mark})`}
+                                  hint={`Per ${formatPricePer(draft.unit, selectedUnit?.name)}.`}
+                                >
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    className={fieldClass}
+                                    placeholder="0.00"
+                                    value={row!.price}
+                                    disabled={busy}
+                                    onChange={(event) =>
+                                      patchBranch(branch.id, { price: event.target.value })
+                                    }
+                                  />
+                                </InputLabel>
+                              </div>
+                            )}
+
+                            <div className="mt-3 rounded-xl border border-pos-border bg-pos-surface-muted px-4 py-3 text-sm">
+                              <div className="flex items-center justify-between gap-3">
+                                <span className="text-pos-ink-muted">Gross margin</span>
+                                <span className="font-semibold text-pos-ink">{gm}%</span>
+                              </div>
+                              <div className="mt-1 flex items-center justify-between gap-3 text-xs text-pos-ink-faint">
+                                <span>
+                                  {row!.mode === "margin"
+                                    ? "Computed selling price"
+                                    : "Markup per unit"}
+                                </span>
+                                <span>{naira(resolved)}</span>
+                              </div>
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </Section>
 

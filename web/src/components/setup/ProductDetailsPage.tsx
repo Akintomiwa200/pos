@@ -17,12 +17,13 @@ import {
   TrendingUp,
   Wallet,
 } from "lucide-react";
-import { marginPercent, multiPricingFromItem, nairaInputFromMinor, parseNairaInput, resolveSellPriceMinor } from "@/lib/catalog";
+import { branchPricesFromDraft, marginPercent, nairaInputFromMinor, parseNairaInput, resolveSellPriceMinor } from "@/lib/catalog";
 import { deleteCatalogItem, listSales, type HqCatalogItem, type HqSale } from "@/lib/hq-api";
 import { setProductsActive } from "@/lib/catalog-bulk";
 import { listMovements, naira, prettyDay, type StockMovement } from "@/lib/hq-ops";
 import { productImageFor, productImageSrc } from "@/lib/product-image";
 import { importCatalogRows } from "@/lib/hq-setup";
+import { useBranches } from "@/lib/use-branches";
 import { toast } from "@/lib/toast";
 import { formatMovementQty, formatStock, inferUnitKind } from "@/lib/units";
 import { useLiveCatalog } from "@/lib/live-catalog";
@@ -112,13 +113,14 @@ function toDraft(item: HqCatalogItem): ItemDraft {
     brand: item.brand ?? "",
     cost: nairaInputFromMinor(item.costMinor ?? 0),
     price: nairaInputFromMinor(item.priceMinor),
-    branchPrice: item.branchPriceMinor != null ? nairaInputFromMinor(item.branchPriceMinor) : "",
-    pricingSystem: item.pricingSystem === "branch" ? "branch" : "main",
-    multiPricing: multiPricingFromItem(item),
+    branchPrices: Object.fromEntries(
+      Object.entries(item.branchPrices ?? {}).map(([branchId, minor]) => [
+        branchId,
+        { price: nairaInputFromMinor(minor), mode: "direct", marginInput: "" },
+      ]),
+    ),
     pricingMode: "direct",
     marginInput: "",
-    branchPricingMode: "direct",
-    branchMarginInput: "",
     onHand: String(item.onHand),
     reorderLevel: String(item.reorderLevel ?? 5),
     unit: item.unit || "each",
@@ -137,6 +139,7 @@ export function ProductDetailsPage({ id }: { id: string }) {
   const { rows: subcategories, ready: subsReady } = useLiveDirectoryRows("item-subgroups");
   const { rows: units, ready: unitReady } = useLiveDirectoryRows("units");
   const { rows: brands, ready: brandReady } = useLiveDirectoryRows("manufacturers");
+  const branches = useBranches();
   const [draft, setDraft] = useState<ItemDraft | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [editOpen, setEditOpen] = useState(false);
@@ -268,15 +271,7 @@ export function ProductDetailsPage({ id }: { id: string }) {
             priceMinor: parseNairaInput(draft.price),
             marginInput: draft.marginInput,
           }),
-          branchPriceMinor: draft.multiPricing && (draft.branchPrice.trim() || draft.branchMarginInput.trim())
-            ? resolveSellPriceMinor({
-                pricingMode: draft.branchPricingMode,
-                costMinor,
-                priceMinor: parseNairaInput(draft.branchPrice),
-                marginInput: draft.branchMarginInput,
-              })
-            : undefined,
-          pricingSystem: draft.pricingSystem,
+          branchPrices: branchPricesFromDraft(draft, costMinor),
           onHand: Math.max(0, Math.round(parseFloat(draft.onHand) || 0)),
           reorderLevel: Math.max(0, Math.round(parseFloat(draft.reorderLevel) || 0)),
           unit: draft.unit || "each",
@@ -683,6 +678,7 @@ export function ProductDetailsPage({ id }: { id: string }) {
           subcategories={subcategories}
           units={units}
           brands={brands}
+          branches={branches}
           onClose={() => setEditOpen(false)}
           onChange={(patch) => setDraft((current) => (current ? { ...current, ...patch } : current))}
           onImageChange={setImageFile}

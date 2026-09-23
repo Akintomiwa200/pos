@@ -34,8 +34,8 @@ export type CatalogRow = {
   baseId?: string;
   costMinor?: number;
   priceMinor?: number;
-  branchPriceMinor?: number;
-  pricingSystem?: "main" | "branch";
+  /** Full per-branch price map (imports replace wholesale). */
+  branchPrices?: Record<string, number>;
   onHand?: number;
   reorderLevel?: number;
   unit?: string;
@@ -50,8 +50,8 @@ export type CatalogRow = {
 
 export type CatalogPatch = {
   priceMinor?: number;
-  branchPriceMinor?: number;
-  pricingSystem?: "main" | "branch";
+  /** Partial per-branch price map; a null value removes that branch's price. */
+  branchPrices?: Record<string, number | null>;
   costMinor?: number;
   onHand?: number;
   reorderLevel?: number;
@@ -143,6 +143,26 @@ export class CatalogService implements OnModuleInit {
     return this.items.find((item) => item.id === id) ?? null;
   }
 
+  /** Merge a partial per-branch price patch over the current map. */
+  private mergeBranchPrices(
+    current: Record<string, number> | undefined,
+    patch: Record<string, number | null>,
+  ) {
+    const next = { ...(current ?? {}) };
+    for (const [branchId, value] of Object.entries(patch ?? {})) {
+      const id = branchId.trim();
+      if (!id) continue;
+      const numeric =
+        value === null ? null : typeof value === "number" ? value : Number(value);
+      if (numeric === null || !Number.isFinite(numeric) || numeric < 0) {
+        delete next[id];
+      } else {
+        next[id] = Math.round(numeric);
+      }
+    }
+    return Object.keys(next).length ? next : undefined;
+  }
+
   update(id: string, patch: CatalogPatch) {
     const index = this.items.findIndex((item) => item.id === id);
     if (index === -1) return null;
@@ -157,16 +177,10 @@ export class CatalogService implements OnModuleInit {
         typeof patch.priceMinor === "number" && Number.isFinite(patch.priceMinor)
           ? patch.priceMinor
           : current.priceMinor,
-      branchPriceMinor:
-        patch.branchPriceMinor === null
-          ? undefined
-          : typeof patch.branchPriceMinor === "number" && Number.isFinite(patch.branchPriceMinor)
-            ? patch.branchPriceMinor
-            : current.branchPriceMinor,
-      pricingSystem:
-        patch.pricingSystem === "branch" || patch.pricingSystem === "main"
-          ? patch.pricingSystem
-          : current.pricingSystem ?? "main",
+      branchPrices:
+        patch.branchPrices !== undefined
+          ? this.mergeBranchPrices(current.branchPrices, patch.branchPrices)
+          : current.branchPrices,
       onHand:
         typeof patch.onHand === "number" && Number.isFinite(patch.onHand)
           ? patch.onHand
@@ -304,6 +318,12 @@ export class CatalogService implements OnModuleInit {
           typeof row.priceMinor === "number" && Number.isFinite(row.priceMinor)
             ? row.priceMinor
             : existing?.priceMinor ?? 0,
+        branchPrices:
+          row.branchPrices !== undefined
+            ? this.mergeBranchPrices(existing?.branchPrices, {
+                ...row.branchPrices,
+              })
+            : existing?.branchPrices,
         currency: "NGN",
         image:
           typeof row.image === "string" ? row.image.trim() : existing?.image ?? "",

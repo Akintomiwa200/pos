@@ -51,10 +51,21 @@ export function CurrentOrder({
           ) : (
             lines.map((line) => (
               <div className="line" key={line.id}>
-                <img src={line.image} alt="" />
+                {line.image ? (
+                  <img src={line.image} alt="" />
+                ) : (
+                  <div className="card-img-fallback line-thumb-fallback">
+                    {line.name.slice(0, 2).toUpperCase()}
+                  </div>
+                )}
                 <div className="line-body">
                   <div className="line-top">
-                    <div className="line-name">{line.name}</div>
+                    <div className="line-name">
+                      {line.isCombo ? (
+                        <span className="combo-badge">COMBO</span>
+                      ) : null}
+                      {line.name}
+                    </div>
                     <button
                       type="button"
                       className="line-del"

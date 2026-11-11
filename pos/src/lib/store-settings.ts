@@ -51,6 +51,7 @@ export type StoreSettings = {
   autoPrintRefund: boolean;
   restockOnRefund: boolean;
   refundWithoutTicket: boolean;
+  tipsEnabled: boolean;
   quickbooks: boolean;
   sage: boolean;
   zoho: boolean;
@@ -183,6 +184,7 @@ export function defaultStoreSettings(): StoreSettings {
     autoPrintRefund: true,
     restockOnRefund: true,
     refundWithoutTicket: false,
+    tipsEnabled: false,
     quickbooks: false,
     sage: false,
     zoho: false,

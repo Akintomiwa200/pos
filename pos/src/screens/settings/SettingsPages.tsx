@@ -514,7 +514,7 @@ export function ReceiptSettings() {
       return;
     }
     const id = toast.loading(`Printing preview on ${printer}…`);
-    printReceipt(sale)
+    printReceipt(sale, { kickDrawer: false })
       .then(() => toast.success(`Preview printed on ${printer}.`, { id }))
       .catch((error) =>
         toast.error(error instanceof Error ? error.message : "Print failed.", { id }),
@@ -915,6 +915,231 @@ export function PrintingSettings() {
           >
             Test
           </button>
+        </SetRow>
+      </SetCard>
+    </>
+  );
+}
+
+export function SalesSettings() {
+  const [settings, patch] = useSettings();
+
+  return (
+    <>
+      <p className="set-lede">
+        Control what cashiers can change at the till. Every switch here takes
+        effect on the next order — no restart needed.
+      </p>
+      <LiveNote>
+        {settings.allowDiscounts
+          ? `Discounts are on, capped at ${settings.maxDiscountPercent}% of the ticket.`
+          : "Discounts are hidden from the order panel."}{" "}
+        {settings.requireManagerPin
+          ? "A supervisor PIN is required for discounts and price overrides."
+          : "Cashiers can apply these changes without a supervisor PIN."}
+      </LiveNote>
+      <SetCard title="Discounts">
+        <SetRow
+          label="Allow order discounts?"
+          hint="Shows the Discount button on the current order"
+        >
+          <Toggle
+            on={settings.allowDiscounts}
+            onChange={(allowDiscounts) => patch({ allowDiscounts })}
+          />
+        </SetRow>
+        <SetRow
+          label="Maximum discount a cashier can give"
+          hint="Applies to the whole ticket before service and VAT"
+        >
+          <NumField
+            value={settings.maxDiscountPercent}
+            step={1}
+            min={0}
+            onChange={(maxDiscountPercent) =>
+              patch({
+                maxDiscountPercent: Math.max(
+                  0,
+                  Math.min(100, Math.round(maxDiscountPercent)),
+                ),
+              })
+            }
+          />
+        </SetRow>
+      </SetCard>
+      <SetCard title="Price changes">
+        <SetRow
+          label="Allow editing an item's selling price?"
+          hint="The line price can be overridden on the current order"
+        >
+          <Toggle
+            on={settings.allowPriceOverride}
+            onChange={(allowPriceOverride) => patch({ allowPriceOverride })}
+          />
+        </SetRow>
+      </SetCard>
+      <SetCard title="Tips">
+        <SetRow
+          label="Prompt for a tip at checkout?"
+          hint="Adds a tip step before payment and prints the tip on the receipt"
+        >
+          <Toggle
+            on={settings.tipsEnabled}
+            onChange={(tipsEnabled) => patch({ tipsEnabled })}
+          />
+        </SetRow>
+      </SetCard>
+      <SetCard title="Supervisor approval">
+        <SetRow
+          label="Require a manager PIN for discounts, refunds and price overrides?"
+          hint="The cashier stays signed in; a supervisor authorises the action"
+        >
+          <Toggle
+            on={settings.requireManagerPin}
+            onChange={(requireManagerPin) => patch({ requireManagerPin })}
+          />
+        </SetRow>
+      </SetCard>
+    </>
+  );
+}
+
+export function HoldsSettings() {
+  const [settings, patch] = useSettings();
+
+  return (
+    <>
+      <p className="set-lede">
+        Held orders are parked on this till and shared with the other tills so
+        any cashier can recall them.
+      </p>
+      <LiveNote>
+        {settings.autoCancelExpiredHolds
+          ? `Held orders expire after ${settings.holdExpiryMinutes || 0} minutes and are removed automatically.`
+          : "Held orders stay in Saved until someone recalls or deletes them."}{" "}
+        {settings.showHoldsOnAllTills
+          ? "Every till sees the shared hold list."
+          : "Cashiers only see holds parked on this till."}
+      </LiveNote>
+      <SetCard title="Held orders">
+        <SetRow
+          label="Expire holds after this many minutes"
+          hint="Set 0 to keep holds until they are recalled"
+        >
+          <NumField
+            value={settings.holdExpiryMinutes}
+            step={5}
+            min={0}
+            onChange={(holdExpiryMinutes) =>
+              patch({ holdExpiryMinutes: Math.max(0, Math.round(holdExpiryMinutes)) })
+            }
+          />
+        </SetRow>
+        <SetRow
+          label="Automatically cancel expired holds?"
+          hint="When off, expired orders stay in Saved with a warning"
+        >
+          <Toggle
+            on={settings.autoCancelExpiredHolds}
+            onChange={(autoCancelExpiredHolds) => patch({ autoCancelExpiredHolds })}
+          />
+        </SetRow>
+        <SetRow
+          label="Require a customer or ticket name?"
+          hint="The Hold button will not save an unnamed order"
+        >
+          <Toggle
+            on={settings.requireNameOnHold}
+            onChange={(requireNameOnHold) => patch({ requireNameOnHold })}
+          />
+        </SetRow>
+        <SetRow
+          label="Show holds from every till?"
+          hint="Turn off to keep each till's holds private"
+        >
+          <Toggle
+            on={settings.showHoldsOnAllTills}
+            onChange={(showHoldsOnAllTills) => patch({ showHoldsOnAllTills })}
+          />
+        </SetRow>
+        <SetRow
+          label="Beep when a held order is recalled?"
+          hint="Helps the cashier notice the order has been restored"
+        >
+          <Toggle
+            on={settings.soundOnHoldRecall}
+            onChange={(soundOnHoldRecall) => patch({ soundOnHoldRecall })}
+          />
+        </SetRow>
+      </SetCard>
+    </>
+  );
+}
+
+export function RefundsSettings() {
+  const [settings, patch] = useSettings();
+
+  return (
+    <>
+      <p className="set-lede">
+        Refunds are recorded as negative sales linked to the original ticket, so
+        the day's totals and stock stay accurate.
+      </p>
+      <LiveNote>
+        {settings.allowPartialRefunds
+          ? "Cashiers can return individual lines or quantities."
+          : "Only full refunds of the remaining ticket are allowed."}{" "}
+        {settings.restockOnRefund
+          ? "Returned stock goes back on hand."
+          : "Returned stock is not added back."}
+      </LiveNote>
+      <SetCard title="Refund rules">
+        <SetRow
+          label="Allow partial refunds?"
+          hint="Off: every remaining item on the ticket must be returned"
+        >
+          <Toggle
+            on={settings.allowPartialRefunds}
+            onChange={(allowPartialRefunds) => patch({ allowPartialRefunds })}
+          />
+        </SetRow>
+        <SetRow
+          label="Put refunded items back in stock?"
+          hint="Adds the returned quantity back to the catalog on HQ"
+        >
+          <Toggle
+            on={settings.restockOnRefund}
+            onChange={(restockOnRefund) => patch({ restockOnRefund })}
+          />
+        </SetRow>
+        <SetRow
+          label="Auto-print a refund receipt?"
+          hint="Prints the refund slip after it is recorded"
+        >
+          <Toggle
+            on={settings.autoPrintRefund}
+            onChange={(autoPrintRefund) => patch({ autoPrintRefund })}
+          />
+        </SetRow>
+        <SetRow
+          label="Allow refunds without the original ticket?"
+          hint="Shows a blind-refund entry on the Saved screen"
+        >
+          <Toggle
+            on={settings.refundWithoutTicket}
+            onChange={(refundWithoutTicket) => patch({ refundWithoutTicket })}
+          />
+        </SetRow>
+      </SetCard>
+      <SetCard title="Supervisor approval">
+        <SetRow
+          label="Require a manager PIN before a refund?"
+          hint="Shared with discount and price-override approval"
+        >
+          <Toggle
+            on={settings.requireManagerPin}
+            onChange={(requireManagerPin) => patch({ requireManagerPin })}
+          />
         </SetRow>
       </SetCard>
     </>

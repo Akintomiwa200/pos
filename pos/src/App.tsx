@@ -11,6 +11,8 @@ import { PaymentOverlay } from "./components/payment/PaymentOverlay";
 import { LoyaltyModal } from "./components/payment/LoyaltyModal";
 import { DiscountModal } from "./components/payment/DiscountModal";
 import { RefundModal } from "./components/payment/RefundModal";
+import { TipModal } from "./components/payment/TipModal";
+import { BlindRefundModal } from "./components/payment/BlindRefundModal";
 import { ItemsScreen } from "./screens/items/ItemsScreen";
 import { PaymentMethodsScreen } from "./screens/payment-methods/PaymentMethodsScreen";
 import { SplitPaymentScreen } from "./screens/split-payment/SplitPaymentScreen";
@@ -175,12 +177,22 @@ export default function App() {
   const [pinError, setPinError] = useState("");
   const [pinBusy, setPinBusy] = useState(false);
   const [pendingPrice, setPendingPrice] = useState<{ id: string; price: number } | null>(null);
-  const [holds, setHolds] = useState<HeldTicket[]>(() => pruneExpiredHolds(loadLocalHolds()));
+  const [holds, setHolds] = useState<HeldTicket[]>(() => {
+    const local = loadLocalHolds();
+    return loadStoreSettings().autoCancelExpiredHolds
+      ? pruneExpiredHolds(local)
+      : local;
+  });
   const [discountMinor, setDiscountMinor] = useState(0);
   const [holdOpen, setHoldOpen] = useState(false);
   const [discountOpen, setDiscountOpen] = useState(false);
   const [refundSale, setRefundSale] = useState<SaleReceipt | null>(null);
   const [pendingRefund, setPendingRefund] = useState<{ sale: SaleReceipt; lines: CartLine[]; reason: string } | null>(null);
+  const [blindRefundOpen, setBlindRefundOpen] = useState(false);
+  const [pendingBlindRefund, setPendingBlindRefund] = useState<{ amountMinor: number; tender: TenderType; reason: string } | null>(null);
+  const [tipOpen, setTipOpen] = useState(false);
+  const [tipContext, setTipContext] = useState<{ method: TenderType; loyalty: string | null } | null>(null);
+  const [tipMinor, setTipMinor] = useState(0);
   const [pendingDiscount, setPendingDiscount] = useState<number | null>(null);
   const [notice, setNotice] = useState("");
   const [activeTableId, setActiveTableId] = useState<string | null>(null);
@@ -218,9 +230,23 @@ export default function App() {
   }, [holds]);
 
   useEffect(() => {
-    const timer = window.setInterval(() => setHolds((current) => pruneExpiredHolds(current)), 30_000);
+    if (!settings.autoCancelExpiredHolds) return;
+    const timer = window.setInterval(
+      () => setHolds((current) => pruneExpiredHolds(current)),
+      30_000,
+    );
     return () => window.clearInterval(timer);
-  }, []);
+  }, [settings.autoCancelExpiredHolds]);
+
+  // Keep the order discount within the ticket value and the store's cap when
+  // lines are removed or the limit is lowered in Settings.
+  useEffect(() => {
+    const subtotal = cartSubtotal(cart);
+    const cap = settings.allowDiscounts
+      ? Math.min(subtotal, Math.round((subtotal * settings.maxDiscountPercent) / 100))
+      : 0;
+    setDiscountMinor((current) => (current > cap ? cap : current));
+  }, [cart, settings.allowDiscounts, settings.maxDiscountPercent]);
 
   useEffect(() => startHqOrgSync(), []);
 
@@ -391,7 +417,15 @@ export default function App() {
       if (tableRows?.length) setFloor(tableRows);
       if (roomRows?.length) setRooms(roomRows);
       if (ticketRows?.length) setTickets(ticketRows);
-      if (holdRows) setHolds(pruneExpiredHolds(holdRows));
+      if (holdRows) {
+        const merged = new Map<string, HeldTicket>();
+        for (const row of holdRows) merged.set(row.id, row);
+        for (const row of loadLocalHolds()) {
+          if (!merged.has(row.id)) merged.set(row.id, row);
+        }
+        const rows = [...merged.values()];
+        setHolds(settings.autoCancelExpiredHolds ? pruneExpiredHolds(rows) : rows);
+      }
       boardsHydrated.current = true;
     }
     void hydrate();
@@ -441,6 +475,10 @@ export default function App() {
 
   function resetTill() {
     setCart([]);
+    setDiscountMinor(0);
+    setTipMinor(0);
+    setTipContext(null);
+    setTipOpen(false);
     setTender("cash");
     setSplitCount(2);
     setSplitTenders(["cash", "card"]);
@@ -544,6 +582,7 @@ export default function App() {
     setActiveRoomId(null);
     setActiveTicketId(null);
     setCart([]);
+    setDiscountMinor(0);
     setReceipt(null);
     setScreen("items");
   }
@@ -553,6 +592,7 @@ export default function App() {
     setActiveRoomId(null);
     setActiveTicketId(null);
     setCart(table.lines);
+    setDiscountMinor(0);
     setReceipt(null);
     setScreen("items");
   }
@@ -562,6 +602,7 @@ export default function App() {
     setActiveRoomId(null);
     setActiveTicketId(null);
     setCart([]);
+    setDiscountMinor(0);
     setReceipt(null);
     setScreen("items");
   }
@@ -578,6 +619,7 @@ export default function App() {
     setActiveTableId(null);
     setActiveTicketId(null);
     setCart([]);
+    setDiscountMinor(0);
     setReceipt(null);
     setScreen("items");
   }
@@ -587,6 +629,7 @@ export default function App() {
     setActiveTableId(null);
     setActiveTicketId(null);
     setCart(room.lines);
+    setDiscountMinor(0);
     setReceipt(null);
     setScreen("items");
   }
@@ -606,6 +649,7 @@ export default function App() {
     setActiveTableId(null);
     setActiveRoomId(null);
     setCart([]);
+    setDiscountMinor(0);
     setReceipt(null);
     setScreen("items");
   }
@@ -615,6 +659,7 @@ export default function App() {
     setActiveTableId(null);
     setActiveRoomId(null);
     setCart(ticket.lines);
+    setDiscountMinor(0);
     setReceipt(null);
     setScreen("items");
   }
@@ -688,6 +733,10 @@ export default function App() {
       if (gate === "refund") {
         if (!unlockedBy.privileges.includes("unlock") && !unlockedBy.privileges.includes("settings")) {
           throw new Error("This PIN does not have supervisor privileges.");
+        }
+        if (pendingBlindRefund) {
+          await processBlindRefund(unlockedBy);
+          return;
         }
         await processRefund(unlockedBy);
         return;
@@ -970,17 +1019,23 @@ export default function App() {
       tillKey: activeTill.name,
       cashierName: session.name,
     });
-    setHolds((current) => [hold, ...pruneExpiredHolds(current)]);
+    setHolds((current) =>
+      settings.autoCancelExpiredHolds
+        ? [hold, ...pruneExpiredHolds(current)]
+        : [hold, ...current],
+    );
     setHoldOpen(false);
-    setCart([]);
-    setDiscountMinor(0);
+    newOrder();
     setScreen("saved");
     toast.success("Order parked in Saved.");
   }
 
-  async function processRefund(unlockedBy: StaffUser) {
-    if (!pendingRefund || !session) return;
-    const { sale, lines, reason } = pendingRefund;
+  async function processRefund(
+    unlockedBy: StaffUser,
+    payload: { sale: SaleReceipt; lines: CartLine[]; reason: string } | null = pendingRefund,
+  ) {
+    if (!payload || !session) return;
+    const { sale, lines, reason } = payload;
     const refund = buildRefundSale({
       original: sale,
       selected: lines,
@@ -993,12 +1048,30 @@ export default function App() {
     if (settings.trackStockOnTill && settings.restockOnRefund) {
       applySaleDeltas(lines.filter((line) => !line.isCombo).map((line) => ({ itemId: line.itemId, delta: line.quantity })));
     }
-    const delivered = await archiveSale(refund);
-    if (!delivered) setPendingSales((count) => count + 1);
     setRefundSale(null);
     setPendingRefund(null);
     setGate(null);
-    setNotice(`Refund ${refund.ticketId} recorded for ${formatMoney(Math.abs(refund.totalMinor), settings.currency)}.`);
+    setReceipt(refund);
+    setReceiptSaved("saving");
+    setScreen("paid");
+    const delivered = await archiveSale(refund);
+    setReceiptSaved(delivered ? "saved" : "queued");
+    if (!delivered) {
+      setPendingSales((count) => count + 1);
+      toast.error("HQ unreachable — refund receipt queued and will retry automatically.");
+    } else if (pendingSales > 0) {
+      void flushSalesOutbox().then(setPendingSales);
+    }
+    setShift((current) =>
+      current
+        ? {
+            ...current,
+            salesCount: current.salesCount + 1,
+            salesMinor: current.salesMinor + refund.totalMinor,
+          }
+        : current,
+    );
+    void recordShiftSale(session.id, refund.totalMinor);
   }
 
   function requestRefund(sale: SaleReceipt, lines: CartLine[], reason: string) {
@@ -1009,7 +1082,74 @@ export default function App() {
       setGate("refund");
       return;
     }
-    if (session) void processRefund(session);
+    if (session) void processRefund(session, { sale, lines, reason });
+  }
+
+  async function processBlindRefund(
+    unlockedBy: StaffUser,
+    payload: { amountMinor: number; tender: TenderType; reason: string } | null = pendingBlindRefund,
+  ) {
+    if (!payload || !session) return;
+    const amount = Math.max(0, Math.round(payload.amountMinor));
+    if (amount <= 0) {
+      setBlindRefundOpen(false);
+      setPendingBlindRefund(null);
+      setGate(null);
+      return;
+    }
+    const refund: SaleReceipt = {
+      ticketId: takeNextTicketId(settings),
+      paidAt: new Date().toISOString(),
+      lines: [],
+      totalMinor: -amount,
+      tender: payload.tender,
+      cashierName: session.name,
+      tillKey: activeTill?.name ?? null,
+      discountMinor: 0,
+      kind: "refund",
+      refundOf: null,
+      refundReason: payload.reason.trim() || "No original ticket",
+      refundedBy: unlockedBy.name,
+    };
+    setBlindRefundOpen(false);
+    setPendingBlindRefund(null);
+    setGate(null);
+    setReceipt(refund);
+    setReceiptSaved("saving");
+    setScreen("paid");
+    const delivered = await archiveSale(refund);
+    setReceiptSaved(delivered ? "saved" : "queued");
+    if (!delivered) {
+      setPendingSales((count) => count + 1);
+      toast.error("HQ unreachable — refund receipt queued and will retry automatically.");
+    } else if (pendingSales > 0) {
+      void flushSalesOutbox().then(setPendingSales);
+    }
+    setShift((current) =>
+      current
+        ? {
+            ...current,
+            salesCount: current.salesCount + 1,
+            salesMinor: current.salesMinor + refund.totalMinor,
+          }
+        : current,
+    );
+    void recordShiftSale(session.id, refund.totalMinor);
+  }
+
+  function requestBlindRefund(input: {
+    amountMinor: number;
+    tender: TenderType;
+    reason: string;
+  }) {
+    setBlindRefundOpen(false);
+    setPendingBlindRefund(input);
+    if (settings.requireManagerPin) {
+      setPinError("");
+      setGate("refund");
+      return;
+    }
+    if (session) void processBlindRefund(session, input);
   }
 
   function resizeSplit(count: number) {
@@ -1028,9 +1168,15 @@ export default function App() {
     });
   }
 
-  function completeSale(method: TenderType, loyalty = loyaltyNumber) {
+  function completeSale(
+    method: TenderType,
+    loyalty = loyaltyNumber,
+    tip = tipMinor,
+  ) {
     if (!session) return;
-    const totalMinor = computeLineTotals(cart, settings, discountMinor).totalMinor;
+    const baseTotal = computeLineTotals(cart, settings, discountMinor).totalMinor;
+    const tipAmount = Math.max(0, Math.round(tip));
+    const totalMinor = baseTotal + tipAmount;
     const till = activeTill;
     const sale: SaleReceipt = {
       ticketId: takeNextTicketId(settings),
@@ -1045,6 +1191,7 @@ export default function App() {
         : null,
       tillKey: till?.name ?? null,
       discountMinor,
+      tipMinor: tipAmount > 0 ? tipAmount : null,
     };
     if (settings.trackStockOnTill) {
       applySaleDeltas(
@@ -1089,6 +1236,9 @@ export default function App() {
     }
     setCart([]);
     setDiscountMinor(0);
+    setTipMinor(0);
+    setTipContext(null);
+    setTipOpen(false);
     setTender("cash");
     setSplitCount(2);
     setSplitTenders(["cash", "card"]);
@@ -1117,8 +1267,36 @@ export default function App() {
   function finishLoyalty(number: string | null, method: TenderType = tender) {
     setLoyaltyNumber(number);
     setLoyaltyOpen(false);
+    if (settings.tipsEnabled) {
+      setTipContext({ method, loyalty: number });
+      setTipOpen(true);
+      return;
+    }
     setPaying(true);
-    window.setTimeout(() => completeSale(method, number), 1600);
+    window.setTimeout(() => completeSale(method, number, 0), 1600);
+  }
+
+  function confirmTip(amount: number) {
+    const context = tipContext;
+    const tipAmount = Math.max(0, Math.round(amount));
+    setTipOpen(false);
+    setTipContext(null);
+    setTipMinor(tipAmount);
+    setPaying(true);
+    window.setTimeout(
+      () =>
+        completeSale(
+          context?.method ?? tender,
+          context?.loyalty ?? loyaltyNumber,
+          tipAmount,
+        ),
+      1600,
+    );
+  }
+
+  function cancelTip() {
+    setTipOpen(false);
+    setTipContext(null);
   }
 
   function chargeSplitPart(index: number) {
@@ -1169,6 +1347,9 @@ export default function App() {
     }
     setCart([]);
     setDiscountMinor(0);
+    setTipMinor(0);
+    setTipContext(null);
+    setTipOpen(false);
     setTender("cash");
     setSplitCount(2);
     setSplitTenders(["cash", "card"]);
@@ -1186,7 +1367,7 @@ export default function App() {
       newOrder();
       return;
     }
-    if (screen === "home" || screen === "items" || screen === "kds") {
+    if (screen === "home" || screen === "items" || screen === "kds" || screen === "saved") {
       if (empty) return;
       setScreen("payment");
       return;
@@ -1355,6 +1536,7 @@ export default function App() {
             sale={receipt}
             saveState={receiptSaved}
             onNewOrder={newOrder}
+            onRefund={() => setRefundSale(receipt)}
           />
         )}
         {screen === "settings" && (
@@ -1380,9 +1562,21 @@ export default function App() {
               setCart(hold.lines);
               setDiscountMinor(hold.discountMinor);
               setHolds((current) => current.filter((row) => row.id !== hold.id));
+              setActiveTableId(null);
+              setActiveRoomId(null);
+              setActiveTicketId(null);
+              setReceipt(null);
+              setLoyaltyNumber(null);
+              setTender("cash");
+              if (settings.soundOnHoldRecall) beep();
               setScreen("items");
             }}
             onRefund={(sale) => setRefundSale(sale)}
+            onBlindRefund={
+              settings.refundWithoutTicket
+                ? () => setBlindRefundOpen(true)
+                : undefined
+            }
           />
         )}
       </main>
@@ -1478,6 +1672,7 @@ lines={cart}
             setPendingPrice(null);
             setPendingDiscount(null);
             setPendingRefund(null);
+            setPendingBlindRefund(null);
             setPinError("");
           }}
           onSubmit={(pin) => void handlePin(pin)}
@@ -1527,6 +1722,22 @@ lines={cart}
           settings={settings}
           onRefund={(lines, reason) => requestRefund(refundSale, lines, reason)}
           onCancel={() => setRefundSale(null)}
+        />
+      )}
+      {blindRefundOpen && (
+        <BlindRefundModal
+          settings={settings}
+          onSubmit={requestBlindRefund}
+          onCancel={() => setBlindRefundOpen(false)}
+        />
+      )}
+      {tipOpen && (
+        <TipModal
+          baseMinor={totals.totalMinor}
+          currency={settings.currency}
+          onConfirm={confirmTip}
+          onSkip={() => confirmTip(0)}
+          onCancel={cancelTip}
         />
       )}
       <PaymentOverlay

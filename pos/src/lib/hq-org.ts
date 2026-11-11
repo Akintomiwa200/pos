@@ -69,6 +69,7 @@ export type HqOrgSnapshot = {
     allowPartialRefunds?: boolean;
     restockOnRefund?: boolean;
     refundWithoutTicket?: boolean;
+    tipsEnabled?: boolean;
     autoPrintReceipt?: boolean;
     openCashDrawer?: boolean;
     receiptCopies?: number;
@@ -279,6 +280,7 @@ export function applyHqOrg(org: HqOrgSnapshot, till?: TillLocation | null) {
     allowPartialRefunds: s.allowPartialRefunds ?? current.allowPartialRefunds,
     restockOnRefund: s.restockOnRefund ?? current.restockOnRefund,
     refundWithoutTicket: s.refundWithoutTicket ?? current.refundWithoutTicket,
+    tipsEnabled: s.tipsEnabled ?? current.tipsEnabled,
     autoPrintReceipt: s.autoPrintReceipt ?? current.autoPrintReceipt,
     openCashDrawer: s.openCashDrawer ?? current.openCashDrawer,
     receiptCopies: duplicate ? Math.max(2, copies) : copies,

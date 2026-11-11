@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import {
   ArrowLeft,
+  Bookmark,
   Boxes,
   CreditCard,
   FileText,
@@ -8,16 +9,21 @@ import {
   Keyboard,
   Percent,
   Printer,
+  RotateCcw,
   ScanBarcode,
+  Tag,
 } from "lucide-react";
 import type { CatalogItem } from "../../lib/types";
 import { TillKeysSettings } from "./TillKeysSettings";
 import { LoyaltyHub } from "./LoyaltyPages";
 import {
   BarcodeSettings,
+  HoldsSettings,
   PaymentsSettings,
   PrintingSettings,
   ReceiptSettings,
+  RefundsSettings,
+  SalesSettings,
   StockSettings,
   TaxSettings,
 } from "./SettingsPages";
@@ -31,7 +37,10 @@ type Page =
   | "loyalty"
   | "printing"
   | "receipt"
-  | "payments";
+  | "payments"
+  | "sales"
+  | "holds"
+  | "refunds";
 
 type Props = {
   items: CatalogItem[];
@@ -41,6 +50,9 @@ type Props = {
 const TILES: { id: Page; label: string; icon: typeof Boxes }[] = [
   { id: "keys", label: "Till keys", icon: Keyboard },
   { id: "barcode", label: "Barcode", icon: ScanBarcode },
+  { id: "sales", label: "Sales", icon: Tag },
+  { id: "holds", label: "Holds", icon: Bookmark },
+  { id: "refunds", label: "Refunds", icon: RotateCcw },
   { id: "tax", label: "Tax", icon: Percent },
   { id: "stock", label: "Stock", icon: Boxes },
   { id: "loyalty", label: "Loyalty", icon: Heart },
@@ -59,6 +71,9 @@ const TITLES: Record<Page, string> = {
   printing: "Printing",
   receipt: "Receipt",
   payments: "Payments",
+  sales: "Sales",
+  holds: "Holds",
+  refunds: "Refunds",
 };
 
 export function SettingsScreen({
@@ -96,6 +111,9 @@ export function SettingsScreen({
         <PageShell title={TITLES[page]} onBack={() => setPage("hub")}>
           {page === "keys" && <TillKeysSettings />}
           {page === "barcode" && <BarcodeSettings />}
+          {page === "sales" && <SalesSettings />}
+          {page === "holds" && <HoldsSettings />}
+          {page === "refunds" && <RefundsSettings />}
           {page === "tax" && <TaxSettings />}
           {page === "stock" && <StockSettings items={items} />}
           {page === "printing" && <PrintingSettings />}

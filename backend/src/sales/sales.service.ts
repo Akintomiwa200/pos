@@ -13,6 +13,8 @@ export type StoredSale = {
   tender: string;
   cashierName: string;
   totalMinor: number;
+  /** Tip captured at checkout (already included in totalMinor). */
+  tipMinor?: number | null;
   /** Refunds are negative-value records linked to the original ticket. */
   kind?: "sale" | "refund";
   refundOf?: string | null;

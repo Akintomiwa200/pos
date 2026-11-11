@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Check, Printer } from "lucide-react";
+import { Check, Printer, RotateCcw } from "lucide-react";
 import { formatMoney } from "../../lib/types";
 import { formatLineQty } from "../../lib/units";
 import { printReceipt, TENDER_LABEL, type SaleReceipt } from "../../lib/receipt";
@@ -12,6 +12,7 @@ type Props = {
   sale: SaleReceipt;
   saveState?: "saving" | "saved" | "queued";
   onNewOrder: () => void;
+  onRefund?: () => void;
 };
 
 const SAVE_COPY = {
@@ -22,11 +23,18 @@ const SAVE_COPY = {
 
 const autoPrintedTickets = new Set<string>();
 
-export function PaidScreen({ sale, saveState = "saved", onNewOrder }: Props) {
+export function PaidScreen({
+  sale,
+  saveState = "saved",
+  onNewOrder,
+  onRefund,
+}: Props) {
   // Keep the receipt card on the same HQ + branch configuration used at print time.
   const settings = overlayReceiptIdentity(useStoreSettings());
   const [status, setStatus] = useState<string>(SAVE_COPY[saveState]);
   const [busy, setBusy] = useState(false);
+  const isRefund = sale.kind === "refund" || sale.totalMinor < 0;
+  const total = Math.abs(sale.totalMinor);
 
   useEffect(() => {
     setStatus(SAVE_COPY[saveState]);
@@ -50,26 +58,38 @@ export function PaidScreen({ sale, saveState = "saved", onNewOrder }: Props) {
     }
   }
 
+  const autoPrint = isRefund
+    ? settings.autoPrintRefund
+    : settings.autoPrintReceipt;
+
   useEffect(() => {
-    if (settings.autoPrintReceipt && !autoPrintedTickets.has(sale.ticketId)) {
+    if (autoPrint && !autoPrintedTickets.has(sale.ticketId)) {
       autoPrintedTickets.add(sale.ticketId);
       void handlePrint();
     }
     // print once per ticket even under StrictMode re-mounts
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sale.ticketId]);
+  }, [sale.ticketId, autoPrint]);
 
   return (
     <section className="paid">
-      <div className="paid-mark">
-        <Check size={36} strokeWidth={2.4} />
+      <div className={`paid-mark ${isRefund ? "refund" : ""}`}>
+        {isRefund ? (
+          <RotateCcw size={34} strokeWidth={2.2} />
+        ) : (
+          <Check size={36} strokeWidth={2.4} />
+        )}
       </div>
-      <h1>Payment successful</h1>
+      <h1>{isRefund ? "Refund complete" : "Payment successful"}</h1>
       <p className="pay-sub">
-        {TENDER_LABEL[sale.tender]} · {formatMoney(sale.totalMinor, settings.currency)}
-        {sale.loyaltyNumber ? ` · Loyalty ${sale.loyaltyNumber}` : ""}
+        {TENDER_LABEL[sale.tender]} · {formatMoney(total, settings.currency)}
+        {isRefund && sale.refundOf ? ` · Refund of ${sale.refundOf}` : ""}
+        {isRefund && !sale.refundOf ? " · No original ticket" : ""}
+        {isRefund && sale.refundedBy ? ` · by ${sale.refundedBy}` : ""}
+        {!isRefund && sale.tipMinor ? ` · Tip ${formatMoney(sale.tipMinor, settings.currency)}` : ""}
+        {!isRefund && sale.loyaltyNumber ? ` · Loyalty ${sale.loyaltyNumber}` : ""}
         {sale.tillKey ? ` · ${sale.tillKey}` : ""}
-        {settings.autoPrintReceipt
+        {(isRefund ? settings.autoPrintRefund : settings.autoPrintReceipt)
           ? ` · ${settings.receiptCopies} cop${settings.receiptCopies === 1 ? "y" : "ies"}`
           : ""}
       </p>
@@ -103,6 +123,11 @@ export function PaidScreen({ sale, saveState = "saved", onNewOrder }: Props) {
           giftCardBalanceAfterMinor={sale.giftCardBalanceAfterMinor}
           discountMinor={sale.discountMinor}
           totalMinor={sale.totalMinor}
+          tipMinor={sale.tipMinor}
+          kind={sale.kind}
+          refundOf={sale.refundOf}
+          refundReason={sale.refundReason}
+          refundedBy={sale.refundedBy}
         />
       </div>
       {status ? <p className="pay-sub">{status}</p> : null}
@@ -110,6 +135,11 @@ export function PaidScreen({ sale, saveState = "saved", onNewOrder }: Props) {
         <button className="ghost-btn" onClick={onNewOrder}>
           New order
         </button>
+        {onRefund && !isRefund ? (
+          <button className="ghost-btn refund-entry" onClick={onRefund}>
+            <RotateCcw size={17} /> Refund
+          </button>
+        ) : null}
         <button
           className="continue print-btn"
           onClick={() => void handlePrint()}

@@ -217,6 +217,74 @@ function Print-Text {
   }
 }
 
+function Print-Raw {
+  param($printer, [byte[]]$bytes)
+  if (-not ('RawPrinterHelper' -as [type])) {
+    $code = @"
+using System;
+using System.Runtime.InteropServices;
+public class RawPrinterHelper {
+  [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+  public struct DOCINFOW {
+    [MarshalAs(UnmanagedType.LPWStr)] public string pDocName;
+    [MarshalAs(UnmanagedType.LPWStr)] public string pOutputFile;
+    [MarshalAs(UnmanagedType.LPWStr)] public string pDataType;
+  }
+  [DllImport("winspool.drv", CharSet = CharSet.Unicode, SetLastError = true)]
+  public static extern bool OpenPrinter(string src, out IntPtr hPrinter, IntPtr pd);
+  [DllImport("winspool.drv", SetLastError = true)]
+  public static extern bool ClosePrinter(IntPtr hPrinter);
+  [DllImport("winspool.drv", CharSet = CharSet.Unicode, SetLastError = true)]
+  public static extern bool StartDocPrinter(IntPtr hPrinter, int level, ref DOCINFOW di);
+  [DllImport("winspool.drv", SetLastError = true)]
+  public static extern bool EndDocPrinter(IntPtr hPrinter);
+  [DllImport("winspool.drv", SetLastError = true)]
+  public static extern bool StartPagePrinter(IntPtr hPrinter);
+  [DllImport("winspool.drv", SetLastError = true)]
+  public static extern bool EndPagePrinter(IntPtr hPrinter);
+  [DllImport("winspool.drv", SetLastError = true)]
+  public static extern bool WritePrinter(IntPtr hPrinter, IntPtr pBytes, int dwCount, out int dwWritten);
+  public static bool SendBytes(string printer, byte[] bytes) {
+    IntPtr hPrinter;
+    if (!OpenPrinter(printer, out hPrinter, IntPtr.Zero)) return false;
+    bool ok = false;
+    DOCINFOW di = new DOCINFOW();
+    di.pDocName = "POS Drawer";
+    di.pDataType = "RAW";
+    if (StartDocPrinter(hPrinter, 1, ref di)) {
+      if (StartPagePrinter(hPrinter)) {
+        IntPtr p = Marshal.AllocCoTaskMem(bytes.Length);
+        try {
+          Marshal.Copy(bytes, 0, p, bytes.Length);
+          int written;
+          ok = WritePrinter(hPrinter, p, bytes.Length, out written);
+        } finally {
+          Marshal.FreeCoTaskMem(p);
+        }
+        EndPagePrinter(hPrinter);
+      }
+      EndDocPrinter(hPrinter);
+    }
+    ClosePrinter(hPrinter);
+    return ok;
+  }
+}
+"@
+    Add-Type -TypeDefinition $code -Language CSharp
+  }
+  if (-not [RawPrinterHelper]::SendBytes($printer, $bytes)) {
+    throw "The spooler rejected the drawer command for '$printer'."
+  }
+}
+
+function Print-Drawer {
+  param($job)
+  $printer = [string]$job.printer
+  # ESC p 0 25 250: the standard ESC/POS cash-drawer kick (pin 2).
+  $kick = [byte[]](0x1B, 0x70, 0x00, 0x19, 0xFA)
+  Print-Raw -printer $printer -bytes $kick
+}
+
 while ($true) {
   $jobFile = Receive-Job
   if ($jobFile) {
@@ -226,7 +294,11 @@ while ($true) {
     try {
       $raw = Get-Content $jobFile.FullName -Raw -Encoding UTF8
       $job = $raw | ConvertFrom-Json
-      if ($job.kind -eq 'rich') { Print-Rich $job } else { Print-Text $job }
+      switch ([string]$job.kind) {
+        'rich' { Print-Rich $job }
+        'drawer' { Print-Drawer $job }
+        default { Print-Text $job }
+      }
       $ok = $true
     } catch {
       $message = $_.Exception.Message

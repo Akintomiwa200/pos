@@ -167,3 +167,26 @@ export async function sendReceiptImage(
   if (!res.ok) throw new Error(body.error ?? "Receipt print job failed.");
   return body;
 }
+
+/**
+ * Pulse the cash drawer wired to the receipt printer. ESC/POS is sent as a raw
+ * print job by the backend worker, so this works with the same driver used for
+ * receipts. Callers should treat failure as non-fatal.
+ */
+export async function kickCashDrawer(printerName?: string | null) {
+  const name = printerName ?? loadPrinterConfig().receiptPrinter;
+  if (!name) throw new Error("No receipt printer in Settings.");
+  let res: Response;
+  try {
+    res = await fetch(apiUrl("/api/hardware/drawer"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ printerName: name }),
+    });
+  } catch {
+    throw new Error("Backend offline. Cash drawer did not open.");
+  }
+  const body = (await res.json().catch(() => ({}))) as { error?: string };
+  if (!res.ok) throw new Error(body.error ?? "Cash drawer did not open.");
+  return body;
+}

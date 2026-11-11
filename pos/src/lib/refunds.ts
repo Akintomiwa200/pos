@@ -1,7 +1,7 @@
 import { loadLocalSales } from "./sales";
 import type { SaleReceipt } from "./receipt";
 import type { StoreSettings } from "./store-settings";
-import { computeLineTotals, type CartLine } from "./types";
+import type { CartLine } from "./types";
 
 /** Quantities already returned for an original ticket, keyed by cart line id. */
 export function refundedQuantities(ticketId: string): Map<string, number> {
@@ -15,7 +15,8 @@ export function refundedQuantities(ticketId: string): Map<string, number> {
   return totals;
 }
 
-function alreadyRefundedMinor(ticketId: string) {
+/** Total value already refunded against an original ticket. */
+export function refundedTotal(ticketId: string): number {
   return loadLocalSales()
     .filter((sale) => sale.kind === "refund" && sale.refundOf === ticketId)
     .reduce((sum, sale) => sum + Math.abs(sale.totalMinor), 0);
@@ -56,26 +57,16 @@ export function refundedDiscount(sale: SaleReceipt, selected: CartLine[]) {
 export function refundAmount(
   sale: SaleReceipt,
   selected: CartLine[],
-  settings: StoreSettings,
+  _settings: StoreSettings,
 ) {
   if (!selected.length) return 0;
-  const remaining = remainingRefundLines(sale);
-  const fullSubtotal = remaining.reduce(
-    (sum, line) => sum + line.unitPriceMinor * line.quantity,
-    0,
-  );
-  const selectedSubtotal = selected.reduce(
-    (sum, line) => sum + line.unitPriceMinor * line.quantity,
-    0,
-  );
-  if (selectedSubtotal >= fullSubtotal) {
-    return Math.max(0, Math.abs(sale.totalMinor) - alreadyRefundedMinor(sale.ticketId));
-  }
-  return computeLineTotals(
-    selected,
-    settings,
-    refundedDiscount(sale, selected),
-  ).totalMinor;
+  const total = Math.abs(sale.totalMinor);
+  const share = refundShare(sale, selected);
+  const remainingValue = Math.max(0, total - refundedTotal(sale.ticketId));
+  // Refund the same proportion of the original total (discount, service and
+  // VAT included) that the selected lines represent. Cap at what is left so
+  // repeated partial refunds can never pay back more than the ticket.
+  return Math.min(remainingValue, Math.round(total * share));
 }
 
 export function buildRefundSale(input: {

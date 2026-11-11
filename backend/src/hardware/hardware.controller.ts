@@ -21,6 +21,20 @@ export class HardwareController {
     return this.hardware.listPrinters();
   }
 
+  @Post("drawer")
+  async drawer(@Body() body: { printerName?: string }) {
+    if (!body?.printerName) {
+      throw new BadRequestException("printerName is required");
+    }
+    try {
+      return await this.hardware.kickDrawer(body.printerName);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Cash drawer did not open";
+      throw new BadRequestException(message);
+    }
+  }
+
   @Post("print")
   async print(
     @Body()

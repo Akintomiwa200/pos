@@ -3,6 +3,7 @@ import { computeLineTotals, formatMoney } from "./types";
 import { formatLineQty } from "./units";
 import {
   getPrinterGeometry,
+  kickCashDrawer,
   loadPrinterConfig,
   sendReceiptLayout,
   type ReceiptRichLine,
@@ -47,6 +48,8 @@ export type SaleReceipt = {
   amountTenderedMinor?: number | null;
   changeMinor?: number | null;
   discountMinor?: number | null;
+  /** Tip captured at checkout. Included in totalMinor, never in line totals. */
+  tipMinor?: number | null;
   /** Refunds are stored as negative-value sales linked to the original ticket. */
   kind?: "sale" | "refund";
   refundOf?: string | null;
@@ -67,6 +70,7 @@ export function formatReceiptText(
   const totals = computeLineTotals(sale.lines, settings, sale.discountMinor ?? 0);
   const isRefund = sale.kind === "refund" || sale.totalMinor < 0;
   const saleTotal = Math.abs(sale.totalMinor);
+  const itemlessRefund = isRefund && sale.lines.length === 0;
   const till = findTill();
   const earned =
     !isRefund && sale.loyaltyNumber
@@ -140,20 +144,26 @@ export function formatReceiptText(
       return [nameLine, qtyLine];
     }),
     "--------------------------------",
-    `Subtotal     ${money(totals.subtotalMinor)}`,
-    ...(showDiscount && totals.discountMinor > 0
+    ...(itemlessRefund ? [] : [`Subtotal     ${money(totals.subtotalMinor)}`]),
+    ...(!itemlessRefund && showDiscount && totals.discountMinor > 0
       ? [`Discount     -${money(totals.discountMinor)}`]
       : []),
-    ...(showTax && settings.applyServiceCharge
+    ...(!itemlessRefund && showTax && settings.applyServiceCharge
       ? [`Service ${settings.servicePercent}%  ${money(totals.serviceMinor)}`]
       : []),
-    ...(showTax
+    ...(!itemlessRefund && showTax
       ? totals.vatSlices.map(
           (slice) => `VAT ${slice.ratePercent}%  ${money(slice.taxMinor)}`,
         )
       : []),
-    ...(showLoyaltyRedeemed && sale.loyaltyRedeemMinor && sale.loyaltyRedeemMinor > 0
+    ...(!itemlessRefund &&
+    showLoyaltyRedeemed &&
+    sale.loyaltyRedeemMinor &&
+    sale.loyaltyRedeemMinor > 0
       ? [`Loyalty      -${money(sale.loyaltyRedeemMinor)}`]
+      : []),
+    ...(!itemlessRefund && sale.tipMinor && sale.tipMinor > 0
+      ? [`Tip          ${money(sale.tipMinor)}`]
       : []),
     `${isRefund ? "REFUND TOTAL" : "TOTAL"}        ${money(saleTotal)}`,
     ...(settings.receiptShowTender
@@ -169,7 +179,7 @@ export function formatReceiptText(
               : []),
           ]
       : []),
-    ...(settings.receiptShowLoyalty && sale.loyaltyNumber
+    ...(settings.receiptShowLoyalty && !isRefund && sale.loyaltyNumber
       ? [
           "--------------------------------",
           "Loyalty",
@@ -340,6 +350,7 @@ export function buildReceiptLayout(
   const totals = computeLineTotals(sale.lines, settings, sale.discountMinor ?? 0);
   const isRefund = sale.kind === "refund" || sale.totalMinor < 0;
   const saleTotal = Math.abs(sale.totalMinor);
+  const itemlessRefund = isRefund && sale.lines.length === 0;
   const till = findTill();
   const earned =
     !isRefund && sale.loyaltyNumber
@@ -474,6 +485,21 @@ export function buildReceiptLayout(
     });
   }
 
+  if (isRefund) {
+    out.push({ t: "s", h: 2 });
+    out.push({ t: "d" });
+    out.push({ t: "c", text: "*** REFUND ***", bold: true });
+    if (sale.refundOf) {
+      out.push({ t: "r", l: "Refund of", r: sale.refundOf, bold: true });
+    }
+    if (sale.refundedBy) {
+      out.push({ t: "r", l: "Authorised by", r: sale.refundedBy, gray: true });
+    }
+    if (sale.refundReason) {
+      pushRow("Reason", sale.refundReason, { gray: true });
+    }
+  }
+
   if (settings.receiptShowCustomer && (sale.customerName || sale.customerPhone)) {
     out.push({ t: "d" });
     if (sale.customerName) {
@@ -499,51 +525,70 @@ export function buildReceiptLayout(
 
   out.push({ t: "d" });
 
-  out.push({ t: "r", l: "Subtotal", r: money(totals.subtotalMinor) });
-  if (showDiscount && sale.discountMinor && sale.discountMinor > 0) {
-    out.push({ t: "r", l: "Discount", r: `-${money(sale.discountMinor)}`, gray: true });
-  }
-  if (showTax && settings.applyServiceCharge && totals.serviceMinor > 0) {
-    out.push({ t: "r", l: `Service ${settings.servicePercent}%`, r: money(totals.serviceMinor), gray: true });
-  }
-  if (showTax) {
-    for (const slice of totals.vatSlices) {
-      out.push({
-        t: "r",
-        l: `VAT ${slice.ratePercent}%`,
-        r: money(slice.taxMinor),
-        gray: true,
-      });
+  if (!itemlessRefund) {
+    out.push({ t: "r", l: "Subtotal", r: money(totals.subtotalMinor) });
+    if (showDiscount && totals.discountMinor > 0) {
+      out.push({ t: "r", l: "Discount", r: `-${money(totals.discountMinor)}`, gray: true });
+    }
+    if (showTax && settings.applyServiceCharge && totals.serviceMinor > 0) {
+      out.push({ t: "r", l: `Service ${settings.servicePercent}%`, r: money(totals.serviceMinor), gray: true });
+    }
+    if (showTax) {
+      for (const slice of totals.vatSlices) {
+        out.push({
+          t: "r",
+          l: `VAT ${slice.ratePercent}%`,
+          r: money(slice.taxMinor),
+          gray: true,
+        });
+      }
+    }
+    if (
+      settings.receiptShowLoyalty &&
+      showLoyaltyRedeemed &&
+      sale.loyaltyRedeemMinor &&
+      sale.loyaltyRedeemMinor > 0
+    ) {
+      out.push({ t: "r", l: "Loyalty", r: `-${money(sale.loyaltyRedeemMinor)}`, gray: true });
+    }
+    if (sale.tipMinor && sale.tipMinor > 0) {
+      out.push({ t: "r", l: "Tip", r: money(sale.tipMinor), gray: true });
     }
   }
-  if (
-    settings.receiptShowLoyalty &&
-    showLoyaltyRedeemed &&
-    sale.loyaltyRedeemMinor &&
-    sale.loyaltyRedeemMinor > 0
-  ) {
-    out.push({ t: "r", l: "Loyalty", r: `-${money(sale.loyaltyRedeemMinor)}`, gray: true });
-  }
-  out.push({ t: "r", l: "TOTAL", r: money(sale.totalMinor), bold: true });
+  out.push({
+    t: "r",
+    l: isRefund ? "REFUND TOTAL" : "TOTAL",
+    r: money(saleTotal),
+    bold: true,
+  });
   out.push({ t: "s", h: 3 });
 
   if (settings.receiptShowTender) {
     out.push({ t: "d" });
-    out.push({ t: "r", l: "Paid by", r: TENDER_LABEL[sale.tender], gray: true });
-    if (sale.tender === "cash") {
+    if (isRefund) {
       out.push({
         t: "r",
-        l: "Tendered",
-        r: money(sale.amountTenderedMinor ?? sale.totalMinor),
+        l: "Refunded via",
+        r: TENDER_LABEL[sale.tender],
         gray: true,
       });
-      if (showChange && sale.changeMinor != null) {
-        out.push({ t: "r", l: "Change", r: money(sale.changeMinor) });
+    } else {
+      out.push({ t: "r", l: "Paid by", r: TENDER_LABEL[sale.tender], gray: true });
+      if (sale.tender === "cash") {
+        out.push({
+          t: "r",
+          l: "Tendered",
+          r: money(sale.amountTenderedMinor ?? sale.totalMinor),
+          gray: true,
+        });
+        if (showChange && sale.changeMinor != null) {
+          out.push({ t: "r", l: "Change", r: money(sale.changeMinor) });
+        }
       }
     }
   }
 
-  if (settings.receiptShowLoyalty && sale.loyaltyNumber) {
+  if (settings.receiptShowLoyalty && !isRefund && sale.loyaltyNumber) {
     out.push({ t: "s", h: 4 });
     out.push({ t: "d" });
     out.push({ t: "c", text: "LOYALTY", bold: true });
@@ -607,7 +652,10 @@ export function buildReceiptLayout(
   return out;
 }
 
-export async function printReceipt(sale: SaleReceipt) {
+export async function printReceipt(
+  sale: SaleReceipt,
+  opts: { kickDrawer?: boolean } = {},
+) {
   const config = loadPrinterConfig();
   if (!config.receiptPrinter) {
     throw new Error("No receipt printer in Settings.");
@@ -622,5 +670,15 @@ export async function printReceipt(sale: SaleReceipt) {
     dpi: geometry.dpi,
   });
   await sendReceiptLayout(config.receiptPrinter, layout, widthMm, copies);
+  const isRefund = sale.kind === "refund" || sale.totalMinor < 0;
+  if (
+    opts.kickDrawer !== false &&
+    settings.openCashDrawer &&
+    sale.tender === "cash" &&
+    !isRefund
+  ) {
+    // Best-effort: a drawer that is unplugged must never fail the receipt.
+    await kickCashDrawer(config.receiptPrinter).catch(() => undefined);
+  }
   return config.receiptPrinter;
 }

@@ -22,6 +22,7 @@ type Props = {
   onRecall: (hold: HeldTicket) => void;
   onDelete: (id: string) => void;
   onRefund: (sale: SaleReceipt) => void;
+  onBlindRefund?: () => void;
 };
 
 function when(value: string) {
@@ -40,6 +41,7 @@ export function SavedScreen({
   onRecall,
   onDelete,
   onRefund,
+  onBlindRefund,
 }: Props) {
   const [tab, setTab] = useState<"holds" | "sales">("holds");
   const currency = settings.currency || "NGN";
@@ -61,24 +63,35 @@ export function SavedScreen({
           <h1>Saved</h1>
           <p>Parked orders and tickets that can still be refunded.</p>
         </div>
-        <div className="saved-tabs" role="tablist">
-          <button
-            role="tab"
-            aria-selected={tab === "holds"}
-            className={tab === "holds" ? "on" : ""}
-            onClick={() => setTab("holds")}
-          >
-            <Bookmark size={16} /> Held orders
-            <span>{visibleHolds.length}</span>
-          </button>
-          <button
-            role="tab"
-            aria-selected={tab === "sales"}
-            className={tab === "sales" ? "on" : ""}
-            onClick={() => setTab("sales")}
-          >
-            <ReceiptText size={16} /> Recent sales
-          </button>
+        <div className="saved-head-actions">
+          {onBlindRefund ? (
+            <button
+              type="button"
+              className="saved-blind-refund"
+              onClick={onBlindRefund}
+            >
+              <RotateCcw size={16} /> Refund without ticket
+            </button>
+          ) : null}
+          <div className="saved-tabs" role="tablist">
+            <button
+              role="tab"
+              aria-selected={tab === "holds"}
+              className={tab === "holds" ? "on" : ""}
+              onClick={() => setTab("holds")}
+            >
+              <Bookmark size={16} /> Held orders
+              <span>{visibleHolds.length}</span>
+            </button>
+            <button
+              role="tab"
+              aria-selected={tab === "sales"}
+              className={tab === "sales" ? "on" : ""}
+              onClick={() => setTab("sales")}
+            >
+              <ReceiptText size={16} /> Recent sales
+            </button>
+          </div>
         </div>
       </header>
 

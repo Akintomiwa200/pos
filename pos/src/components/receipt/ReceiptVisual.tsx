@@ -35,6 +35,11 @@ type Props = {
   /** Persisted sale values keep the on-screen receipt identical to the printed one. */
   discountMinor?: number | null;
   totalMinor?: number | null;
+  tipMinor?: number | null;
+  kind?: "sale" | "refund";
+  refundOf?: string | null;
+  refundReason?: string | null;
+  refundedBy?: string | null;
 };
 
 function initialsOf(name: string) {
@@ -78,15 +83,18 @@ export function ReceiptVisual({
   giftCardBalanceAfterMinor,
   discountMinor,
   totalMinor,
+  tipMinor,
+  kind,
+  refundOf,
+  refundReason,
+  refundedBy,
 }: Props) {
-  const subtotal = lines.reduce(
-    (sum, line) => sum + line.unitPriceMinor * line.quantity,
-    0,
-  );
-  const totals = computeLineTotals(lines, settings);
-  const total = totalMinor ?? totals.totalMinor;
-  const tendered = tenderedMinor ?? total;
-  const change = changeMinor ?? Math.max(0, tendered - total);
+  const totals = computeLineTotals(lines, settings, discountMinor ?? 0);
+  const isRefund = kind === "refund" || (totalMinor ?? 0) < 0;
+  const total = Math.abs(totalMinor ?? totals.totalMinor);
+  const itemlessRefund = isRefund && lines.length === 0;
+  const tendered = isRefund ? total : (tenderedMinor ?? total);
+  const change = isRefund ? 0 : (changeMinor ?? Math.max(0, tendered - total));
   const money = (n: number) => formatMoney(n, settings.currency || "NGN");
 
   const dense =
@@ -242,6 +250,28 @@ export function ReceiptVisual({
 
         <div style={dash} />
 
+        {isRefund ? (
+          <div
+            style={{
+              margin: "2px 0 8px",
+              padding: "6px 8px",
+              borderRadius: 8,
+              background: "rgba(220, 38, 38, .08)",
+              color: "#b91c1c",
+              textAlign: "center",
+              fontWeight: 700,
+              letterSpacing: ".08em",
+            }}
+          >
+            REFUND
+            {refundOf ? (
+              <div style={{ fontWeight: 500, letterSpacing: 0, marginTop: 2 }}>
+                of {refundOf}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
         {lines.map((line, index) => (
           <div key={`${line.name}-${index}`} style={{ marginBottom: 5 }}>
             <div style={row}>
@@ -269,14 +299,16 @@ export function ReceiptVisual({
         ))}
 
         <div style={dash} />
+        {!itemlessRefund ? (
+          <>
         <div style={row}>
           <span>Subtotal</span>
           <span style={tabular}>{money(totals.subtotalMinor)}</span>
         </div>
-        {showDiscount && (discountMinor ?? totals.discountMinor) > 0 ? (
+        {showDiscount && totals.discountMinor > 0 ? (
           <div style={{ ...row, ...muted }}>
             <span>Discount</span>
-            <span style={tabular}>-{money(discountMinor ?? totals.discountMinor)}</span>
+            <span style={tabular}>-{money(totals.discountMinor)}</span>
           </div>
         ) : null}
         {showTax && settings.applyServiceCharge && totals.serviceMinor > 0 ? (
@@ -302,6 +334,14 @@ export function ReceiptVisual({
             <span style={tabular}>-{money(loyaltyRedeemMinor)}</span>
           </div>
         ) : null}
+        {tipMinor && tipMinor > 0 ? (
+          <div style={{ ...row, ...muted }}>
+            <span>Tip</span>
+            <span style={tabular}>{money(tipMinor)}</span>
+          </div>
+        ) : null}
+          </>
+        ) : null}
         <div
           style={{
             ...row,
@@ -311,17 +351,17 @@ export function ReceiptVisual({
             fontSize: bold ? 13 : undefined,
           }}
         >
-          <span>TOTAL</span>
+          <span>{isRefund ? "REFUND TOTAL" : "TOTAL"}</span>
           <span style={tabular}>{money(total)}</span>
         </div>
 
         {settings.receiptShowTender ? (
           <div style={{ marginTop: 8, paddingTop: 6, borderTop: "1px dashed rgba(0,0,0,.25)" }}>
             <div style={{ ...row, ...muted }}>
-              <span>Paid by</span>
+              <span>{isRefund ? "Refunded via" : "Paid by"}</span>
               <span>{TENDER_LABEL[tender]}</span>
             </div>
-            {tender === "cash" ? (
+            {!isRefund && tender === "cash" ? (
               <>
                 <div style={{ ...row, ...muted }}>
                   <span>Tendered</span>
@@ -335,10 +375,22 @@ export function ReceiptVisual({
                 ) : null}
               </>
             ) : null}
+            {isRefund && refundedBy ? (
+              <div style={{ ...row, ...muted }}>
+                <span>Authorised by</span>
+                <span>{refundedBy}</span>
+              </div>
+            ) : null}
+            {isRefund && refundReason ? (
+              <div style={{ ...row, ...muted }}>
+                <span>Reason</span>
+                <span style={{ textAlign: "right" }}>{refundReason}</span>
+              </div>
+            ) : null}
           </div>
         ) : null}
 
-        {settings.receiptShowLoyalty && loyaltyNumber ? (
+        {settings.receiptShowLoyalty && !isRefund && loyaltyNumber ? (
           <div style={{ marginTop: 8, paddingTop: 6, borderTop: "1px dashed rgba(0,0,0,.25)" }}>
             <div style={{ fontWeight: 600, marginBottom: 2 }}>Loyalty</div>
             <div style={{ ...row, ...muted }}>

@@ -119,7 +119,7 @@ export class HardwareService implements OnModuleDestroy {
   }
 
   private async runPrintJob(
-    kind: "rich" | "text",
+    kind: "rich" | "text" | "drawer",
     payload: Record<string, unknown>,
     waitMs = 60000,
   ): Promise<{ ok: true }> {
@@ -549,6 +549,26 @@ export class HardwareService implements OnModuleDestroy {
       throw new Error(`Receipt print failed on "${printerName}". ${message}`);
     } finally {
       await unlink(file).catch(() => undefined);
+    }
+  }
+
+  /**
+   * Pulse the cash drawer connected to the printer. ESC/POS is written through
+   * the Windows spooler as a RAW job, so it works alongside GDI+ receipts on the
+   * same printer without opening a text document.
+   */
+  async kickDrawer(printerName: string) {
+    if (process.platform !== "win32") {
+      throw new Error("The cash drawer is available on the Windows POS terminal.");
+    }
+    try {
+      await this.enqueue(() =>
+        this.runPrintJob("drawer", { printer: printerName }, 15000),
+      );
+      return { ok: true, printer: printerName };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Drawer kick failed";
+      throw new Error(`Cash drawer did not open on "${printerName}". ${message}`);
     }
   }
 

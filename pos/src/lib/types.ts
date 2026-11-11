@@ -102,27 +102,66 @@ function vatNet(grossMinor: number, ratePercent: number, inclusive: boolean) {
     : grossMinor;
 }
 
+/**
+ * Split an order-level discount across lines in proportion to their value.
+ * Integer amounts are preserved exactly (largest-remainder rounding), and no
+ * line is discounted by more than it is worth.
+ */
+function allocateDiscount(grosses: number[], discountMinor: number): number[] {
+  const total = grosses.reduce((sum, gross) => sum + Math.max(0, gross), 0);
+  const discount = Math.min(
+    Math.max(0, Math.round(discountMinor)),
+    Math.max(0, Math.round(total)),
+  );
+  if (!discount || !total) return grosses.map(() => 0);
+
+  const shares = grosses.map((gross) =>
+    gross > 0 ? (gross * discount) / total : 0,
+  );
+  const allocation = shares.map((share) => Math.floor(share));
+  let remainder =
+    discount - allocation.reduce((sum, value) => sum + value, 0);
+  const order = shares
+    .map((share, index) => ({ index, fraction: share - Math.floor(share) }))
+    .sort((a, b) => b.fraction - a.fraction);
+  for (let i = 0; i < remainder && order.length; i++) {
+    allocation[order[i % order.length]!.index] += 1;
+  }
+  return allocation;
+}
+
 export function computeLineTotals(
   lines: Pick<CartLine, "unitPriceMinor" | "quantity" | "taxPercent">[],
   settings: StoreSettings = loadStoreSettings(),
+  discountMinor = 0,
 ): Totals {
   const { vatPercent, servicePercent, pricesIncludeVat, applyServiceCharge } =
     settings;
   const applyVat = settings.applyVat !== false;
 
-  const subtotalMinor = lines.reduce(
-    (sum, line) => sum + line.unitPriceMinor * line.quantity,
-    0,
+  const grossLines = lines.map(
+    (line) => line.unitPriceMinor * line.quantity,
   );
+  const subtotalMinor = grossLines.reduce((sum, gross) => sum + gross, 0);
+  const discount = Math.min(
+    Math.max(0, Math.round(discountMinor)),
+    Math.max(0, subtotalMinor),
+  );
+  const allocations = allocateDiscount(grossLines, discount);
+  const discountedLines = grossLines.map(
+    (gross, index) => gross - allocations[index]!,
+  );
+  const discountedSubtotal = subtotalMinor - discount;
   const serviceMinor = applyServiceCharge
-    ? Math.round((subtotalMinor * servicePercent) / 100)
+    ? Math.round((discountedSubtotal * servicePercent) / 100)
     : 0;
 
   // Bucket taxable line value (gross) by effective VAT rate. Rate 0 → exempt.
   const buckets = new Map<number, number>();
   let exemptMinor = 0;
-  for (const line of lines) {
-    const gross = line.unitPriceMinor * line.quantity;
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index]!;
+    const gross = discountedLines[index]!;
     if (!gross) continue;
     const rate = applyVat
       ? typeof line.taxPercent === "number"
@@ -144,8 +183,8 @@ export function computeLineTotals(
     applyServiceCharge &&
     !pricesIncludeVat &&
     vatableTotal > 0 &&
-    subtotalMinor > 0
-      ? Math.round((vatableTotal / subtotalMinor) * serviceMinor)
+    discountedSubtotal > 0
+      ? Math.round((vatableTotal / discountedSubtotal) * serviceMinor)
       : 0;
   const vatSlices: VatSlice[] = [];
   for (const [rate, gross] of entries) {
@@ -170,12 +209,12 @@ export function computeLineTotals(
 
   const vatMinor = vatSlices.reduce((sum, slice) => sum + slice.taxMinor, 0);
   const totalMinor = pricesIncludeVat
-    ? subtotalMinor + serviceMinor
-    : subtotalMinor + serviceMinor + vatMinor;
+    ? discountedSubtotal + serviceMinor
+    : discountedSubtotal + serviceMinor + vatMinor;
 
   return {
     subtotalMinor,
-    discountMinor: 0,
+    discountMinor: discount,
     serviceMinor,
     vatMinor,
     totalMinor,

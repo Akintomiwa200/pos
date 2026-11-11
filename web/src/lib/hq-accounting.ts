@@ -97,6 +97,7 @@ export async function loadAccountingBooks(): Promise<AccountingBooks> {
             liabilityMinor: 0,
             lines: [],
             byCategory: [],
+            byRate: [],
           }) as TaxSummary,
       ),
       paymentFeed().catch(() => ({ transactions: [], settlements: [] }) as PaymentFeed),

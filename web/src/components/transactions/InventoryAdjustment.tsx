@@ -118,7 +118,7 @@ export function InventoryAdjustment() {
     reload();
   }, [reload]);
 
-  const adjustments = useMemo(() => movements.filter((move) => move.type !== "transfer"), [movements]);
+  const adjustments = useMemo(() => movements.filter((move) => move.type === "adjustment"), [movements]);
 
   const stats = useMemo(() => {
     let net = 0;

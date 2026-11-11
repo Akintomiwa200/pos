@@ -57,12 +57,14 @@ export class InventoryController {
       reason?: string;
       staff?: string;
       at?: string;
+      runId?: string;
       lines?: Array<{
         itemId?: string;
         quantity?: number;
         countedOnHand?: number;
         reason?: string;
         at?: string;
+        runId?: string;
       }>;
     },
   ) {

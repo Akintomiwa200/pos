@@ -47,6 +47,11 @@ export type SaleReceipt = {
   amountTenderedMinor?: number | null;
   changeMinor?: number | null;
   discountMinor?: number | null;
+  /** Refunds are stored as negative-value sales linked to the original ticket. */
+  kind?: "sale" | "refund";
+  refundOf?: string | null;
+  refundReason?: string | null;
+  refundedBy?: string | null;
 };
 
 function maskGiftCard(code: string) {
@@ -59,11 +64,14 @@ export function formatReceiptText(
   sale: SaleReceipt,
   settings: StoreSettings = overlayReceiptIdentity(loadStoreSettings()),
 ) {
-  const totals = computeLineTotals(sale.lines, settings);
+  const totals = computeLineTotals(sale.lines, settings, sale.discountMinor ?? 0);
+  const isRefund = sale.kind === "refund" || sale.totalMinor < 0;
+  const saleTotal = Math.abs(sale.totalMinor);
   const till = findTill();
   const earned =
-    sale.loyaltyPointsEarned ??
-    (sale.loyaltyNumber ? loyaltyPointsEarned(sale.totalMinor, settings) : 0);
+    !isRefund && sale.loyaltyNumber
+      ? (sale.loyaltyPointsEarned ?? loyaltyPointsEarned(sale.totalMinor, settings))
+      : (sale.loyaltyPointsEarned ?? 0);
   const money = (n: number) => formatMoney(n, settings.currency || "NGN");
   const when = new Date(sale.paidAt);
   const showTicket = settings.receiptShowTicketNumber !== false;
@@ -105,6 +113,14 @@ export function formatReceiptText(
     ...(settings.receiptShowTill && (sale.tillKey || till)
       ? [`Till: ${sale.tillKey || (till ? tillLabel(till) : "")}`]
       : []),
+    ...(isRefund
+      ? [
+          "*** REFUND ***",
+          ...(sale.refundOf ? [`Refund of # ${sale.refundOf}`] : []),
+          ...(sale.refundedBy ? [`Authorised by ${sale.refundedBy}`] : []),
+          ...(sale.refundReason ? [`Reason: ${sale.refundReason}`] : []),
+        ]
+      : []),
     ...(settings.receiptShowCustomer && (sale.customerName || sale.customerPhone)
       ? [
           sale.customerName ? `Customer: ${sale.customerName}` : "",
@@ -125,8 +141,8 @@ export function formatReceiptText(
     }),
     "--------------------------------",
     `Subtotal     ${money(totals.subtotalMinor)}`,
-    ...(showDiscount && sale.discountMinor && sale.discountMinor > 0
-      ? [`Discount     -${money(sale.discountMinor)}`]
+    ...(showDiscount && totals.discountMinor > 0
+      ? [`Discount     -${money(totals.discountMinor)}`]
       : []),
     ...(showTax && settings.applyServiceCharge
       ? [`Service ${settings.servicePercent}%  ${money(totals.serviceMinor)}`]
@@ -139,17 +155,19 @@ export function formatReceiptText(
     ...(showLoyaltyRedeemed && sale.loyaltyRedeemMinor && sale.loyaltyRedeemMinor > 0
       ? [`Loyalty      -${money(sale.loyaltyRedeemMinor)}`]
       : []),
-    `TOTAL        ${money(sale.totalMinor)}`,
+    `${isRefund ? "REFUND TOTAL" : "TOTAL"}        ${money(saleTotal)}`,
     ...(settings.receiptShowTender
-      ? [
-          `Paid by ${TENDER_LABEL[sale.tender]}`,
-          ...(sale.amountTenderedMinor != null
-            ? [`Tendered     ${money(sale.amountTenderedMinor)}`]
-            : []),
-          ...(showChange && sale.changeMinor != null
-            ? [`Change       ${money(sale.changeMinor)}`]
-            : []),
-        ]
+      ? isRefund
+        ? [`Refunded via ${TENDER_LABEL[sale.tender]}`]
+        : [
+            `Paid by ${TENDER_LABEL[sale.tender]}`,
+            ...(sale.amountTenderedMinor != null
+              ? [`Tendered     ${money(sale.amountTenderedMinor)}`]
+              : []),
+            ...(showChange && sale.changeMinor != null
+              ? [`Change       ${money(sale.changeMinor)}`]
+              : []),
+          ]
       : []),
     ...(settings.receiptShowLoyalty && sale.loyaltyNumber
       ? [
@@ -319,11 +337,14 @@ export function buildReceiptLayout(
   // hardware margins, where it would silently clip.
   const useWidthMm = Math.max(48, Math.min(80, Math.round(opts.widthMm ?? paperMm)));
   const dpi = opts.dpi && opts.dpi > 0 ? Math.round(opts.dpi) : 203;
-  const totals = computeLineTotals(sale.lines, settings);
+  const totals = computeLineTotals(sale.lines, settings, sale.discountMinor ?? 0);
+  const isRefund = sale.kind === "refund" || sale.totalMinor < 0;
+  const saleTotal = Math.abs(sale.totalMinor);
   const till = findTill();
   const earned =
-    sale.loyaltyPointsEarned ??
-    (sale.loyaltyNumber ? loyaltyPointsEarned(sale.totalMinor, settings) : 0);
+    !isRefund && sale.loyaltyNumber
+      ? (sale.loyaltyPointsEarned ?? loyaltyPointsEarned(sale.totalMinor, settings))
+      : (sale.loyaltyPointsEarned ?? 0);
   const money = (n: number) => formatMoney(n, settings.currency || "NGN");
   const when = new Date(sale.paidAt);
 

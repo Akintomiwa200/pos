@@ -13,6 +13,11 @@ export type StoredSale = {
   tender: string;
   cashierName: string;
   totalMinor: number;
+  /** Refunds are negative-value records linked to the original ticket. */
+  kind?: "sale" | "refund";
+  refundOf?: string | null;
+  refundReason?: string | null;
+  refundedBy?: string | null;
   loyaltyNumber?: string | null;
   tillKey?: string | null;
   customerName?: string | null;
@@ -80,7 +85,12 @@ export class SalesService implements OnModuleInit {
       storeName: storeName ?? sale.storeName ?? null,
       paidAt: sale.paidAt || new Date().toISOString(),
     };
-    deductSoldStock(next.lines, this.catalog, this.combos);
+    // A refund is recorded as a negative sale; stock is returned by the till's
+    // signed delta request when restockOnRefund is enabled, so never deduct it.
+    const isRefund = next.kind === "refund" || next.totalMinor < 0;
+    if (!isRefund) {
+      deductSoldStock(next.lines, this.catalog, this.combos);
+    }
     this.sales = [next, ...this.sales.filter((row) => row.ticketId !== next.ticketId)];
     await mkdir(this.receiptsDir, { recursive: true });
     await writeFile(this.file, JSON.stringify(this.sales, null, 2), "utf8");

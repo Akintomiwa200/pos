@@ -17,6 +17,8 @@ export type StoreSettings = {
   showTinOnReceipt: boolean;
   showOutOfStock: boolean;
   allowPriceOverride: boolean;
+  allowDiscounts: boolean;
+  maxDiscountPercent: number;
   trackStockOnTill: boolean;
   stockMode: StockMode;
   requireBarcode: boolean;
@@ -147,6 +149,8 @@ export function defaultStoreSettings(): StoreSettings {
     showTinOnReceipt: true,
     showOutOfStock: true,
     allowPriceOverride: false,
+    allowDiscounts: true,
+    maxDiscountPercent: 20,
     trackStockOnTill: true,
     stockMode: "both",
     requireBarcode: false,

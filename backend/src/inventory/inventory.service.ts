@@ -85,17 +85,21 @@ export class InventoryService implements OnModuleInit {
     reason?: string;
     staff?: string;
     at?: string;
+    runId?: string;
     lines?: Array<{
       itemId?: string;
       quantity?: number;
       countedOnHand?: number;
       reason?: string;
       at?: string;
+      runId?: string;
     }>;
   }): Promise<StockMovement[]> {
     const { lines = [], ...base } = input;
     const movements: StockMovement[] = [];
-    const runId = base.type === "transfer" ? this.nextRunId() : undefined;
+    const runId = base.runId || this.nextRunId(
+      base.type === "transfer" ? "TRF" : base.type === "count" ? "CNT" : "ADJ",
+    );
     for (const line of lines) {
       movements.push(await this.store.recordMovement({ ...base, ...line, runId }));
     }
@@ -103,8 +107,8 @@ export class InventoryService implements OnModuleInit {
     return movements;
   }
 
-  /** Human-friendly reference shared by every line of one transfer run. */
-  private nextRunId(): string {
+  /** Human-friendly reference shared by every line in one stock batch. */
+  private nextRunId(prefix: string): string {
     const now = new Date();
     const stamp = [
       now.getFullYear(),
@@ -112,7 +116,7 @@ export class InventoryService implements OnModuleInit {
       String(now.getDate()).padStart(2, "0"),
     ].join("");
     const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
-    return `TRF-${stamp}-${rand}`;
+    return `${prefix}-${stamp}-${rand}`;
   }
 }
 

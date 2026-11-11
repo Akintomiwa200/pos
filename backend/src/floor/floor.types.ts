@@ -1,11 +1,11 @@
-/** Generic persisted boards for till service state: floor tables, hotel rooms, kitchen tickets. */
+/** Generic persisted boards for till service state: floor tables, hotel rooms, kitchen tickets, held tickets. */
 
 export type BoardRecord = {
   id: string;
   [key: string]: unknown;
 };
 
-export const BOARDS = ["tables", "rooms", "kitchen"] as const;
+export const BOARDS = ["tables", "rooms", "kitchen", "holds"] as const;
 export type BoardName = (typeof BOARDS)[number];
 
 export function isBoardName(value: string): value is BoardName {

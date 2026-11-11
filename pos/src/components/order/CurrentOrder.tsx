@@ -3,14 +3,17 @@ import { computeLineTotals, formatMoney } from "../../lib/types";
 import { formatPricePer } from "../../lib/units";
 import { useStoreSettings } from "../../lib/use-store-settings";
 import type { StaffUser } from "../../lib/staff";
-import { Minus, Plus, ShoppingBag, Trash2 } from "lucide-react";
+import { Bookmark, Minus, Percent, Plus, ShoppingBag, Trash2 } from "lucide-react";
 
 type Props = {
   staff: StaffUser;
   tableLabel?: string;
   lines: CartLine[];
+  discountMinor?: number;
   onQty: (id: string, delta: number) => void;
   onPrice?: (id: string, unitPriceMinor: number) => void;
+  onDiscount?: () => void;
+  onHold?: () => void;
   onContinue: () => void;
   continueLabel?: string;
   continueDisabled?: boolean;
@@ -20,14 +23,17 @@ export function CurrentOrder({
   staff,
   tableLabel,
   lines,
+  discountMinor = 0,
   onQty,
   onPrice,
+  onDiscount,
+  onHold,
   onContinue,
   continueLabel = "Continue",
   continueDisabled = false,
 }: Props) {
   const rates = useStoreSettings();
-  const totals = computeLineTotals(lines, rates);
+  const totals = computeLineTotals(lines, rates, discountMinor);
 
   return (
     <aside className="order-wrap">
@@ -126,14 +132,41 @@ export function CurrentOrder({
           )}
         </div>
 
+        {lines.length > 0 && (onDiscount || onHold) ? (
+          <div className="order-actions">
+            {onDiscount ? (
+              <button
+                type="button"
+                className={`order-action ${discountMinor > 0 ? "on" : ""}`}
+                onClick={onDiscount}
+              >
+                <Percent size={16} strokeWidth={2} />
+                {discountMinor > 0
+                  ? `Discount ${formatMoney(discountMinor)}`
+                  : "Discount"}
+              </button>
+            ) : null}
+            {onHold ? (
+              <button type="button" className="order-action" onClick={onHold}>
+                <Bookmark size={16} strokeWidth={2} />
+                Hold
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+
         <div className="summary">
           <div className="row">
             <span>Subtotal</span>
             <span>{formatMoney(totals.subtotalMinor)}</span>
           </div>
-          <div className="row">
+          <div className={`row ${totals.discountMinor > 0 ? "discount" : ""}`}>
             <span>Discount</span>
-            <span>{formatMoney(totals.discountMinor)}</span>
+            <span>
+              {totals.discountMinor > 0
+                ? `-${formatMoney(totals.discountMinor)}`
+                : formatMoney(0)}
+            </span>
           </div>
           {rates.applyServiceCharge ? (
             <div className="row">

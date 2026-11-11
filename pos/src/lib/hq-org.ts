@@ -63,6 +63,8 @@ export type HqOrgSnapshot = {
     lowStockQty: number;
     blockNegativeStock: boolean;
     allowPriceOverride?: boolean;
+    allowDiscounts?: boolean;
+    maxDiscountPercent?: number;
     requireManagerPin?: boolean;
     allowPartialRefunds?: boolean;
     restockOnRefund?: boolean;
@@ -271,6 +273,8 @@ export function applyHqOrg(org: HqOrgSnapshot, till?: TillLocation | null) {
     lowStockQty: s.lowStockQty,
     blockNegativeStock: s.blockNegativeStock,
     allowPriceOverride: s.allowPriceOverride ?? current.allowPriceOverride,
+    allowDiscounts: s.allowDiscounts ?? current.allowDiscounts,
+    maxDiscountPercent: s.maxDiscountPercent ?? current.maxDiscountPercent,
     requireManagerPin: s.requireManagerPin ?? current.requireManagerPin,
     allowPartialRefunds: s.allowPartialRefunds ?? current.allowPartialRefunds,
     restockOnRefund: s.restockOnRefund ?? current.restockOnRefund,

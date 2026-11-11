@@ -2,6 +2,7 @@ import { apiUrl } from "./api-base";
 import type { FloorTable } from "./tables";
 import type { HotelRoom } from "./rooms";
 import type { KitchenTicket } from "./tickets";
+import type { HeldTicket } from "./holds";
 
 /**
  * Till floor state (tables / rooms / kitchen tickets) is persisted on HQ so a
@@ -9,7 +10,7 @@ import type { KitchenTicket } from "./tickets";
  * the local seeds without breaking the till.
  */
 
-export type BoardName = "tables" | "rooms" | "kitchen";
+export type BoardName = "tables" | "rooms" | "kitchen" | "holds";
 
 async function fetchBoard<T>(board: BoardName): Promise<T[] | null> {
   try {
@@ -47,6 +48,10 @@ export async function loadKitchenTickets(): Promise<KitchenTicket[] | null> {
   return fetchBoard<KitchenTicket>("kitchen");
 }
 
+export async function loadHolds(): Promise<HeldTicket[] | null> {
+  return fetchBoard<HeldTicket>("holds");
+}
+
 export function saveTables(rows: FloorTable[]) {
   return pushBoard("tables", rows);
 }
@@ -57,4 +62,8 @@ export function saveRooms(rows: HotelRoom[]) {
 
 export function saveKitchenTickets(rows: KitchenTicket[]) {
   return pushBoard("kitchen", rows);
+}
+
+export function saveHolds(rows: HeldTicket[]) {
+  return pushBoard("holds", rows);
 }

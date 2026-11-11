@@ -6,7 +6,7 @@ import { OnHandPage } from "@/components/reports/stock/OnHandPage";
 import { ReplenishmentPage } from "@/components/reports/stock/ReplenishmentPage";
 import { StockAnalysisPage } from "@/components/reports/stock/StockAnalysisPage";
 import { StockBalancePage } from "@/components/reports/stock/StockBalancePage";
-import { StockCountPage } from "@/components/reports/stock/StockCountPage";
+import { StockTakingModule } from "@/components/stock-taking/StockTakingModule";
 import { StockExpiryPage } from "@/components/reports/stock/StockExpiryPage";
 import { StockMovementPage } from "@/components/reports/stock/StockMovementPage";
 import { StockPerformancePage } from "@/components/reports/stock/StockPerformancePage";
@@ -25,7 +25,7 @@ export default async function StockReportPage({
   if (key === "movement") return <StockMovementPage />;
   if (key === "bin-card") return <BinCardPage />;
   if (key === "expiry") return <StockExpiryPage />;
-  if (key === "count") return <StockCountPage />;
+  if (key === "count") return <StockTakingModule mode="initial" />;
   if (key === "on-hand") return <OnHandPage />;
   if (key === "low") return <LowStockPage />;
   if (key === "replenishment") return <ReplenishmentPage />;

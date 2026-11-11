@@ -8,6 +8,7 @@ import {
   Building2,
   Calculator,
   CircleDollarSign,
+  ClipboardCheck,
   CreditCard,
   FileSpreadsheet,
   FileText,
@@ -128,7 +129,6 @@ const STOCK_REPORT_NAV: NavNode[] = [
   { id: "stock-awaiting-pickup", label: "Awaiting Pickup", href: "/reports/stock/awaiting-pickup" },
   { id: "stock-bin-card", label: "Bin Card", href: "/reports/stock/bin-card" },
   { id: "stock-expiry", label: "Expiry", href: "/reports/stock/expiry" },
-  { id: "stock-count", label: "Count", href: "/reports/stock/count" },
 ];
 
 const BALANCE_REPORT_NAV: NavNode[] = [
@@ -925,6 +925,24 @@ export const NAV: NavSection[] = [
         label: "Purchase Reports",
         icon: BarChart3,
         children: PURCHASE_REPORTS_NAV,
+      },
+    ],
+  },
+  {
+    heading: "Stock Taking",
+    department: "Transaction",
+    items: [
+      {
+        id: "stock-taking",
+        label: "Stock Taking",
+        icon: ClipboardCheck,
+        children: [
+          { id: "stock-taking-overview", label: "Overview", href: "/stock-taking" },
+          { id: "stock-taking-initial", label: "Initial Stock Take", href: "/stock-taking/initial" },
+          { id: "stock-taking-random", label: "Random Stock Take", href: "/stock-taking/random" },
+          { id: "stock-taking-adjustments", label: "Stock Adjustments", href: "/stock-taking/adjustments" },
+          { id: "stock-taking-history", label: "Count History", href: "/stock-taking/history" },
+        ],
       },
     ],
   },

@@ -137,8 +137,9 @@ export function useCatalog() {
   }, []);
 
   /**
-   * Apply every stock decrement from one sale in a single optimistic update,
-   * then sync HQ with one bulk request (sequential PATCH fallback).
+   * Apply signed stock movements from a sale or refund in a single optimistic
+   * update, then sync HQ with one bulk request (sequential PATCH fallback).
+   * Sales send negative deltas; refunds send positive deltas when restocking.
    */
   const applySaleDeltas = useCallback(
     (deltas: Array<{ itemId: string; delta: number }>) => {
@@ -159,7 +160,7 @@ export function useCatalog() {
       if (readStockMode() === "offline") return;
       const payload = usable.map(({ itemId, delta }) => ({
         itemId,
-        delta: -Math.abs(delta),
+        delta: Math.round(delta),
       }));
       void fetch(apiUrl("/api/catalog/stock/bulk"), {
         method: "POST",

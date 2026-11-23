@@ -778,6 +778,7 @@ export const ACCESS_NAV: NavSection[] = [
         children: [
           { id: "users-account", label: "Accounts", href: "/setup/users/account" },
           { id: "users-group", label: "Groups", href: "/setup/users/group" },
+          { id: "users-role", label: "Roles & privileges", href: "/setup/access" },
         ],
       },
       {
@@ -1143,6 +1144,7 @@ export const NAV: NavSection[] = [
         children: [
           { id: "users-account", label: "Accounts", href: "/setup/users/account" },
           { id: "users-group", label: "Groups", href: "/setup/users/group" },
+          { id: "users-role", label: "Roles & privileges", href: "/setup/access" },
         ],
       },
       {

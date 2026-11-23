@@ -15,8 +15,8 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import { memoryStorage } from "multer";
 import { map, Observable } from "rxjs";
 import { CatalogService, type CatalogRow } from "../catalog/catalog.service";
-import { MAX_PRODUCT_IMAGE_BYTES } from "../catalog/cloudinary.service";
-import { ConsoleService, type BillingEvent, type BillingPlan, type DirectoryEvent, type NoticesEvent, type PosEvent, type SecurityFeedEvent, type SessionLockEvent } from "./console.service";
+import { CloudinaryService, MAX_PRODUCT_IMAGE_BYTES } from "../catalog/cloudinary.service";
+import { ConsoleService, type BillingEvent, type BillingPlan, type DirectoryEvent, type NoticesEvent, type PosEvent, type SecurityFeedEvent, type SessionStreamEvent } from "./console.service";
 import { SetupService, type SettingsEvent } from "./setup.service";
 import type { ConsoleAccount, ConsoleGroup, GroupScope } from "./console.types";
 import type {
@@ -39,6 +39,7 @@ export class ConsoleController {
     private readonly consoleService: ConsoleService,
     private readonly setup: SetupService,
     private readonly catalog: CatalogService,
+    private readonly cloudinary: CloudinaryService,
   ) {}
 
   @Post("login")
@@ -160,7 +161,7 @@ export class ConsoleController {
   }
 
   @Sse("session/stream")
-  sessionStream(): Observable<{ data: SessionLockEvent }> {
+  sessionStream(): Observable<{ data: SessionStreamEvent }> {
     return this.consoleService.sessionStream().pipe(map((data) => ({ data })));
   }
 
@@ -179,6 +180,36 @@ export class ConsoleController {
       body?.current ?? "",
       body?.password ?? "",
     );
+  }
+
+  @Post("profile")
+  updateProfile(
+    @Headers("authorization") authorization: string | undefined,
+    @Body() body: { name?: string; username?: string },
+  ) {
+    return this.consoleService.updateOwnProfile(bearer(authorization), body ?? {});
+  }
+
+  @Post("profile/avatar")
+  @UseInterceptors(
+    FileInterceptor("file", {
+      storage: memoryStorage(),
+      limits: { fileSize: MAX_PRODUCT_IMAGE_BYTES, files: 1 },
+    }),
+  )
+  async uploadProfileAvatar(
+    @Headers("authorization") authorization: string | undefined,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    const token = bearer(authorization);
+    const me = await this.consoleService.me(token);
+    const url = await this.cloudinary.uploadAvatar(file, me.user.id);
+    return this.consoleService.setOwnAvatar(token, url);
+  }
+
+  @Delete("profile/avatar")
+  removeProfileAvatar(@Headers("authorization") authorization?: string) {
+    return this.consoleService.setOwnAvatar(bearer(authorization), null);
   }
 
   @Post("session/unlock")
@@ -448,8 +479,44 @@ export class ConsoleController {
   }
 
   @Post("setup/company")
-  saveCompany(@Body() body: Partial<HqCompany>) {
-    return this.setup.saveCompany(body);
+  async saveCompany(@Body() body: Partial<HqCompany>) {
+    const saved = await this.setup.saveCompany(body);
+    await this.consoleService.recordActivity({
+      action: "company.save",
+      target: saved.name,
+      detail: Object.keys(body).join(", "),
+    });
+    return saved;
+  }
+
+  @Post("setup/company/image")
+  @UseInterceptors(
+    FileInterceptor("file", {
+      storage: memoryStorage(),
+      limits: { fileSize: MAX_PRODUCT_IMAGE_BYTES, files: 1 },
+    }),
+  )
+  async uploadCompanyImage(@UploadedFile() file: Express.Multer.File) {
+    const company = this.setup.getCompany();
+    const logoUrl = await this.cloudinary.uploadCompanyLogo(file, company.id);
+    const saved = await this.setup.saveCompany({ logoUrl });
+    await this.consoleService.recordActivity({
+      action: "company.image",
+      target: saved.name,
+      detail: "logo",
+    });
+    return saved;
+  }
+
+  @Delete("setup/company/image")
+  async removeCompanyImage() {
+    const saved = await this.setup.saveCompany({ logoUrl: null });
+    await this.consoleService.recordActivity({
+      action: "company.image.removed",
+      target: saved.name,
+      detail: "logo",
+    });
+    return saved;
   }
 
   @Get("setup/branches")

@@ -12,6 +12,8 @@ export type HqCompany = {
   state: string;
   country: string;
   currency: string;
+  /** Company logo / profile picture URL. */
+  logoUrl?: string | null;
 };
 
 export type HqBranch = {
@@ -173,6 +175,33 @@ export async function getCompany() {
 }
 export async function saveCompany(body: Partial<HqCompany>) {
   return api<HqCompany>("/api/console/setup/company", { method: "POST", body: JSON.stringify(body) });
+}
+
+export async function uploadCompanyImage(file: File): Promise<HqCompany> {
+  const form = new FormData();
+  form.append("file", file);
+  let response: Response;
+  try {
+    response = await fetch("/api/console/setup/company/image", {
+      method: "POST",
+      body: form,
+      cache: "no-store",
+    });
+  } catch {
+    throw new Error("Company image upload failed");
+  }
+  const data = (await response.json().catch(() => ({}))) as HqCompany & {
+    message?: string | string[];
+  };
+  if (!response.ok) {
+    const message = Array.isArray(data.message) ? data.message[0] : data.message;
+    throw new Error(message || "Company image upload failed");
+  }
+  return data;
+}
+
+export async function removeCompanyImage() {
+  return api<HqCompany>("/api/console/setup/company/image", { method: "DELETE" });
 }
 
 export async function listBranches() {

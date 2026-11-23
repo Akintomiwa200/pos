@@ -36,6 +36,7 @@ const STATIC_CRUMBS: Record<string, string[]> = {
   "/admin/administrators": ["Super Admin", "Administrators"],
   "/admin/support": ["Super Admin", "Support"],
   "/password": ["Password"],
+  "/profile": ["My profile"],
   "/setup/others/settings": ["Settings"],
   "/catalog": ["Products", "Print Labels"],
   "/procurement": ["Procurement"],

@@ -139,23 +139,38 @@ export function ReceiptVisual({
     <div className="receipt-visual-paper" style={{ width: paper }}>
       <div style={base}>
         {settings.receiptShowLogo ? (
-          <div
-            style={{
-              width: 40,
-              height: 40,
-              margin: "0 auto 8px",
-              borderRadius: "50%",
-              background: accent,
-              color: "#fff",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontWeight: 700,
-              fontSize: 11,
-            }}
-          >
-            {initialsOf(title)}
-          </div>
+          settings.companyLogoUrl ? (
+            <img
+              src={settings.companyLogoUrl}
+              alt={title}
+              style={{
+                width: 40,
+                height: 40,
+                margin: "0 auto 8px",
+                borderRadius: "50%",
+                objectFit: "cover",
+                display: "block",
+              }}
+            />
+          ) : (
+            <div
+              style={{
+                width: 40,
+                height: 40,
+                margin: "0 auto 8px",
+                borderRadius: "50%",
+                background: accent,
+                color: "#fff",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontWeight: 700,
+                fontSize: 11,
+              }}
+            >
+              {initialsOf(title)}
+            </div>
+          )
         ) : null}
         {showTitle ? (
           <div

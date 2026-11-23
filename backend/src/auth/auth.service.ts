@@ -1,7 +1,6 @@
 import { Injectable, UnauthorizedException } from "@nestjs/common";
 import { StaffService } from "../staff/staff.service";
 import { ConsoleService } from "../console/console.service";
-import { fromConsoleUser } from "../staff/web-user";
 import { isSellOnly, publicStaff } from "../staff/staff.types";
 
 @Injectable()
@@ -18,9 +17,9 @@ export class AuthService {
       if (!(error instanceof UnauthorizedException)) throw error;
     }
     const session = await this.console.login(username, password);
-    const user = fromConsoleUser(session.user);
+    const user = await this.staff.consolePosUser(session.user);
     if (!user) {
-      throw new UnauthorizedException("This web account cannot open the till.");
+      throw new UnauthorizedException("This account is not registered as a till user.");
     }
     return {
       token: `web-${session.token}`,

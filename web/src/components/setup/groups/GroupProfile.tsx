@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Pencil, Trash2, Users } from "lucide-react";
+import { ArrowLeft, LockKeyhole, Pencil, Trash2, Users } from "lucide-react";
 import { toast } from "@/lib/toast";
 import {
   departmentsFromPrivileges,
@@ -191,10 +191,17 @@ export function GroupProfile({ groupId }: { groupId: string }) {
                   Delete
                 </button>
               ) : null}
-              <PrimaryButton onClick={openEdit}>
-                <Pencil size={15} />
-                Edit privileges
-              </PrimaryButton>
+              {isDefault ? (
+                <Link href="/setup/access" className={secondaryButtonClass}>
+                  <LockKeyhole size={15} />
+                  View roles
+                </Link>
+              ) : (
+                <PrimaryButton onClick={openEdit}>
+                  <Pencil size={15} />
+                  Edit privileges
+                </PrimaryButton>
+              )}
             </div>
           </div>
         </div>
@@ -247,7 +254,7 @@ export function GroupProfile({ groupId }: { groupId: string }) {
                       href={`/setup/users/account/${encodeURIComponent(member.id)}`}
                       className="flex items-center gap-3 rounded-2xl bg-pos-surface-muted/60 px-3 py-3 transition hover:bg-pos-surface-muted"
                     >
-                      <PersonAvatar name={member.name} id={member.id} size={36} />
+                      <PersonAvatar name={member.name} id={member.id} size={36} src={member.avatarUrl} />
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium text-pos-ink">{member.name}</p>
                         <p className="truncate text-[12px] text-pos-ink-faint">{member.email}</p>

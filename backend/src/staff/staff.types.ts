@@ -8,6 +8,14 @@ export type StaffUser = {
   username: string;
   email: string;
   role: StaffRole;
+  /** HQ group name, e.g. Administrator, Super Admin, Store Manager, Cashier. */
+  roleName?: string;
+  /** Whether this row comes from company staff or an HQ account. */
+  source?: "staff" | "account";
+  /** True only for staff explicitly configured to sign in on a till. */
+  posLogin?: boolean;
+  /** HQ account this row is linked to, when set explicitly in Setup › Staff. */
+  hqAccountId?: string;
   password: string;
   pin: string;
   /** Derived from whether a till PIN is stored. Never contains a PIN or hash. */

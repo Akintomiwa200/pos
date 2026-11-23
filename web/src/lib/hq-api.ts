@@ -359,6 +359,51 @@ export async function changePassword(token: string, current: string, password: s
   });
 }
 
+export type ProfileAccount = Omit<ConsoleAccount, "password">;
+
+export async function updateMyProfile(
+  token: string,
+  input: { name?: string; username?: string },
+) {
+  return api<ProfileAccount>("/api/console/profile", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(input),
+  });
+}
+
+export async function uploadProfileAvatar(token: string, file: File): Promise<ProfileAccount> {
+  const form = new FormData();
+  form.append("file", file);
+  let response: Response;
+  try {
+    response = await fetch("/api/console/profile/avatar", {
+      method: "POST",
+      body: form,
+      cache: "no-store",
+      headers: authHeaders(token),
+    });
+  } catch {
+    throw new NetworkError();
+  }
+  const data = (await response.json().catch(() => ({}))) as ProfileAccount & {
+    message?: string | string[];
+  };
+  if (!response.ok) {
+    if (response.status >= 500) throw new NetworkError();
+    const message = Array.isArray(data.message) ? data.message[0] : data.message;
+    throw new Error(message || "Profile picture upload failed");
+  }
+  return data;
+}
+
+export async function removeProfileAvatar(token: string) {
+  return api<ProfileAccount>("/api/console/profile/avatar", {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+}
+
 export type HqNotice = {
   id: string;
   key: string;
@@ -516,9 +561,11 @@ export type TillStaffPinState = {
 export type TillStaffMember = {
   id: string;
   name: string;
-  username: string;
-  email: string;
+  username?: string;
+  email?: string;
   role: string;
+  roleName?: string;
+  source?: "staff" | "account";
   privileges?: string[];
   hasPin?: boolean;
 };

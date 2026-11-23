@@ -46,11 +46,25 @@ export function PersonAvatar({
   name,
   id,
   size = 40,
+  src,
 }: {
   name: string;
   id: string;
   size?: number;
+  /** Uploaded profile picture; falls back to initials when absent. */
+  src?: string | null;
 }) {
+  if (src) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={src}
+        alt={name}
+        className="shrink-0 rounded-full object-cover shadow-pos-sm ring-2 ring-white"
+        style={{ width: size, height: size }}
+      />
+    );
+  }
   return (
     <span
       className="grid shrink-0 place-items-center rounded-full font-semibold text-white shadow-pos-sm ring-2 ring-white"

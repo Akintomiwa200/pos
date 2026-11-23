@@ -7,6 +7,11 @@ export type StaffUser = {
   username: string;
   email: string;
   role: StaffRole;
+  /** HQ role name, e.g. Super Admin, Administrator, Store Manager, Cashier. */
+  roleName?: string;
+  source?: "staff" | "account";
+  /** True only for staff explicitly set up to sign in on this till. */
+  posLogin?: boolean;
   /** True when this staff member has a till PIN set. Never contains a PIN/hash. */
   hasPin?: boolean;
   privileges: Privilege[];

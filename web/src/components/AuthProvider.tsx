@@ -11,8 +11,8 @@ import {
 } from "react";
 import type {
   ConsoleSession,
-  SessionLockEvent,
   SessionLockReason,
+  SessionStreamEvent,
   SessionLockState,
 } from "../lib/access";
 import {
@@ -148,6 +148,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const same =
             current.token === next.token &&
             current.name === next.name &&
+            current.username === next.username &&
+            current.email === next.email &&
+            (current.avatarUrl ?? null) === (next.avatarUrl ?? null) &&
             current.groupName === next.groupName &&
             current.scope === next.scope &&
             (current.locked?.reason ?? null) === (next.locked?.reason ?? null) &&
@@ -182,14 +185,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!session?.token) return;
     const source = new EventSource("/api/console/session/stream");
     source.onmessage = (event) => {
-      let payload: SessionLockEvent | null = null;
+      let payload: SessionStreamEvent | null = null;
       try {
-        payload = JSON.parse(event.data) as SessionLockEvent;
+        payload = JSON.parse(event.data) as SessionStreamEvent;
       } catch {
         return;
       }
       const current = sessionRef.current;
       if (!current) return;
+
+      if (payload.type === "privileges") {
+        void fetchConsoleSession(current.token)
+          .then((next) => {
+            setSessionState((latest) => {
+              if (!latest) return next;
+              if (
+                latest.locked?.reason === "manual_lock" ||
+                latest.locked?.reason === "idle_lock"
+              ) {
+                return { ...latest, ...next, locked: latest.locked };
+              }
+              return next;
+            });
+          })
+          .catch(() => undefined);
+        return;
+      }
 
       if (payload.type === "lock") {
         const affectsMe =

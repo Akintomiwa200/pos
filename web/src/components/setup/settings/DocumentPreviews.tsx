@@ -256,12 +256,21 @@ export function ReceiptLivePreview({
           className={`font-mono text-[#111827] ${dense ? "text-[10px] leading-[1.35]" : "text-[11px] leading-[1.45]"}`}
         >
           {draft.receiptShowLogo ? (
-            <div
-              className="mx-auto mb-2 grid size-10 place-items-center rounded-full text-[11px] font-bold text-white"
-              style={{ backgroundColor: accent }}
-            >
-              {initials(title)}
-            </div>
+            company?.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={company.logoUrl}
+                alt={title}
+                className="mx-auto mb-2 block size-10 rounded-full object-cover"
+              />
+            ) : (
+              <div
+                className="mx-auto mb-2 grid size-10 place-items-center rounded-full text-[11px] font-bold text-white"
+                style={{ backgroundColor: accent }}
+              >
+                {initials(title)}
+              </div>
+            )
           ) : null}
           {showTitle ? (
             <p
@@ -559,9 +568,18 @@ export function InvoiceLivePreview({
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 {draft.invoiceShowLogo ? (
-                  <div className="mb-2 grid size-9 place-items-center rounded-md bg-white/15 text-[11px] font-bold">
-                    {initials(company?.name)}
-                  </div>
+                  company?.logoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={company.logoUrl}
+                      alt={company.name}
+                      className="mb-2 block size-9 rounded-md object-cover"
+                    />
+                  ) : (
+                    <div className="mb-2 grid size-9 place-items-center rounded-md bg-white/15 text-[11px] font-bold">
+                      {initials(company?.name)}
+                    </div>
+                  )
                 ) : null}
                 <p className="truncate text-[15px] font-semibold">
                   {company?.name || "Your company"}

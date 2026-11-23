@@ -89,6 +89,7 @@ export class ChatService implements OnModuleInit {
         id: account.id,
         name: account.name,
         username: account.username,
+        avatar: account.avatarUrl ?? undefined,
         groupName: account.groupId,
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
@@ -120,9 +121,15 @@ export class ChatService implements OnModuleInit {
     }
 
     const otherName = memberIds[0] ?? "";
+    let avatar: string | undefined;
+    if (kind === "direct") {
+      const accounts = await this.console.listAccounts();
+      avatar = accounts.find((row) => row.id === memberIds[0])?.avatarUrl ?? undefined;
+    }
     const conversation: ChatConversation = {
       id: `chat-${kind}-${Date.now()}`,
       kind,
+      avatar,
       name:
         kind === "group"
           ? (input.name?.trim() || "Group chat")

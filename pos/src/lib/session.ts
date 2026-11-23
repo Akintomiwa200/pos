@@ -37,7 +37,7 @@ export async function loginWithPin(staffId: string, pin: string) {
 }
 
 export async function listStaff() {
-  const response = await fetch(apiUrl("/api/staff"));
+  const response = await fetch(apiUrl("/api/staff/login-roster"));
   if (!response.ok) throw new Error(`Staff request failed (${response.status})`);
   return (await response.json()) as StaffUser[];
 }

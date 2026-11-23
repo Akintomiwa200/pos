@@ -643,7 +643,7 @@ export function AccountManager({
                               else openPreview(row.id, event.currentTarget);
                             }}
                           >
-                            <PersonAvatar name={row.name} id={row.id} />
+                            <PersonAvatar name={row.name} id={row.id} src={row.avatarUrl} />
                             <span className="min-w-0">
                               <span className="block truncate font-semibold text-pos-ink">
                                 {row.name}
@@ -714,7 +714,7 @@ export function AccountManager({
                       </ProfileBanner>
                       <div className="relative px-4 pb-4 pt-0">
                         <div className="-mt-8 mb-3 flex items-end justify-between gap-2">
-                          <PersonAvatar name={row.name} id={row.id} size={64} />
+                          <PersonAvatar name={row.name} id={row.id} size={64} src={row.avatarUrl} />
                           <span
                             className={`mb-1 inline-flex rounded-full px-2.5 py-1 text-[11px] font-medium ${statusTone(row.active)}`}
                           >
@@ -793,7 +793,7 @@ export function AccountManager({
                             className="rounded-2xl border border-pos-border/70 bg-pos-surface p-3 text-left shadow-pos-sm transition hover:border-pos-primary/30 hover:shadow-pos-md"
                           >
                             <div className="flex items-center gap-3">
-                              <PersonAvatar name={row.name} id={row.id} size={36} />
+                              <PersonAvatar name={row.name} id={row.id} size={36} src={row.avatarUrl} />
                               <div className="min-w-0">
                                 <p className="truncate text-sm font-semibold text-pos-ink">
                                   {row.name}
@@ -897,7 +897,7 @@ function AccountPreviewCard({
 
       <div className="relative px-5 pb-5 pt-0">
         <div className="-mt-10 mb-3 flex items-end justify-between gap-3">
-          <PersonAvatar name={account.name} id={account.id} size={72} />
+          <PersonAvatar name={account.name} id={account.id} size={72} src={account.avatarUrl} />
           <div className="mb-1 flex items-center gap-2">
             <a
               href={`mailto:${account.email}`}

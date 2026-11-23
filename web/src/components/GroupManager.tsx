@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Building2, Plus, Users, Wifi, WifiOff } from "lucide-react";
+import { Building2, Plus, ShieldCheck, Users, Wifi, WifiOff } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { departmentsFromPrivileges, groupScope, type ConsoleGroup } from "../lib/access";
 import { refreshSessionFromGroup, saveGroup } from "../lib/hq-api";
@@ -145,7 +145,7 @@ export function GroupManager() {
       <SetupHeader
         kicker="Setup · Users"
         title="Groups"
-        copy="Open a group card for members and access details. Edit privileges from the group page."
+        copy="Open a group card for members and access details. Use Roles & privileges to see defaults and create custom roles."
         action={
           <div className="flex items-center gap-2">
             <span
@@ -159,6 +159,10 @@ export function GroupManager() {
               {live ? <Wifi size={13} /> : <WifiOff size={13} />}
               {live ? "Live" : "Offline"}
             </span>
+            <Link href="/setup/access" className={secondaryButtonClass}>
+              <ShieldCheck size={15} />
+              Roles & privileges
+            </Link>
             <PrimaryButton onClick={openNew}>
               <span className="inline-flex items-center gap-2">
                 <Plus size={16} />
@@ -258,9 +262,18 @@ export function GroupManager() {
 
         <aside className="h-fit rounded-[24px] bg-pos-surface-muted/70 p-5">
           <div className="flex items-start gap-3">
-            <span className="grid size-12 place-items-center rounded-full bg-pos-primary text-white shadow-pos-primary">
-              <Building2 size={20} />
-            </span>
+            {company?.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={company.logoUrl}
+                alt={company.name}
+                className="size-12 shrink-0 rounded-full object-cover shadow-pos-sm ring-1 ring-pos-border"
+              />
+            ) : (
+              <span className="grid size-12 place-items-center rounded-full bg-pos-primary text-white shadow-pos-primary">
+                <Building2 size={20} />
+              </span>
+            )}
             <div className="min-w-0">
               <p className="truncate text-[16px] font-semibold text-pos-ink">{orgName}</p>
               <p className="truncate text-[13px] text-pos-primary">{orgHandle}</p>
@@ -329,7 +342,7 @@ export function GroupManager() {
               <ul className="space-y-2.5">
                 {admins.slice(0, 4).map((admin) => (
                   <li key={admin.id} className="flex items-center gap-3">
-                    <PersonAvatar name={admin.name} id={admin.id} size={32} />
+                    <PersonAvatar name={admin.name} id={admin.id} size={32} src={admin.avatarUrl} />
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium text-pos-ink">{admin.name}</p>
                       <p className="truncate text-[11px] text-pos-ink-faint">@{admin.username}</p>

@@ -10,6 +10,12 @@ export class StaffController {
     return this.staff.list();
   }
 
+  /** Only explicitly configured till users; Super Admin is never included. */
+  @Get("login-roster")
+  loginRoster() {
+    return this.staff.listLoginRoster();
+  }
+
   /** Authenticated by the current credential in the body; no bearer token needed. */
   @Post("pin/local")
   pinLocal(

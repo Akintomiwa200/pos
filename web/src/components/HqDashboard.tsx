@@ -377,8 +377,29 @@ function bucketChart(bucket: Bucket) {
   };
 }
 
-function Avatar({ name, size = 36, index = 0 }: { name: string; size?: number; index?: number }) {
+function Avatar({
+  name,
+  size = 36,
+  index = 0,
+  src,
+}: {
+  name: string;
+  size?: number;
+  index?: number;
+  src?: string | null;
+}) {
   const { avatar } = useThemeColors();
+  if (src) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={src}
+        alt={name}
+        className="shrink-0 rounded-full object-cover"
+        style={{ width: size, height: size }}
+      />
+    );
+  }
   return (
     <span
       className="grid shrink-0 place-items-center rounded-full font-semibold text-white"
@@ -956,6 +977,7 @@ function SalesTeamCard({
   unit,
   selected,
   onSelect,
+  avatarOf,
 }: {
   cashiers: NamedTotal[];
   ticketsByCashier: NamedTotal[];
@@ -966,6 +988,7 @@ function SalesTeamCard({
   unit: BucketUnit;
   selected: string | null;
   onSelect: (name: string) => void;
+  avatarOf?: (name: string) => string | null | undefined;
 }) {
   const colors = useThemeColors();
   const openName = selected || cashiers[0]?.name || null;
@@ -1032,7 +1055,7 @@ function SalesTeamCard({
                   onClick={() => onSelect(row.name)}
                 >
                   <span className="flex min-w-0 items-center gap-2">
-                    <Avatar name={row.name} size={32} index={index} />
+                    <Avatar name={row.name} size={32} index={index} src={avatarOf?.(row.name)} />
                     <span className="truncate text-[14px] font-medium">{shortName(row.name)}</span>
                   </span>
                   <span className="text-[14px] tabular-nums min-w-0">
@@ -1835,6 +1858,8 @@ export function HqDashboard() {
   const periodLabel = report.unit === "month" ? "Average monthly" : report.unit === "week" ? "Average weekly" : "Average daily";
   const people = accounts.slice(0, 3);
   const extra = accounts[3];
+  const avatarOf = (name: string) =>
+    accounts.find((row) => samePerson(row.name, name))?.avatarUrl ?? null;
   const cashierBar = fillCashierBar(
     report.cashiers,
     accounts.filter(
@@ -1877,7 +1902,7 @@ export function HqDashboard() {
               href="/setup/users/account"
               className="flex items-center gap-2 rounded-full bg-pos-surface py-1 pl-1 pr-3 shadow-pos-sm"
             >
-              <Avatar name={row.name} size={28} index={index} />
+              <Avatar name={row.name} size={28} index={index} src={row.avatarUrl} />
               <span className="text-[13px] font-medium text-pos-ink">{shortName(row.name)}</span>
             </Link>
           ))}
@@ -2043,7 +2068,7 @@ export function HqDashboard() {
               </p>
               {report.topCashier ? (
                 <div className="flex items-center gap-1.5">
-                  <Avatar name={report.topCashier.name} size={24} index={2} />
+                  <Avatar name={report.topCashier.name} size={24} index={2} src={avatarOf(report.topCashier.name)} />
                   <span className="text-[13px] font-medium">
                     {firstName(report.topCashier.name)}
                   </span>
@@ -2137,7 +2162,7 @@ export function HqDashboard() {
                   className="flex min-w-0 flex-1 flex-nowrap items-center gap-2 overflow-hidden whitespace-nowrap px-2.5 text-left"
                   onClick={() => setSelectedCashier(row.name)}
                 >
-                  <Avatar name={row.name} size={20} index={index} />
+                  <Avatar name={row.name} size={20} index={index} src={avatarOf(row.name)} />
                   <span className="min-w-0 truncate text-[13px] font-medium leading-none tabular-nums">
                     {displayMoney(row.total)}
                   </span>
@@ -2318,6 +2343,7 @@ export function HqDashboard() {
           unit={report.unit}
           selected={selectedCashier}
           onSelect={setSelectedCashier}
+          avatarOf={avatarOf}
         />
       </div>
 

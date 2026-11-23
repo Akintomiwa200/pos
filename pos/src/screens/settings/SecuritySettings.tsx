@@ -8,7 +8,6 @@ import type { StaffUser } from "../../lib/staff";
 import {
   LiveNote,
   NumField,
-  SelectField,
   SetCard,
   SetRow,
   Toggle,
@@ -32,6 +31,20 @@ function hqConsoleUrl() {
   } catch {
     return "";
   }
+}
+
+function displayRole(row: Pick<StaffUser, "role" | "roleName">) {
+  return row.roleName || row.role || "cashier";
+}
+
+function pinAuthority(role: string) {
+  if (role === "admin") {
+    return "Admin / Super Admin PIN opens Settings and authorises all supervisor actions.";
+  }
+  if (role === "supervisor") {
+    return "Supervisor PIN authorises overrides, refunds and reports.";
+  }
+  return "Cashier PIN signs in and sells only.";
 }
 
 function CredentialField({
@@ -64,7 +77,6 @@ function CredentialField({
 export function SecuritySettings({ staff, onLockTerminal }: Props) {
   const [settings, patch] = useSettings();
   const [roster, setRoster] = useState<StaffUser[]>([]);
-  const [staffId, setStaffId] = useState(staff.id);
   const [currentPassword, setCurrentPassword] = useState("");
   const [currentPin, setCurrentPin] = useState("");
   const [newPin, setNewPin] = useState("");
@@ -74,9 +86,7 @@ export function SecuritySettings({ staff, onLockTerminal }: Props) {
   const till = loadDeviceTill();
 
   async function load() {
-    const rows = await listStaff();
-    setRoster(rows);
-    setStaffId((current) => (rows.some((row) => row.id === current) ? current : rows[0]?.id ?? ""));
+    setRoster(await listStaff());
   }
 
   useEffect(() => {
@@ -85,11 +95,11 @@ export function SecuritySettings({ staff, onLockTerminal }: Props) {
     );
   }, []);
 
-  const selected = roster.find((row) => row.id === staffId) ?? null;
+  const currentUser = roster.find((row) => row.id === staff.id) ?? staff;
 
   async function savePin(pin: string | null) {
-    if (!selected) {
-      toast.error("Choose a staff member first.");
+    if (!currentUser) {
+      toast.error("The signed-in user was not found.");
       return;
     }
     if (!currentPassword.trim() && !currentPin.trim()) {
@@ -109,7 +119,7 @@ export function SecuritySettings({ staff, onLockTerminal }: Props) {
     setBusy(true);
     try {
       const result = await manageStaffPin({
-        staffId: selected.id,
+        staffId: currentUser.id,
         pin,
         currentPassword,
         currentPin,
@@ -133,7 +143,9 @@ export function SecuritySettings({ staff, onLockTerminal }: Props) {
     <>
       <p className="set-lede">
         PINs are stored on HQ as a hash. This terminal never displays a PIN; it only
-        reports whether one is set. Changes here take effect on the next sign-in.
+        reports whether one is set. Only staff explicitly set up on this till can sign
+        in; Super Admin is never shown. Supervisor and admin authority comes from the
+        live HQ role; displayed session privileges refresh on the next sign-in.
       </p>
       <LiveNote>
         Signed in as <strong>{staff.name}</strong> ({staff.role}).{" "}
@@ -157,39 +169,31 @@ export function SecuritySettings({ staff, onLockTerminal }: Props) {
         </SetRow>
       </SetCard>
 
-      <SetCard title="Till PIN setup · all roles">
-        {roster.length === 0 ? (
-          <SetRow label="No company staff yet" hint="Add staff in HQ › Setup › Staff, then refresh this page.">
-            <span className="set-muted">Company staff appear here automatically.</span>
-          </SetRow>
-        ) : (
-          <>
-            <SetRow label="Staff member" hint="PIN status is shown beside each name">
-              <SelectField
-                value={staffId}
-                onChange={setStaffId}
-                options={roster.map((row) => ({
-                  value: row.id,
-                  label: `${row.name} — ${row.role || "cashier"} · ${row.hasPin ? "PIN set" : "no PIN"}`,
-                }))}
-              />
-            </SetRow>
-            <SetRow
-              label="Selected staff PIN"
-              hint={
-                selected?.role === "admin"
-                  ? "Admin PIN opens Settings and authorises all supervisor actions."
-                  : selected?.role === "supervisor"
-                    ? "Supervisor PIN authorises overrides, refunds and reports."
-                    : "Cashier PIN signs in and sells only."
-              }
+      <SetCard title="Till PIN setup · current user">
+        <>
+          <SetRow label="Staff member" hint="Signed in on this terminal">
+            <div
+              className="set-live"
+              style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-start" }}
             >
-              <span className={selected?.hasPin ? "loyalty-on" : "set-muted"}>
-                {selected?.hasPin ? "Set" : "Not set"} · {selected?.role || "cashier"} ·{" "}
-                {selected?.privileges.join(", ") || "sell"}
+              <div style={{ minWidth: 220, flex: 1 }}>
+                <strong>{currentUser.name}</strong>
+                <span className="set-muted">
+                  {" · "}
+                  {displayRole(currentUser)} ·{" "}
+                  {currentUser.source === "account" ? "HQ account" : "Company staff"}
+                  {currentUser.email ? ` · ${currentUser.email}` : ""}
+                </span>
+                <p className="set-muted" style={{ marginTop: 4 }}>
+                  {pinAuthority(currentUser.role)}
+                </p>
+              </div>
+              <span className={currentUser.hasPin ? "loyalty-on" : "set-muted"}>
+                {currentUser.hasPin ? "PIN set" : "No PIN"}
               </span>
-            </SetRow>
-            <SetRow
+            </div>
+          </SetRow>
+          <SetRow
               label="Prove it's you"
               hint="A current password OR a current supervisor PIN is required"
             >
@@ -232,7 +236,7 @@ export function SecuritySettings({ staff, onLockTerminal }: Props) {
                 className="set-text-btn set-danger"
                 disabled={busy}
                 onClick={() => {
-                  if (window.confirm(`Clear the PIN for ${selected?.name ?? "this staff member"}?`)) {
+                  if (window.confirm(`Clear the PIN for ${currentUser.name}?`)) {
                     void savePin(null);
                   }
                 }}
@@ -240,8 +244,7 @@ export function SecuritySettings({ staff, onLockTerminal }: Props) {
                 Clear PIN
               </button>
             </SetRow>
-          </>
-        )}
+        </>
       </SetCard>
 
       <SetCard title="Session policy">

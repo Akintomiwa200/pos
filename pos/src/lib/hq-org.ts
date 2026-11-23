@@ -11,6 +11,8 @@ export type HqOrgSnapshot = {
     address: string;
     state: string;
     currency?: string;
+    /** Company logo / profile picture URL. */
+    logoUrl?: string | null;
   };
   branches: Array<{
     id: string;
@@ -310,6 +312,7 @@ export function applyHqOrg(org: HqOrgSnapshot, till?: TillLocation | null) {
     receiptShowDiscount: flag(s.receiptShowDiscount, current.receiptShowDiscount),
     receiptShowPoweredBy: flag(s.receiptShowPoweredBy, current.receiptShowPoweredBy),
     receiptShowLogo: flag(s.receiptShowLogo, current.receiptShowLogo),
+    companyLogoUrl: org.company.logoUrl || "",
     showSkuOnReceipt: flag(s.showSkuOnReceipt, current.showSkuOnReceipt),
     receiptTemplate: s.receiptTemplate ?? current.receiptTemplate,
     storefrontEnabled: front?.enabled ?? current.storefrontEnabled,

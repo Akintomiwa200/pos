@@ -303,6 +303,33 @@ function wrapCentered(text: string, avail: number, pt: number): string[] {
 }
 
 /**
+ * Best-effort fetch of the HQ company logo as base64 for native printers.
+ * Offline tills, CORS failures, and slow hosts simply fall back to initials.
+ */
+async function fetchLogoBase64(url: string): Promise<string | null> {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 1500);
+    try {
+      const response = await fetch(url, { signal: controller.signal, cache: "force-cache" });
+      if (!response.ok) return null;
+      const blob = await response.blob();
+      return await new Promise<string | null>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () =>
+          resolve(typeof reader.result === "string" ? (reader.result.split(",")[1] ?? null) : null);
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(blob);
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Builds the printed receipt as a list of primitive text/Dash/image lines that
  * mirror the on-screen ReceiptVisual. The backend renders these natively with
  * GDI+ DrawString, so the text is always printing at the printer's native
@@ -338,7 +365,7 @@ function renderBarcode(
 export function buildReceiptLayout(
   sale: SaleReceipt,
   settings: StoreSettings,
-  opts: { widthMm?: number; dpi?: number } = {},
+  opts: { widthMm?: number; dpi?: number; logoB64?: string | null } = {},
 ): ReceiptRichLine[] {
   const out: ReceiptRichLine[] = [];
   const paperMm = settings.receiptPaper === "58mm" ? 58 : 80;
@@ -431,7 +458,11 @@ export function buildReceiptLayout(
   };
 
   if (settings.receiptShowLogo) {
-    out.push({ t: "c", text: initialsOf(title), bold: true });
+    if (opts.logoB64) {
+      out.push({ t: "img", b64: opts.logoB64, wMm: 12, hMm: 12 });
+    } else {
+      out.push({ t: "c", text: initialsOf(title), bold: true });
+    }
   }
   if (showTitle) {
     centered(bold ? title.toUpperCase() : title, { bold });
@@ -665,9 +696,14 @@ export async function printReceipt(
   const paperMm = settings.receiptPaper === "58mm" ? 58 : 80;
   const geometry = await getPrinterGeometry(config.receiptPrinter);
   const widthMm = Math.min(paperMm, geometry.printableWidthMm || paperMm);
+  const logoB64 =
+    settings.receiptShowLogo && settings.companyLogoUrl
+      ? await fetchLogoBase64(settings.companyLogoUrl)
+      : null;
   const layout = buildReceiptLayout(sale, settings, {
     widthMm,
     dpi: geometry.dpi,
+    logoB64,
   });
   await sendReceiptLayout(config.receiptPrinter, layout, widthMm, copies);
   const isRefund = sale.kind === "refund" || sale.totalMinor < 0;

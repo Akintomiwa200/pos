@@ -17,6 +17,7 @@ import {
   Percent,
   Palette,
   Receipt,
+  ShieldCheck,
   ShoppingCart,
   SlidersHorizontal,
   Store,
@@ -135,6 +136,13 @@ const ORG_LINKS = [
     hint: "VAT and service charge",
     icon: Percent,
     req: "others-tax",
+  },
+  {
+    href: "/setup/access",
+    label: "Roles & privileges",
+    hint: "Default roles and custom access",
+    icon: ShieldCheck,
+    req: "users-role",
   },
 ] as const;
 

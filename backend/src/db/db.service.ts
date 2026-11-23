@@ -82,6 +82,11 @@ export class DbService implements OnModuleInit {
     } catch {
       /* already present */
     }
+    try {
+      await this.query(`alter table hq_accounts add column if not exists avatar_url text`);
+    } catch {
+      /* already present */
+    }
     await this.query(`create table if not exists hq_sessions (
       token text primary key,
       account_id text not null references hq_accounts(id) on delete cascade,

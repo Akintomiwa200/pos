@@ -438,7 +438,7 @@ export const EXISTING_LINKS: ExistingLink[] = [
   { group: "People", label: "Team", copy: "Staff directory, departments and roster status.", href: "/setup/staff" },
   { group: "Security", label: "Security settings", copy: "Password policy, idle lock, login history, sessions and cashier PINs.", href: "/setup/others/settings?section=security" },
   { group: "Security", label: "HQ accounts", copy: "Sign-in accounts, passwords and account access.", href: "/setup/users/account" },
-  { group: "Security", label: "Privilege groups", copy: "Roles and permissions for HQ sections and tools.", href: "/setup/users/group" },
+  { group: "Security", label: "Roles & privileges", copy: "See default roles, add or remove access, and create custom roles that apply live.", href: "/setup/access" },
   { group: "Security", label: "Floor staff", copy: "Till operators, roles and cashier PIN setup.", href: "/setup/staff" },
   { group: "Security", label: "Security dashboard", copy: "Producer-wide security activity, audit trail and events.", href: "/admin/security" },
   { group: "Money", label: "Billing", copy: "Subscriptions, till licences and invoices.", href: "/setup/billing/subscriptions" },
@@ -449,6 +449,6 @@ export const EXISTING_LINKS: ExistingLink[] = [
   { group: "Operations", label: "Units of Measure", copy: "Count, weight, volume and pack units.", href: "/setup/items/units" },
   { group: "Operations", label: "Promotions & Loyalty", copy: "Discount campaigns and loyalty programme.", href: "/setup/sales-promotion" },
   { group: "Administration & Data", label: "Data Export", copy: "Export your data for backup or migration.", href: "/setup/others/export" },
-  { group: "My account", label: "My profile", copy: "Your sign-in details and account profile.", href: "/setup/users/account" },
+  { group: "My account", label: "My profile", copy: "Your sign-in details, profile picture, and account profile.", href: "/profile" },
   { group: "My account", label: "Password & lock", copy: "Change your password, set idle lock and review security activity.", href: "/setup/others/settings?section=security" },
 ];

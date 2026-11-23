@@ -37,7 +37,6 @@ import {
   SetupHeader,
   fieldClass,
   secondaryButtonClass,
-  selectClass,
 } from "@/components/setup/SetupChrome";
 import { AccountFormSheet } from "./AccountFormSheet";
 import {
@@ -66,7 +65,6 @@ export function AccountProfile({ accountId }: { accountId: string }) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [pinRoster, setPinRoster] = useState<TillStaffMember[]>([]);
-  const [pinTarget, setPinTarget] = useState("");
   const [pinValue, setPinValue] = useState("");
   const [pinConfirm, setPinConfirm] = useState("");
   const [pinVisible, setPinVisible] = useState(false);
@@ -82,20 +80,24 @@ export function AccountProfile({ accountId }: { accountId: string }) {
       .then((rows) => {
         if (cancelled) return;
         setPinRoster(rows);
-        const self = rows.find(
-          (row) => row.username.toLowerCase() === (account?.username ?? "").toLowerCase(),
-        );
-        setPinTarget(self?.id ?? (rows.length > 0 ? rows[0].id : ""));
       })
       .catch(() => undefined);
     return () => {
       cancelled = true;
     };
-  }, [account?.username]);
+  }, [account?.id, account?.username, account?.email]);
 
   const group = account
     ? groups.find((row) => row.id === account.groupId)
     : undefined;
+  const pinLogin = (account?.username ?? account?.email ?? "").trim().toLowerCase();
+  const pinMember = pinRoster.find(
+    (row) =>
+      (account?.id && row.id === `web:${account.id}`) ||
+      (row.username ?? "").trim().toLowerCase() === pinLogin ||
+      (row.email ?? "").trim().toLowerCase() === pinLogin,
+  );
+  const pinTarget = pinMember?.id ?? (account?.id ? `web:${account.id}` : "");
 
   function openEdit() {
     if (!account) return;
@@ -126,6 +128,7 @@ export function AccountProfile({ accountId }: { accountId: string }) {
             name: saved.name,
             email: saved.email,
             username: saved.username,
+            avatarUrl: saved.avatarUrl ?? session.avatarUrl ?? null,
             groupId: saved.groupId,
             groupName: nextGroup.name,
             departments: nextGroup.departments,
@@ -160,7 +163,7 @@ export function AccountProfile({ accountId }: { accountId: string }) {
     if (!session?.token || pinTarget === "") return;
     const value = pinValue.trim();
     if (!/^\d{4,10}$/.test(value)) {
-      toast.error("Cashier PIN must be 4 to 10 digits.");
+      toast.error("Till PIN must be 4 to 10 digits.");
       return;
     }
     if (value !== pinConfirm) {
@@ -172,7 +175,7 @@ export function AccountProfile({ accountId }: { accountId: string }) {
       await setStaffPin(session.token, pinTarget, value);
       setPinValue("");
       setPinConfirm("");
-      toast.success("Cashier PIN saved.");
+      toast.success("Till PIN saved.");
     } catch (err) {
       toast.error(err, "Could not save PIN");
     } finally {
@@ -187,7 +190,7 @@ export function AccountProfile({ accountId }: { accountId: string }) {
       await clearStaffPin(session.token, pinTarget);
       setPinValue("");
       setPinConfirm("");
-      toast.success("Cashier PIN cleared.");
+      toast.success("Till PIN cleared.");
     } catch (err) {
       toast.error(err, "Could not clear PIN");
     } finally {
@@ -244,7 +247,7 @@ export function AccountProfile({ accountId }: { accountId: string }) {
 
         <div className="relative px-5 pb-6 pt-0 sm:px-8">
           <div className="-mt-12 flex flex-col gap-4 sm:-mt-14 sm:flex-row sm:items-end sm:justify-between">
-            <PersonAvatar name={account.name} id={account.id} size={96} />
+            <PersonAvatar name={account.name} id={account.id} size={96} src={account.avatarUrl} />
             <div className="flex flex-wrap gap-2 sm:pb-1">
               <a href={`mailto:${account.email}`} className={secondaryButtonClass}>
                 <Mail size={15} />
@@ -365,10 +368,10 @@ export function AccountProfile({ accountId }: { accountId: string }) {
                   </span>
                   <div className="min-w-0">
                     <p className="text-[12px] text-pos-ink-faint">POS access</p>
-                    <p className="mt-0.5 font-semibold text-pos-ink">Cashier PIN</p>
+                    <p className="mt-0.5 font-semibold text-pos-ink">Till PIN</p>
                     <p className="mt-1 text-[13px] leading-relaxed text-pos-ink-muted">
-                      Set the PIN this staff member uses to sign in on the till. 4–10
-                      digits. Tills pick it up on their next sync.
+                      Set a PIN to register this account on the till. Its HQ role controls
+                      what the PIN can authorise there.
                     </p>
                   </div>
                 </div>
@@ -377,27 +380,31 @@ export function AccountProfile({ accountId }: { accountId: string }) {
                   className="mt-4 space-y-3"
                   onSubmit={(event) => void onPinSave(event)}
                 >
-                  <label className="block">
-                    <span className="text-[11px] font-semibold uppercase tracking-wide text-pos-ink-muted">
-                      Till staff
-                    </span>
-                    <select
-                      className={selectClass}
-                      value={pinTarget}
-                      onChange={(event) => setPinTarget(event.target.value)}
-                      disabled={!canManagePin || pinRoster.length === 0}
-                    >
-                      {pinRoster.length === 0 ? (
-                        <option value="">No till staff on roster</option>
-                      ) : (
-                        pinRoster.map((row) => (
-                          <option key={row.id} value={row.id}>
-                            {row.name} (@{row.username})
-                          </option>
-                        ))
-                      )}
-                    </select>
-                  </label>
+                  <div className="rounded-[14px] border border-pos-border bg-pos-surface px-3 py-2.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-pos-ink-faint">
+                      Staff member
+                    </p>
+                    <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-[13px] font-semibold text-pos-ink">
+                          {account?.name || "Account"}
+                        </p>
+                        <p className="text-[11px] text-pos-ink-muted">
+                          {pinMember?.roleName || group?.name || "Cashier"} · HQ account
+                          {account?.email ? ` · ${account.email}` : ""}
+                        </p>
+                      </div>
+                      <span
+                        className={`inline-flex rounded-lg px-2 py-1 text-[10px] font-medium ${
+                          pinMember?.hasPin
+                            ? "bg-pos-success/10 text-pos-success"
+                            : "bg-pos-surface-muted text-pos-ink-faint"
+                        }`}
+                      >
+                        {pinMember?.hasPin ? "PIN set" : "No PIN"}
+                      </span>
+                    </div>
+                  </div>
 
                   <div className="flex gap-2">
                     <label className="block flex-1">
@@ -418,7 +425,7 @@ export function AccountProfile({ accountId }: { accountId: string }) {
                           maxLength={10}
                           placeholder={pinTarget ? "4–10 digits" : "Select staff first"}
                           disabled={!canManagePin || pinTarget === "" || pinBusy}
-                          aria-label="Cashier PIN"
+                          aria-label="Till PIN"
                         />
                         <button
                           type="button"

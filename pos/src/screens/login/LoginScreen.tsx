@@ -13,9 +13,10 @@ type Props = {
 
 const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "del"] as const;
 
-function roleCopy(role: StaffUser["role"]) {
-  if (role === "admin") return "Manager";
-  if (role === "supervisor") return "Supervisor";
+function roleCopy(row: StaffUser) {
+  if (row.roleName?.trim()) return row.roleName.trim();
+  if (row.role === "admin") return "Manager";
+  if (row.role === "supervisor") return "Supervisor";
   return "Cashier";
 }
 
@@ -133,13 +134,13 @@ export function LoginScreen({ onLogin, banner }: Props) {
                       <img src={selected.avatar} alt="" />
                       <span>
                         <strong>{selected.name}</strong>
-                        <em>{roleCopy(selected.role)}</em>
+                        <em>{roleCopy(selected)}</em>
                       </span>
                     </>
                   ) : (
                     <span>
-                      <strong>No staff on roster</strong>
-                      <em>Use password sign-in</em>
+                      <strong>No till users on roster</strong>
+                      <em>Set up a till user in HQ</em>
                     </span>
                   )}
                   <ChevronDown size={18} />
@@ -160,7 +161,7 @@ export function LoginScreen({ onLogin, banner }: Props) {
                           <img src={row.avatar} alt="" />
                           <span>
                             <strong>{row.name}</strong>
-                            <em>{roleCopy(row.role)}</em>
+                            <em>{roleCopy(row)}</em>
                           </span>
                           {row.id === selected?.id ? <i>✓</i> : null}
                         </button>
@@ -214,7 +215,7 @@ export function LoginScreen({ onLogin, banner }: Props) {
           ) : (
             <form onSubmit={(event) => void submitPassword(event)}>
               <h1>Sign in</h1>
-              <p>Use a till username or HQ account to open this till.</p>
+              <p>Use a till username and password to open this till.</p>
               {banner ? <p className="login-banner">{banner}</p> : null}
               <label>
                 Username

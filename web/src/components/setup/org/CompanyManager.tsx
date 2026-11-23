@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 import Link from "next/link";
 import {
   Building2,
+  Camera,
   Mail,
   MapPin,
   Pencil,
@@ -11,14 +12,17 @@ import {
   Percent,
   CreditCard,
   Store,
+  Trash2,
 } from "lucide-react";
 import { toast } from "@/lib/toast";
 import {
   getCompany,
   getSetupData,
   listBranches,
+  removeCompanyImage,
   saveCompany,
   saveOrgSettings,
+  uploadCompanyImage,
   type HqCompany,
 } from "@/lib/hq-setup";
 import { ManagerSkeleton } from "@/components/Skeleton";
@@ -36,6 +40,9 @@ import { SetupCountryStateFields } from "@/components/geo/CountryStateFields";
 import { CURRENCIES, currencyForCountry, localeFromCurrency, withCurrent } from "@/lib/locale";
 import { setOrgLocale, useOrgLocale } from "@/lib/org-locale";
 import { useOrgLinks } from "@/lib/org-links";
+
+const MAX_COMPANY_IMAGE_BYTES = 1024 * 1024;
+const COMPANY_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 
 function requiredCompany(draft: Partial<HqCompany>) {
   if (!draft.name?.trim()) return "Trading name is required";
@@ -62,7 +69,9 @@ export function CompanyManager() {
   const [branchPreview, setBranchPreview] = useState<string[]>([]);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [imageBusy, setImageBusy] = useState(false);
   const [ready, setReady] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     const [next, data, branches] = await Promise.all([
@@ -91,6 +100,47 @@ export function CompanyManager() {
 
   useOrgLive(load);
 
+  function applyImage(next: HqCompany) {
+    setCompany(next);
+    setDraft(next);
+    void load().catch(() => undefined);
+  }
+
+  async function onPickImage(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (!COMPANY_IMAGE_TYPES.has(file.type)) {
+      toast.error("Use JPG, PNG, WebP, or GIF for company images.");
+      return;
+    }
+    if (file.size > MAX_COMPANY_IMAGE_BYTES) {
+      toast.error("Company images must be 1 MB or smaller.");
+      return;
+    }
+    setImageBusy(true);
+    try {
+      applyImage(await uploadCompanyImage(file));
+      toast.success("Company image updated.");
+    } catch (err) {
+      toast.error(err, "Could not upload company image");
+    } finally {
+      setImageBusy(false);
+    }
+  }
+
+  async function onRemoveImage() {
+    setImageBusy(true);
+    try {
+      applyImage(await removeCompanyImage());
+      toast.success("Company image removed.");
+    } catch (err) {
+      toast.error(err, "Could not remove company image");
+    } finally {
+      setImageBusy(false);
+    }
+  }
+
   if (!ready) return <ManagerSkeleton variant="list" />;
 
   if (!company) {
@@ -110,7 +160,7 @@ export function CompanyManager() {
       <SetupHeader
         kicker={kicker}
         title="Company"
-        copy="Legal identity on receipts and filings. Branches, storefronts, gateways, and tax hang off this profile."
+        copy="Company image and legal identity on receipts and filings. Branches, storefronts, gateways, and tax hang off this profile."
         action={
           <PrimaryButton
             onClick={() => {
@@ -155,9 +205,18 @@ export function CompanyManager() {
       <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
         <section className="overflow-hidden rounded-[24px] bg-pos-surface shadow-pos-md">
           <div className="flex items-start gap-4 border-b border-pos-border/70 px-5 py-5">
-            <span className="grid size-12 place-items-center rounded-full bg-pos-primary text-white shadow-pos-primary">
-              <Building2 size={20} />
-            </span>
+            {company.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={company.logoUrl}
+                alt={company.name}
+                className="size-12 shrink-0 rounded-[14px] object-cover shadow-pos-sm ring-1 ring-pos-border"
+              />
+            ) : (
+              <span className="grid size-12 place-items-center rounded-full bg-pos-primary text-white shadow-pos-primary">
+                <Building2 size={20} />
+              </span>
+            )}
             <div className="min-w-0">
               <h2 className="text-[20px] font-semibold tracking-tight text-pos-ink">
                 {company.name || "Untitled company"}
@@ -287,6 +346,55 @@ export function CompanyManager() {
               </p>
             </header>
             <div className="min-h-0 flex-1 space-y-1 overflow-y-auto px-5 py-4">
+              <div className="mb-4 flex items-center gap-3 rounded-[18px] bg-pos-surface-muted/60 p-3">
+                {draft.logoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={draft.logoUrl}
+                    alt="Company image"
+                    className="size-14 shrink-0 rounded-[14px] object-cover ring-1 ring-pos-border"
+                  />
+                ) : (
+                  <span className="grid size-14 shrink-0 place-items-center rounded-[14px] bg-pos-primary text-white">
+                    <Building2 size={22} />
+                  </span>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] font-semibold text-pos-ink">Company image</p>
+                  <p className="mt-0.5 text-[12px] leading-relaxed text-pos-ink-faint">
+                    JPG, PNG, WebP, or GIF, up to 1 MB. Used on receipts, invoices, and tills.
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className={secondaryButtonClass}
+                      onClick={() => fileRef.current?.click()}
+                      disabled={imageBusy}
+                    >
+                      <Camera size={14} />
+                      {imageBusy ? "Working…" : draft.logoUrl ? "Change image" : "Upload image"}
+                    </button>
+                    {draft.logoUrl ? (
+                      <button
+                        type="button"
+                        className={secondaryButtonClass}
+                        onClick={() => void onRemoveImage()}
+                        disabled={imageBusy}
+                      >
+                        <Trash2 size={14} />
+                        Remove
+                      </button>
+                    ) : null}
+                  </div>
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    className="hidden"
+                    onChange={(event) => void onPickImage(event)}
+                  />
+                </div>
+              </div>
               <Field label="Trading name">
                 <input
                   className={fieldClass}

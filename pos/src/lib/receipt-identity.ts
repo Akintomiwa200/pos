@@ -73,5 +73,6 @@ export function overlayReceiptIdentity(
     receiptShowDiscount: s.receiptShowDiscount ?? settings.receiptShowDiscount,
     receiptShowPoweredBy: s.receiptShowPoweredBy ?? settings.receiptShowPoweredBy,
     receiptShowLogo: s.receiptShowLogo ?? settings.receiptShowLogo,
+    companyLogoUrl: company.logoUrl || settings.companyLogoUrl,
   };
 }

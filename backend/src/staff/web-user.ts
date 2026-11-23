@@ -18,7 +18,28 @@ export type WebUserLike = {
   groupId?: string | null;
   groupName?: string | null;
   privileges?: string[] | null;
+  avatarUrl?: string | null;
 };
+
+/** Super Admin is an HQ-only role and must never reach the till login roster. */
+export function isSuperAdmin(user: {
+  groupId?: string | null;
+  groupName?: string | null;
+  roleName?: string | null;
+  scope?: string | null;
+  privileges?: string[] | null;
+}) {
+  const groupId = (user.groupId ?? "").trim().toLowerCase();
+  const role = (user.groupName ?? user.roleName ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+  return (
+    groupId === "g-super-admin" ||
+    role === "superadmin" ||
+    (user.scope === "producer" && Boolean(user.privileges?.includes("*")))
+  );
+}
 
 /**
  * Console privileges that imply a till supervisor. Deliberately excludes the
@@ -26,11 +47,19 @@ export type WebUserLike = {
  * `sales-return-list`, `customer`) so a "Cashier" group is not upgraded to a
  * supervisor on the till.
  */
+/** HQ privileges that should be able to open till Settings with a PIN. */
+const ADMIN_PRIVS = new Set([
+  "settings",
+  "super-admins",
+  "super-admin-roles",
+  "super-people-access",
+  "super-people-roles",
+]);
+
 const SUPERVISOR_PRIVS = new Set([
   "audit",
   "staff",
   "setup",
-  "settings",
   "manager",
   "supervisor",
 ]);
@@ -43,7 +72,12 @@ export function fromConsoleUser(u: WebUserLike): StaffUser | null {
   const privs = new Set(u.privileges ?? []);
   const groupId = (u.groupId ?? "").trim().toLowerCase();
   let role: StaffRole;
-  if (privs.has("*") || u.scope === "producer" || ADMIN_GROUPS.has(groupId)) {
+  if (
+    privs.has("*") ||
+    u.scope === "producer" ||
+    ADMIN_GROUPS.has(groupId) ||
+    [...ADMIN_PRIVS].some((p) => privs.has(p))
+  ) {
     role = "admin";
   } else if (
     SUPERVISOR_GROUPS.has(groupId) ||
@@ -65,10 +99,22 @@ export function fromConsoleUser(u: WebUserLike): StaffUser | null {
     username: (u.username ?? "").trim() || (u.email || ""),
     email: u.email || "",
     role,
+    roleName:
+      (u.groupName || "").trim() ||
+      (u.scope === "producer"
+        ? "Super Admin"
+        : role === "admin"
+          ? "Administrator"
+          : role === "supervisor"
+            ? "Supervisor"
+            : "Cashier"),
+    source: "account",
+    posLogin: false,
+    hqAccountId: u.id,
     privileges,
     password: "",
     pin: "",
     hasPin: false,
-    avatar: avatarFor(u.name),
+    avatar: u.avatarUrl || avatarFor(u.name),
   };
 }

@@ -36,6 +36,8 @@ export type ConsoleAccount = {
   authProvider?: "password" | "google" | "both";
   /** Whether the account confirmed its email address (default false). */
   emailVerified?: boolean;
+  /** Profile picture URL (uploaded via HQ profile). */
+  avatarUrl?: string | null;
 };
 
 export type HqNotice = {

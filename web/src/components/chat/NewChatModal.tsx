@@ -173,9 +173,18 @@ export function NewChatModal({
                     isSelected ? "bg-pos-primary-soft" : "hover:bg-pos-surface-muted"
                   }`}
                 >
-                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-pos-primary-soft text-pos-primary">
-                    <span className="text-xs font-semibold">{initials}</span>
-                  </div>
+                  {target.avatar ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={target.avatar}
+                      alt={target.name}
+                      className="h-10 w-10 shrink-0 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-pos-primary-soft text-pos-primary">
+                      <span className="text-xs font-semibold">{initials}</span>
+                    </div>
+                  )}
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold text-pos-ink">{target.name}</p>
                     <p className="truncate text-[12px] text-pos-ink-faint">@{target.username}</p>

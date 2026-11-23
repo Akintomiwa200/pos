@@ -33,6 +33,10 @@ export type SessionLockEvent = {
   at: string;
 };
 
+export type SessionStreamEvent =
+  | SessionLockEvent
+  | { type: "privileges"; at: string };
+
 export type ConsoleGroup = {
   id: string;
   name: string;
@@ -49,6 +53,8 @@ export type ConsoleAccount = {
   password: string;
   groupId: string;
   active: boolean;
+  /** Profile picture URL (uploaded via My Profile). */
+  avatarUrl?: string | null;
 };
 
 export type ConsoleSession = {
@@ -62,6 +68,8 @@ export type ConsoleSession = {
   scope?: GroupScope;
   departments: Array<DepartmentName | "*">;
   privileges: string[];
+  /** Profile picture URL, kept in sync with the account directory. */
+  avatarUrl?: string | null;
   /** Set while the account or company subscription is locked (pages blocked). */
   locked?: SessionLockState | null;
 };
@@ -77,7 +85,7 @@ export function sessionScope(session: { scope?: GroupScope } | null | undefined)
 export const SESSION_KEY = "hq.session.v1";
 
 /** Always reachable when signed in (not shown as group privileges). */
-const ALWAYS_ALLOWED_PATHS = ["/password", "/help"];
+const ALWAYS_ALLOWED_PATHS = ["/password", "/help", "/profile"];
 
 function nodeIds(node: NavNode): string[] {
   if (!isNavGroup(node)) return [node.id];

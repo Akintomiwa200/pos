@@ -9,7 +9,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { DirectoryRecord } from "../directory/directory.types";
 import { ConsoleService } from "../console/console.service";
-import { avatarFor, fromConsoleUser } from "./web-user";
+import { avatarFor, fromConsoleUser, isSuperAdmin, type WebUserLike } from "./web-user";
 import {
   canAccessSettings,
   canUnlock,
@@ -47,22 +47,54 @@ function roleFor(label: string): StaffRole {
   return "cashier";
 }
 
+/** Map an HQ role (including custom ones) to the till role its PIN can use. */
+function roleFromGroup(
+  group: { id: string; name: string; scope?: string; privileges: string[] } | undefined,
+  label: string,
+) {
+  if (group) {
+    const mapped = fromConsoleUser({
+      id: group.id,
+      name: group.name,
+      email: "",
+      username: "",
+      groupId: group.id,
+      scope: group.scope,
+      privileges: group.privileges,
+    });
+    if (mapped) return { role: mapped.role, privileges: mapped.privileges };
+  }
+  return { role: roleFor(label), privileges: privilegesFor(label) };
+}
+
 function fromRecord(row: DirectoryRecord): StaffUser {
   const extra = row.extra ?? {};
   const label = roleLabel(extra);
   const tillPin = str(extra.tillPin);
+  const posLogin =
+    extra.posLogin === true ||
+    extra.posLogin === "true" ||
+    str(extra.posLogin) === "1" ||
+    str(extra.tillUsername) !== "";
   return {
     id: row.id,
     name: row.name,
     username: str(extra.tillUsername),
     email: str(row.email),
     role: roleFor(label),
+    posLogin,
+    hqAccountId: str(extra.hqAccountId) || undefined,
     password: hash(str(extra.tillPassword)),
     pin: tillPin ? hash(tillPin) : "",
     hasPin: Boolean(tillPin),
     privileges: privilegesFor(label),
     avatar: avatarFor(row.name),
   };
+}
+
+/** Only explicitly configured till users can appear in, or use, POS login. */
+function canPosLogin(user: StaffUser) {
+  return Boolean(user.posLogin) && !isSuperAdmin({ roleName: user.roleName });
 }
 
 @Injectable()
@@ -102,19 +134,149 @@ export class StaffService {
   }
 
   /**
-   * Company staff come from the Setup › Staff directory. Every active staff
-   * member can be given a PIN, even before they have a till username — PIN
-   * sign-in identifies the operator by staff id, not by username.
+   * Full till roster: active company staff plus active HQ account holders.
+   * This roster backs HQ PIN setup and live PIN authorisation. POS login uses
+   * `posUsers()` below, which only includes staff explicitly set up on a till
+   * and never includes Super Admin.
    */
   private async users(): Promise<StaffUser[]> {
     const [roster, pins] = await Promise.all([this.roster(), this.pinStore()]);
-    return roster
+    let groups: Awaited<ReturnType<ConsoleService["listGroups"]>> = [];
+    let accounts: Awaited<ReturnType<ConsoleService["listAccounts"]>> = [];
+    try {
+      [groups, accounts] = await Promise.all([this.console.listGroups(), this.console.listAccounts()]);
+    } catch {
+      /* fall back to built-in till roles if HQ data is unavailable */
+    }
+
+    const accountByEmail = new Map(
+      accounts.map((account) => [account.email.trim().toLowerCase(), account]),
+    );
+    const linkedAccountIds = new Set(
+      roster.map((row) => str(row.extra?.hqAccountId)).filter(Boolean),
+    );
+    const linkedEmails = new Set(
+      roster.map((row) => str(row.email).trim().toLowerCase()).filter(Boolean),
+    );
+
+    const staffUsers = roster
       .filter((row) => row.active)
       .map((row) => {
         const base = fromRecord(row);
+        const label = roleLabel(row.extra).toLowerCase();
+        const linkedAccount =
+          accounts.find((account) => account.id === str(row.extra?.hqAccountId)) ??
+          accountByEmail.get(str(row.email).trim().toLowerCase());
+        const linkedGroupId =
+          str(row.extra?.hqGroupId).toLowerCase() || (linkedAccount?.groupId ?? "").toLowerCase();
+        const group =
+          groups.find((entry) => entry.id.toLowerCase() === linkedGroupId) ??
+          groups.find((entry) => entry.name.trim().toLowerCase() === label) ??
+          groups.find((entry) => entry.id.toLowerCase() === label);
+        const mapped = roleFromGroup(group, label);
         const pin = pins[base.id] ?? base.pin;
-        return { ...base, pin, hasPin: Boolean(pin) };
+        const superAdmin = isSuperAdmin({
+          groupId: group?.id,
+          groupName: group?.name,
+          scope: group?.scope,
+          privileges: group?.privileges,
+        });
+        return {
+          ...base,
+          role: mapped.role,
+          roleName: group?.name?.trim() || str(row.extra?.tillRole) || mapped.role,
+          source: "staff" as const,
+          posLogin: !superAdmin && base.posLogin,
+          privileges: mapped.privileges,
+          avatar: linkedAccount?.avatarUrl || base.avatar,
+          pin,
+          hasPin: Boolean(pin),
+        };
       });
+
+    const accountUsers = accounts
+      .filter(
+        (account) =>
+          account.active &&
+          !linkedAccountIds.has(account.id) &&
+          !linkedEmails.has(account.email.trim().toLowerCase()),
+      )
+      .map((account) => {
+        const group = groups.find((entry) => entry.id === account.groupId);
+        const mapped =
+          fromConsoleUser({
+            id: account.id,
+            name: account.name,
+            email: account.email,
+            username: account.username,
+            groupId: account.groupId,
+            groupName: group?.name,
+            scope: group?.scope,
+            privileges: group?.privileges ?? [],
+            avatarUrl: account.avatarUrl,
+          }) ?? undefined;
+        const id = `web:${account.id}`;
+        const pin = pins[id] ?? "";
+        const superAdmin = isSuperAdmin({
+          groupId: group?.id,
+          groupName: group?.name,
+          scope: group?.scope,
+          privileges: group?.privileges,
+        });
+        const base: StaffUser = mapped ?? {
+          id,
+          name: account.name,
+          username: account.username || account.email,
+          email: account.email,
+          role: "cashier",
+          roleName: group?.name || "Cashier",
+          source: "account",
+          password: "",
+          pin: "",
+          hasPin: false,
+          privileges: ["sell"],
+          avatar: account.avatarUrl || avatarFor(account.name),
+        };
+        return {
+          ...base,
+          id,
+          pin,
+          hasPin: Boolean(pin),
+          // A saved Till PIN is what registers an HQ account on the till. Without
+          // one it must not appear in the POS login roster (and Super Admin never does).
+          posLogin: Boolean(pin) && !superAdmin,
+          hqAccountId: account.id,
+        };
+      });
+
+    return [...staffUsers, ...accountUsers];
+  }
+
+  /** Staff explicitly configured to sign in on a POS device. */
+  private async posUsers(): Promise<StaffUser[]> {
+    return (await this.users()).filter(canPosLogin);
+  }
+
+  async listLoginRoster() {
+    return (await this.posUsers()).map(publicStaff);
+  }
+
+  /**
+   * An HQ account may only open the till when it has a saved Till PIN (or is
+   * linked to a staff record explicitly configured as a till user).
+   * Super Admin is always rejected.
+   */
+  async consolePosUser(user: WebUserLike): Promise<StaffUser | undefined> {
+    if (isSuperAdmin(user)) return undefined;
+    const roster = await this.posUsers();
+    const email = (user.email ?? "").trim().toLowerCase();
+    const username = (user.username ?? "").trim().toLowerCase();
+    return roster.find(
+      (staff) =>
+        (user.id && staff.hqAccountId === user.id) ||
+        (email !== "" && staff.email.trim().toLowerCase() === email) ||
+        (username !== "" && staff.username.trim().toLowerCase() === username),
+    );
   }
 
   async list() {
@@ -127,7 +289,7 @@ export class StaffService {
       await this.audit(null, "staff.login.failed", name || "blank", "password");
       throw new UnauthorizedException("Wrong username or password.");
     }
-    const user = (await this.users()).find(
+    const user = (await this.posUsers()).find(
       (staff) =>
         staff.password === hash(password) &&
         (staff.username.toLowerCase() === name || staff.email.toLowerCase() === name),
@@ -149,7 +311,7 @@ export class StaffService {
     if (trimmed.length < 4) {
       throw new UnauthorizedException("Enter your 4-digit PIN.");
     }
-    const user = (await this.users()).find((staff) => staff.id === staffId);
+    const user = (await this.posUsers()).find((staff) => staff.id === staffId);
     if (!user || user.pin !== hash(trimmed)) {
       await this.audit(null, "staff.login.failed", staffId, "PIN");
       throw new UnauthorizedException("Wrong PIN.");

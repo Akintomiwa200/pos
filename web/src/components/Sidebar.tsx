@@ -364,11 +364,20 @@ export function Sidebar({
           <div className="min-w-0 flex-1">
             {session.scope !== "producer" && company ? (
               <Link href={homeHref} className="flex min-w-0 items-center gap-2.5">
-                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-pos-primary text-white shadow-pos-primary">
-                  <span className="text-[12px] font-semibold tracking-wide">
-                    {companyInitials(company.name)}
+                {company.logoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={company.logoUrl}
+                    alt={company.name}
+                    className="h-8 w-8 shrink-0 rounded-[10px] object-cover shadow-pos-sm ring-1 ring-pos-border"
+                  />
+                ) : (
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-pos-primary text-white shadow-pos-primary">
+                    <span className="text-[12px] font-semibold tracking-wide">
+                      {companyInitials(company.name)}
+                    </span>
                   </span>
-                </span>
+                )}
                 <span className="min-w-0">
                   <span className="block truncate text-[14px] font-medium leading-tight tracking-tight text-pos-ink">
                     {company.name}

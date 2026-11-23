@@ -10,6 +10,8 @@ export type HqCompany = {
   state: string;
   country: string;
   currency: string;
+  /** Company logo / profile picture URL (uploaded via company setup). */
+  logoUrl?: string | null;
 };
 
 export type HqBranch = {
@@ -179,6 +181,7 @@ export const DEFAULT_COMPANY: HqCompany = {
   state: "",
   country: "Nigeria",
   currency: "NGN",
+  logoUrl: null,
 };
 
 export const SEED_TAXES: HqTax[] = [

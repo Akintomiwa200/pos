@@ -88,6 +88,8 @@ export type StoreSettings = {
   receiptShowDiscount: boolean;
   receiptShowPoweredBy: boolean;
   receiptShowLogo: boolean;
+  /** HQ company logo shown above the receipt title when receiptShowLogo is on. */
+  companyLogoUrl: string;
   receiptShowTax: boolean;
   receiptBrandColor: string;
   /** HQ's configured barcode value is only for previews; completed sales use their ticket id. */
@@ -221,6 +223,7 @@ export function defaultStoreSettings(): StoreSettings {
     receiptShowDiscount: true,
     receiptShowPoweredBy: true,
     receiptShowLogo: true,
+    companyLogoUrl: "",
     receiptShowTax: true,
     receiptBrandColor: "#111827",
     receiptBarcodeValue: "",

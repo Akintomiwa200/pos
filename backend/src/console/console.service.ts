@@ -66,6 +66,7 @@ type AccountRow = {
   google_id: string | null;
   auth_provider: string;
   email_verified: boolean;
+  avatar_url: string | null;
 };
 
 function isoOrNull(value: Date | string | null): string | null {
@@ -213,6 +214,11 @@ export type SessionLockEvent = {
   at: string;
 };
 
+/** Sent when roles/privileges change so sessions can refresh immediately. */
+export type SessionStreamEvent =
+  | SessionLockEvent
+  | { type: "privileges"; at: string };
+
 /** Signal for Super Admin's live security/operation feed. */
 export type SecurityFeedEvent = {
   type: "security";
@@ -228,7 +234,7 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
   private readonly posEvents = new Subject<PosEvent>();
   private readonly billingEvents = new Subject<BillingEvent>();
   private readonly noticesEvents = new Subject<NoticesEvent>();
-  private readonly sessionEvents = new Subject<SessionLockEvent>();
+  private readonly sessionEvents = new Subject<SessionStreamEvent>();
   private readonly securityFeed = new Subject<SecurityFeedEvent>();
   private noticePublishing = false;
   private subscriptionLocked: boolean | null = null;
@@ -298,6 +304,7 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
           ? row.auth_provider
           : "password",
       emailVerified: row.email_verified,
+      avatarUrl: row.avatar_url ?? null,
     };
   }
 
@@ -364,6 +371,14 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
     const name = group.name?.trim();
     if (!name) throw new BadRequestException("Group name is required");
     const existing = group.id ? await this.findGroup(group.id) : undefined;
+    if (isDefaultGroupId(group.id ?? "") || (existing && isDefaultGroupId(existing.id))) {
+      await this.recordAudit({
+        action: "role.update.denied",
+        target: group.name || group.id || "",
+        detail: "Default roles are read-only",
+      });
+      throw new ForbiddenException("Default roles cannot be edited");
+    }
     const scope: GroupScope =
       existing?.scope === "producer" ||
       group.scope === "producer" ||
@@ -396,7 +411,13 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
         next.scope,
       ],
     );
+    await this.recordAudit({
+      action: existing ? "role.updated" : "role.created",
+      target: next.name,
+      detail: `${next.scope} · ${next.privileges.length} privileges`,
+    });
     this.publishDirectory();
+    this.publishPrivileges();
     return next;
   }
 
@@ -413,14 +434,16 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
     }
     const result = await this.db.query(`delete from hq_groups where id = $1`, [id]);
     if (!result.rowCount) throw new NotFoundException("Group not found");
+    await this.recordAudit({ action: "role.deleted", target: id });
     this.publishDirectory();
+    this.publishPrivileges();
     return { ok: true };
   }
 
   // ---------- accounts ----------
 
   private static ACCOUNT_COLUMNS =
-    "id, name, email, username, password_hash, group_id, active, google_id, auth_provider, email_verified";
+    "id, name, email, username, password_hash, group_id, active, google_id, auth_provider, email_verified, avatar_url";
 
   private async findAccount(where: string, params: unknown[]): Promise<ConsoleAccount | undefined> {
     const result = await this.db.query<AccountRow>(
@@ -451,6 +474,7 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
       groupName: group?.name ?? "",
       scope: group?.scope ?? "tenant",
       privileges: group?.privileges ?? [],
+      avatarUrl: account.avatarUrl ?? null,
     };
   }
 
@@ -544,7 +568,7 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
       }
     >(
       `select a.id, a.name, a.email, a.username, a.password_hash, a.group_id, a.active,
-              a.google_id, a.auth_provider, a.email_verified,
+              a.google_id, a.auth_provider, a.email_verified, a.avatar_url,
               g.name as group_name, g.departments, g.privileges,
               coalesce(g.scope, 'tenant') as scope
        from hq_sessions s
@@ -1191,9 +1215,10 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
     const googleId =
       input.googleId !== undefined ? input.googleId : existing?.googleId ?? null;
 
+    const avatarUrl = input.avatarUrl !== undefined ? input.avatarUrl : existing?.avatarUrl ?? null;
     await this.db.query(
-      `insert into hq_accounts (id, name, email, username, password_hash, group_id, active, google_id, auth_provider)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `insert into hq_accounts (id, name, email, username, password_hash, group_id, active, google_id, auth_provider, avatar_url)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        on conflict (id) do update
        set name = excluded.name,
            email = excluded.email,
@@ -1202,7 +1227,8 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
            group_id = excluded.group_id,
            active = excluded.active,
            google_id = excluded.google_id,
-           auth_provider = excluded.auth_provider`,
+           auth_provider = excluded.auth_provider,
+           avatar_url = excluded.avatar_url`,
       [
         id,
         name,
@@ -1213,6 +1239,7 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
         input.active ?? existing?.active ?? true,
         googleId,
         authProvider,
+        avatarUrl,
       ],
     );
 
@@ -1227,6 +1254,7 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
       googleId,
       authProvider:
         authProvider === "google" || authProvider === "both" ? authProvider : "password",
+      avatarUrl,
     };
 
     if (existing && existing.active !== next.active) {
@@ -1316,10 +1344,77 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
     return { ok: true };
   }
 
+  // ---------- my profile ----------
+
+  /** Self-service profile edit: only the signed-in account's own name/username. */
+  async updateOwnProfile(token: string, input: { name?: string; username?: string }) {
+    const payload = await this.sessionPayload(token.trim());
+    const account = await this.findAccount("id = $1", [payload.user.id]);
+    if (!account) throw new UnauthorizedException("Sign in again");
+    const name = input.name !== undefined ? input.name.trim() : account.name;
+    const username = (input.username !== undefined ? input.username.trim() : account.username).toLowerCase();
+    if (!name) throw new BadRequestException("Name is required");
+    if (!/^[a-z0-9._-]{3,32}$/.test(username)) {
+      throw new BadRequestException(
+        "Username must be 3–32 characters: letters, numbers, dots, underscores, or hyphens",
+      );
+    }
+    const duplicate = await this.findAccount("id <> $1 and lower(username) = $2", [
+      account.id,
+      username,
+    ]);
+    if (duplicate) throw new BadRequestException("Username already in use");
+    await this.db.query(`update hq_accounts set name = $2, username = $3 where id = $1`, [
+      account.id,
+      name,
+      username,
+    ]);
+    const changed = [
+      name !== account.name ? "name" : null,
+      username !== account.username ? "username" : null,
+    ].filter(Boolean);
+    if (changed.length) {
+      await this.recordAudit({
+        actorId: account.id,
+        actorName: name,
+        action: "profile.update",
+        target: account.email,
+        detail: changed.join(", "),
+      });
+    }
+    this.publishDirectory();
+    this.publishPrivileges();
+    return publicAccount({ ...account, name, username });
+  }
+
+  /** Store (or clear) the signed-in account's profile picture URL. */
+  async setOwnAvatar(token: string, avatarUrl: string | null) {
+    const payload = await this.sessionPayload(token.trim());
+    const account = await this.findAccount("id = $1", [payload.user.id]);
+    if (!account) throw new UnauthorizedException("Sign in again");
+    await this.db.query(`update hq_accounts set avatar_url = $2 where id = $1`, [
+      account.id,
+      avatarUrl,
+    ]);
+    await this.recordAudit({
+      actorId: account.id,
+      actorName: account.name,
+      action: avatarUrl ? "profile.avatar" : "profile.avatar.removed",
+      target: account.email,
+    });
+    this.publishDirectory();
+    this.publishPrivileges();
+    return publicAccount({ ...account, avatarUrl });
+  }
+
   // ---------- security ----------
 
   private publishSecurity(action?: string, id?: string) {
     this.securityFeed.next({ type: "security", action, id, at: new Date().toISOString() });
+  }
+
+  private publishPrivileges() {
+    this.sessionEvents.next({ type: "privileges", at: new Date().toISOString() });
   }
 
   /** Called by other modules (for example till staff) so every operation is auditable. */
@@ -2261,7 +2356,7 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
     return state;
   }
 
-  sessionStream(): Observable<SessionLockEvent> {
+  sessionStream(): Observable<SessionStreamEvent> {
     return new Observable((subscriber) => {
       void this.evaluateSubscriptionLock()
         .then((state) => {

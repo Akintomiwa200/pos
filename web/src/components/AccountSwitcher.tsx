@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { ChevronsUpDown, KeyRound, LayoutDashboard, LogOut, type LucideIcon } from "lucide-react";
+import { ChevronsUpDown, KeyRound, LayoutDashboard, LogOut, UserRound, type LucideIcon } from "lucide-react";
 import { useAuth } from "./AuthProvider";
 import type { ConsoleSession } from "../lib/access";
 
@@ -64,6 +64,7 @@ export function AccountSwitcher({
 
   const items: AccountMenuItem[] = [
     ...extraItems,
+    { href: "/profile", label: "My profile", icon: UserRound },
     { href: "/password", label: "Password", icon: KeyRound },
   ];
 
@@ -128,14 +129,25 @@ export function AccountSwitcher({
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
       >
-        <span
-          aria-hidden
-          className={`grid shrink-0 place-items-center rounded-full bg-pos-primary font-semibold tracking-wide text-white ${
-            isSidebar ? "h-10 w-10 text-xs" : "h-9 w-9 text-[11px]"
-          }`}
-        >
-          {initials(session.name)}
-        </span>
+        {session.avatarUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={session.avatarUrl}
+            alt={session.name}
+            className={`shrink-0 rounded-full object-cover ${
+              isSidebar ? "h-10 w-10" : "h-9 w-9"
+            }`}
+          />
+        ) : (
+          <span
+            aria-hidden
+            className={`grid shrink-0 place-items-center rounded-full bg-pos-primary font-semibold tracking-wide text-white ${
+              isSidebar ? "h-10 w-10 text-xs" : "h-9 w-9 text-[11px]"
+            }`}
+          >
+            {initials(session.name)}
+          </span>
+        )}
         <span className={`min-w-0 flex-1 ${isSidebar ? "block" : "hidden sm:block"}`}>
           <span className="block truncate text-sm font-semibold leading-5 text-pos-ink">
             {session.name}

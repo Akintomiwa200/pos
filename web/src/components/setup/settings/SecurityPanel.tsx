@@ -7,7 +7,6 @@ import {
   Clock3,
   KeyRound,
   Lock,
-  Plus,
   RefreshCw,
   ScrollText,
   ShieldAlert,
@@ -32,7 +31,6 @@ import {
   type TenantSession,
   type TillStaffMember,
 } from "@/lib/hq-api";
-import { saveDirectory } from "@/lib/hq-directory";
 import { useAuth } from "@/components/AuthProvider";
 import {
   Field,
@@ -59,6 +57,20 @@ function when(value: string | null) {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
+function tillRoleLabel(row: Pick<TillStaffMember, "role" | "roleName">) {
+  return row.roleName || row.role || "cashier";
+}
+
+function pinAuthority(role: string) {
+  if (role === "admin") {
+    return "Admin / Super Admin PIN opens till Settings and authorises every supervisor action.";
+  }
+  if (role === "supervisor") {
+    return "Supervisor PIN authorises discounts, refunds, overrides and reports.";
+  }
+  return "Cashier PIN signs in and sells; it cannot authorise supervisor actions.";
+}
+
 function EmptyLine({ children }: { children: React.ReactNode }) {
   return (
     <p className="px-5 py-6 text-center text-[13px] text-pos-ink-faint sm:px-6">{children}</p>
@@ -78,20 +90,24 @@ export function SecurityPanel({
   const [pwdBusy, setPwdBusy] = useState(false);
 
   const [roster, setRoster] = useState<TillStaffMember[]>([]);
-  const [pinTarget, setPinTarget] = useState("");
   const [pin, setPin] = useState("");
   const [pinConfirm, setPinConfirm] = useState("");
   const [pinBusy, setPinBusy] = useState(false);
-  const [newStaffName, setNewStaffName] = useState("");
-  const [newStaffRole, setNewStaffRole] = useState("cashier");
-  const [addBusy, setAddBusy] = useState(false);
 
   const [logins, setLogins] = useState<TenantLoginEvent[]>([]);
   const [sessions, setSessions] = useState<TenantSession[]>([]);
   const [audit, setAudit] = useState<TenantAuditEntry[]>([]);
   const [events, setEvents] = useState<TenantSecurityEvent[]>([]);
   const [revokeBusy, setRevokeBusy] = useState(false);
-  const selectedStaff = roster.find((row) => row.id === pinTarget) ?? null;
+  const ownLogin = (session?.username ?? session?.email ?? "").trim().toLowerCase();
+  const currentUser =
+    roster.find(
+      (row) =>
+        (session?.id && row.id === `web:${session.id}`) ||
+        (row.username ?? "").trim().toLowerCase() === ownLogin ||
+        (row.email ?? "").trim().toLowerCase() === ownLogin,
+    ) ?? null;
+  const pinTarget = currentUser?.id ?? "";
 
   const loadSecurity = useCallback(async () => {
     if (!session?.token) return;
@@ -114,16 +130,12 @@ export function SecurityPanel({
       .then((rows) => {
         if (cancelled) return;
         setRoster(rows);
-        const self = rows.find(
-          (row) => row.username.toLowerCase() === (session?.username ?? "").toLowerCase(),
-        );
-        setPinTarget(self?.id ?? rows[0]?.id ?? "");
       })
       .catch(() => undefined);
     return () => {
       cancelled = true;
     };
-  }, [loadSecurity, session?.username]);
+  }, [loadSecurity]);
 
   async function onPinSave(event: FormEvent) {
     event.preventDefault();
@@ -169,29 +181,6 @@ export function SecurityPanel({
       toast.error(err, "Could not clear PIN");
     } finally {
       setPinBusy(false);
-    }
-  }
-
-  async function addStaff(event: FormEvent) {
-    event.preventDefault();
-    const name = newStaffName.trim();
-    if (!name) return;
-    setAddBusy(true);
-    try {
-      const created = await saveDirectory("staff", {
-        name,
-        active: true,
-        extra: { tillRole: newStaffRole },
-      });
-      const rows = await listTillStaff();
-      setRoster(rows);
-      setPinTarget(created.id);
-      setNewStaffName("");
-      toast.success(`${name} added to company staff.`);
-    } catch (err) {
-      toast.error(err, "Could not add staff");
-    } finally {
-      setAddBusy(false);
     }
   }
 
@@ -355,36 +344,63 @@ export function SecurityPanel({
       </SettingsCard>
 
       <SettingsCard
-        title="Till PIN setup · all roles"
-        copy="Set or clear the 4–10 digit PIN for cashiers, supervisors and admins. It signs the operator in and authorises the actions their role allows."
+        id="till-pin"
+        title="Till PIN setup · current user"
+        copy="Set or clear your own 4–10 digit till PIN. Your active HQ role controls what this PIN can authorise."
       >
         <form className="space-y-3 px-5 py-5 sm:px-6" onSubmit={(event) => void onPinSave(event)}>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <Field label="Staff member">
-              <select
-                className={fieldClass}
-                value={pinTarget}
-                onChange={(event) => setPinTarget(event.target.value)}
-                required
-              >
-                <option value="">Select staff</option>
-                {roster.map((row) => (
-                  <option key={row.id} value={row.id}>
-                    {row.name} · {row.role || "cashier"}
-                    {row.hasPin ? " · PIN set" : ""}
-                  </option>
-                ))}
-              </select>
-              {roster.length === 0 ? (
-                <p className="text-[12px] text-pos-ink-faint">
-                  No company staff yet. Add one below or manage staff in{" "}
-                  <Link className="underline" href="/setup/staff">
-                    Setup › Staff
-                  </Link>
-                  .
-                </p>
-              ) : null}
-            </Field>
+          <div className="rounded-[16px] border border-pos-border bg-pos-surface-muted/50 px-4 py-3">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-pos-ink-faint">
+              Staff member
+            </p>
+            {currentUser ? (
+              <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
+                <div className="flex min-w-0 items-start gap-3">
+                  <span className="grid size-10 shrink-0 place-items-center rounded-full bg-pos-primary/10 text-[13px] font-semibold text-pos-primary">
+                    {(currentUser.name || "?").charAt(0).toUpperCase()}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-[14px] font-semibold text-pos-ink">{currentUser.name}</p>
+                    <p className="text-[12px] text-pos-ink-muted">
+                      {tillRoleLabel(currentUser)} ·{" "}
+                      {currentUser.source === "account" ? "HQ account" : "Company staff"}
+                      {currentUser.email ? ` · ${currentUser.email}` : ""}
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-pos-ink-faint">
+                      {pinAuthority(currentUser.role)}
+                    </p>
+                  </div>
+                </div>
+                <span
+                  className={`inline-flex rounded-lg px-2.5 py-1 text-[11px] font-medium ${
+                    currentUser.hasPin
+                      ? "bg-pos-success/10 text-pos-success"
+                      : "bg-pos-surface text-pos-ink-faint"
+                  }`}
+                >
+                  {currentUser.hasPin ? "PIN set" : "No PIN"}
+                </span>
+              </div>
+            ) : (
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-[14px] font-semibold text-pos-ink">
+                    {session?.name || "Signed-in user"}
+                  </p>
+                  <p className="text-[12px] text-pos-ink-muted">
+                    {tillRoleLabel({ role: "admin", roleName: session?.groupName })} · HQ account
+                    {session?.email ? ` · ${session.email}` : ""}
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-pos-ink-faint">
+                    This account is not on the till roster yet. Refresh this page after the HQ
+                    directory syncs.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
             <Field label="New PIN">
               <input
                 className={fieldClass}
@@ -412,25 +428,13 @@ export function SecurityPanel({
               />
             </Field>
           </div>
-          {selectedStaff ? (
-            <div className="rounded-[14px] bg-pos-surface-muted px-4 py-3 text-[12px] text-pos-ink-muted">
-              <span className="font-semibold text-pos-ink">{selectedStaff.name}</span> ·{" "}
-              {selectedStaff.role || "cashier"} ·{" "}
-              {selectedStaff.privileges?.length
-                ? selectedStaff.privileges.join(", ")
-                : "sell"}
-              <p className="mt-1 text-pos-ink-faint">
-                {selectedStaff.role === "admin"
-                  ? "Admin PIN opens till Settings and authorises every supervisor action."
-                  : selectedStaff.role === "supervisor"
-                    ? "Supervisor PIN authorises discounts, refunds, overrides and reports."
-                    : "Cashier PIN signs in and sells; it cannot authorise supervisor actions."}
-              </p>
-            </div>
-          ) : null}
           <p className="text-[12px] text-pos-ink-faint">
-            Only an administrator or the staff member themselves can change a PIN. Clearing a PIN
-            removes PIN sign-in for that operator. Every change is written to the audit trail.
+            Cashier: sign-in only. Supervisor: overrides, returns, discounts and reports. Admin and
+            Super Admin: Settings plus every supervisor action. Role changes are live —{" "}
+            <Link className="underline" href="/setup/access">
+              manage roles and privileges
+            </Link>
+            . Every PIN change is written to the audit trail.
           </p>
           <div className="flex flex-wrap items-center gap-3 pt-1">
             <PrimaryButton type="submit" disabled={pinBusy || !pinTarget}>
@@ -446,35 +450,6 @@ export function SecurityPanel({
               Clear PIN
             </button>
           </div>
-        </form>
-        <form
-          className="flex flex-wrap items-end gap-3 border-t border-pos-border/60 px-5 py-5 sm:px-6"
-          onSubmit={(event) => void addStaff(event)}
-        >
-          <Field label="Add company staff">
-            <input
-              className={fieldClass}
-              value={newStaffName}
-              onChange={(event) => setNewStaffName(event.target.value)}
-              placeholder="Full name"
-              required
-            />
-          </Field>
-          <Field label="Till access">
-            <select
-              className={fieldClass}
-              value={newStaffRole}
-              onChange={(event) => setNewStaffRole(event.target.value)}
-            >
-              <option value="cashier">Cashier</option>
-              <option value="supervisor">Supervisor</option>
-              <option value="manager">Manager / Admin</option>
-            </select>
-          </Field>
-          <PrimaryButton type="submit" disabled={addBusy || !newStaffName.trim()}>
-            <Plus size={14} />
-            {addBusy ? "Adding…" : "Add staff"}
-          </PrimaryButton>
         </form>
       </SettingsCard>
 

@@ -32,18 +32,20 @@ const SWATCHES = [
 const HEX_COLOR = /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/;
 
 export function SettingsCard({
+  id,
   title,
   copy,
   children,
   action,
 }: {
+  id?: string;
   title: string;
   copy: string;
   children: ReactNode;
   action?: ReactNode;
 }) {
   return (
-    <section className="overflow-hidden rounded-[22px] bg-pos-surface shadow-pos-sm">
+    <section id={id} className="overflow-hidden rounded-[22px] bg-pos-surface shadow-pos-sm">
       <header className="flex flex-wrap items-start justify-between gap-3 border-b border-pos-border/60 px-5 py-4 sm:px-6">
         <div className="min-w-0">
           <h2 className="text-[18px] font-semibold tracking-tight text-pos-ink">{title}</h2>

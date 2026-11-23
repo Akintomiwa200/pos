@@ -109,11 +109,12 @@ export class SetupService implements OnModuleInit {
   }
 
   async saveCompany(input: Partial<HqCompany>) {
-    const name = input.name?.trim();
+    const name = input.name?.trim() || this.company.name;
     if (!name) throw new BadRequestException("Company name is required");
     this.company = {
       ...this.company,
       ...input,
+      logoUrl: input.logoUrl !== undefined ? input.logoUrl : this.company.logoUrl ?? null,
       id: this.company.id,
       name,
       legalName: input.legalName?.trim() ?? this.company.legalName,

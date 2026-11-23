@@ -38,13 +38,15 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
       headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
     });
   } catch {
-    throw new NetworkError();
+    throw new NetworkError(`${init?.method ?? "GET"} ${path}`);
   }
   const data = (await response.json().catch(() => ({}))) as T & {
     message?: string | string[];
   };
   if (!response.ok) {
-    if (response.status >= 500) throw new NetworkError();
+    if (response.status >= 500) {
+      throw new NetworkError(`${init?.method ?? "GET"} ${path} (${response.status})`);
+    }
     const message = Array.isArray(data.message) ? data.message[0] : data.message;
     throw new Error(message || "Request failed");
   }
@@ -384,13 +386,17 @@ export async function uploadProfileAvatar(token: string, file: File): Promise<Pr
       headers: authHeaders(token),
     });
   } catch {
-    throw new NetworkError();
+    throw new NetworkError("POST /api/console/profile/avatar");
   }
   const data = (await response.json().catch(() => ({}))) as ProfileAccount & {
     message?: string | string[];
   };
   if (!response.ok) {
-    if (response.status >= 500) throw new NetworkError();
+    if (response.status >= 500) {
+      throw new NetworkError(
+        `POST /api/console/profile/avatar (${response.status})`,
+      );
+    }
     const message = Array.isArray(data.message) ? data.message[0] : data.message;
     throw new Error(message || "Profile picture upload failed");
   }
@@ -521,13 +527,19 @@ export async function uploadProductImage(itemId: string, file: File): Promise<Hq
       cache: "no-store",
     });
   } catch {
-    throw new NetworkError();
+    throw new NetworkError(
+      `POST /api/console/setup/catalog/items/${encodeURIComponent(itemId)}/image`,
+    );
   }
   const data = (await response.json().catch(() => ({}))) as HqCatalogItem & {
     message?: string | string[];
   };
   if (!response.ok) {
-    if (response.status >= 500) throw new NetworkError();
+    if (response.status >= 500) {
+      throw new NetworkError(
+        `POST /api/console/setup/catalog/items/${encodeURIComponent(itemId)}/image (${response.status})`,
+      );
+    }
     const message = Array.isArray(data.message) ? data.message[0] : data.message;
     throw new Error(message || "Image upload failed");
   }

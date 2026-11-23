@@ -1,8 +1,8 @@
 const isDev = process.env.NODE_ENV === "development";
 
 export class NetworkError extends Error {
-  constructor() {
-    super("Console API unavailable");
+  constructor(detail?: string) {
+    super(detail ? `Console API unavailable: ${detail}` : "Console API unavailable");
     this.name = "NetworkError";
   }
 }

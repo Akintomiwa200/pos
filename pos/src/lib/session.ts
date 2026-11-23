@@ -46,12 +46,41 @@ export async function unlockWithPin(pin: string) {
   return await post<StaffUser>("/api/staff/unlock", { pin });
 }
 
+/**
+ * Verifies the PIN and the privilege required for a till gate on the server.
+ * Admin gates need `settings`; supervisor gates need `unlock`.
+ */
+export async function authorizeWithPin(pin: string, privilege: "settings" | "unlock") {
+  return await post<StaffUser>("/api/staff/authorize", { pin, privilege });
+}
+
+/**
+ * Set or clear a staff PIN from the till. Authenticated by the current password
+ * or current supervisor PIN — no HQ bearer token is sent.
+ */
+export async function manageStaffPin(input: {
+  staffId: string;
+  pin: string | null;
+  currentPassword?: string;
+  currentPin?: string;
+}) {
+  return await post<{ id: string; name: string; hasPin: boolean }>(
+    "/api/staff/pin/local",
+    {
+      staffId: input.staffId,
+      currentPassword: input.currentPassword?.trim() || undefined,
+      currentPin: input.currentPin?.trim() || undefined,
+      pin: input.pin,
+    },
+  );
+}
+
 export async function openShift(staffId: string) {
   return await post<ShiftRecord>("/api/staff/shift/open", { staffId });
 }
 
 export async function closeShift(staffId: string, pin?: string) {
-  if (pin) await unlockWithPin(pin);
+  // The backend authorises the PIN before closing the shift.
   return await post<ShiftRecord | null>("/api/staff/shift/close", {
     staffId,
     pin,
@@ -67,7 +96,7 @@ export async function recordShiftSale(staffId: string, amountMinor: number) {
 }
 
 export async function closeDay(pin?: string, staffId?: string) {
-  if (pin) await unlockWithPin(pin);
+  // The backend authorises the PIN before closing the day.
   return await post<{ closedAt: string }>("/api/staff/day/close", { pin, staffId });
 }
 

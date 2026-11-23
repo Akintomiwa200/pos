@@ -19,7 +19,9 @@ export type SessionLockReason =
   | "account_deleted"
   | "account_reactivated"
   | "subscription_expired"
-  | "subscription_renewed";
+  | "subscription_renewed"
+  | "manual_lock"
+  | "idle_lock";
 
 export type SessionLockState = { reason: SessionLockReason; message: string };
 

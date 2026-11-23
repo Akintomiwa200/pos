@@ -21,7 +21,7 @@ import {
   type GroupScope,
   type HqNotice,
 } from "./console.types";
-import { hashPassword, isHashedPassword, verifyPassword } from "./password.util";
+import { hashPassword, isHashedPassword, verifyPassword } from "../catalog/password.util";
 import { SetupService } from "./setup.service";
 import { EmailService } from "../email/email.service";
 import type { HqCompany, HqBranch, HqStore } from "./setup.types";
@@ -213,6 +213,14 @@ export type SessionLockEvent = {
   at: string;
 };
 
+/** Signal for Super Admin's live security/operation feed. */
+export type SecurityFeedEvent = {
+  type: "security";
+  action?: string;
+  id?: string;
+  at: string;
+};
+
 @Injectable()
 export class ConsoleService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ConsoleService.name);
@@ -221,6 +229,7 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
   private readonly billingEvents = new Subject<BillingEvent>();
   private readonly noticesEvents = new Subject<NoticesEvent>();
   private readonly sessionEvents = new Subject<SessionLockEvent>();
+  private readonly securityFeed = new Subject<SecurityFeedEvent>();
   private noticePublishing = false;
   private subscriptionLocked: boolean | null = null;
   private subscriptionTimer: ReturnType<typeof setInterval> | null = null;
@@ -563,6 +572,19 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
     return this.attachSessionLock(await this.sessionPayload(token.trim()));
   }
 
+  /** Org-configured minimum, with a safe floor for accounts created before settings existed. */
+  private minimumPasswordLength() {
+    const value = Number(this.setup.getSettings()?.passwordMinLength ?? 6);
+    return Number.isFinite(value) && value >= 6 && value <= 32
+      ? Math.trunc(value)
+      : 6;
+  }
+
+  /** Tenant callers only see records tied to their own account. Producers see all. */
+  private securityScope(user: { id: string; scope?: string; email?: string }) {
+    return user.scope === "producer" ? null : user.id;
+  }
+
   async logout(token: string) {
     const payload = await this.sessionPayload(token.trim()).catch(() => null);
     await this.db.query(`delete from hq_sessions where token = $1`, [token.trim()]);
@@ -613,8 +635,10 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
   }) {
     // Legacy personal register → sales staff. Prefer registerCompany for new tenants.
     const password = input.password?.trim() ?? "";
-    if (password.length < 6) {
-      throw new BadRequestException("Password must be at least 6 characters");
+    if (password.length < this.minimumPasswordLength()) {
+      throw new BadRequestException(
+        `Password must be at least ${this.minimumPasswordLength()} characters`,
+      );
     }
     const groups = await this.listGroups();
     const group =
@@ -683,8 +707,10 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
     if (!name || !email || !username) {
       throw new BadRequestException("Owner name, email, and username are required");
     }
-    if (password.length < 6) {
-      throw new BadRequestException("Password must be at least 6 characters");
+    if (password.length < this.minimumPasswordLength()) {
+      throw new BadRequestException(
+        `Password must be at least ${this.minimumPasswordLength()} characters`,
+      );
     }
 
     const groups = await this.listGroups();
@@ -976,8 +1002,10 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
 
   async resetPassword(token: string, password: string) {
     const next = password.trim();
-    if (next.length < 6) {
-      throw new BadRequestException("Password must be at least 6 characters");
+    if (next.length < this.minimumPasswordLength()) {
+      throw new BadRequestException(
+        `Password must be at least ${this.minimumPasswordLength()} characters`,
+      );
     }
     const result = await this.db.query<{ id: string; name: string; email: string }>(
       `select a.id, a.name, a.email
@@ -1072,8 +1100,10 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
       throw new UnauthorizedException("Current password is wrong");
     }
     const next = nextPassword.trim();
-    if (next.length < 6) {
-      throw new BadRequestException("Password must be at least 6 characters");
+    if (next.length < this.minimumPasswordLength()) {
+      throw new BadRequestException(
+        `Password must be at least ${this.minimumPasswordLength()} characters`,
+      );
     }
     await this.setPassword(account.id, next);
     return { ok: true as const };
@@ -1146,8 +1176,10 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
     if (!existing && !plainPassword && !isGoogleOnly) {
       throw new BadRequestException("Password is required for new accounts");
     }
-    if (plainPassword && plainPassword.length < 6) {
-      throw new BadRequestException("Password must be at least 6 characters");
+    if (plainPassword && plainPassword.length < this.minimumPasswordLength()) {
+      throw new BadRequestException(
+        `Password must be at least ${this.minimumPasswordLength()} characters`,
+      );
     }
 
     const passwordHash = existing
@@ -1286,6 +1318,25 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
 
   // ---------- security ----------
 
+  private publishSecurity(action?: string, id?: string) {
+    this.securityFeed.next({ type: "security", action, id, at: new Date().toISOString() });
+  }
+
+  /** Called by other modules (for example till staff) so every operation is auditable. */
+  async recordActivity(input: {
+    actorId?: string;
+    actorName?: string;
+    action: string;
+    target?: string;
+    detail?: string;
+  }) {
+    await this.recordAudit(input);
+  }
+
+  securityStream(): Observable<SecurityFeedEvent> {
+    return this.securityFeed.asObservable();
+  }
+
   private async recordAudit(input: {
     actorId?: string;
     actorName?: string;
@@ -1293,12 +1344,13 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
     target?: string;
     detail?: string;
   }) {
+    const id = `a-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     try {
       await this.db.query(
         `insert into hq_audit_logs (id, actor_id, actor_name, action, target, detail)
          values ($1, $2, $3, $4, $5, $6)`,
         [
-          `a-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          id,
           input.actorId ?? null,
           input.actorName ?? null,
           input.action,
@@ -1306,6 +1358,7 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
           input.detail ?? null,
         ],
       );
+      this.publishSecurity(input.action, id);
     } catch {
       /* security logging is best-effort */
     }
@@ -1317,18 +1370,20 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
     success: boolean;
     reason?: string;
   }) {
+    const id = `l-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     try {
       await this.db.query(
         `insert into hq_login_events (id, account_id, email, success, reason)
          values ($1, $2, $3, $4, $5)`,
         [
-          `l-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          id,
           input.accountId ?? null,
           input.email,
           input.success,
           input.reason ?? null,
         ],
       );
+      this.publishSecurity("auth.login", id);
     } catch {
       /* best-effort */
     }
@@ -1341,12 +1396,13 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
     body?: string;
     accountId?: string;
   }) {
+    const id = `e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     try {
       await this.db.query(
         `insert into hq_security_events (id, kind, severity, title, body, account_id)
          values ($1, $2, $3, $4, $5, $6)`,
         [
-          `e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          id,
           input.kind,
           input.severity,
           input.title,
@@ -1354,9 +1410,170 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
           input.accountId ?? null,
         ],
       );
+      this.publishSecurity(`security.${input.kind}`, id);
     } catch {
       /* best-effort */
     }
+  }
+
+  /** Tenant-scoped login history for the Security settings panel. */
+  async tenantLoginHistory(token: string, limit = 50) {
+    const session = await this.me(token);
+    const accountId = this.securityScope(session.user);
+    const email = (session.user.email ?? "").toLowerCase();
+    const result = await this.db.query<{
+      id: string;
+      account_id: string | null;
+      email: string;
+      success: boolean;
+      reason: string | null;
+      created_at: Date;
+    }>(
+      `select id, account_id, email, success, reason, created_at
+       from hq_login_events
+       where ($1::text is null or account_id = $1 or lower(email) = $2)
+       order by created_at desc limit $3`,
+      [accountId, email, Math.min(Math.max(limit, 1), 200)],
+    );
+    return result.rows.map((row) => ({
+      id: row.id,
+      accountId: row.account_id,
+      email: row.email,
+      success: Boolean(row.success),
+      reason: row.reason,
+      createdAt: isoOrNull(row.created_at),
+    }));
+  }
+
+  /** Tenant-scoped audit trail for the Security settings panel. */
+  async tenantAuditLog(token: string, limit = 50) {
+    const session = await this.me(token);
+    const accountId = this.securityScope(session.user);
+    const name = (session.user.name ?? "").toLowerCase();
+    const result = await this.db.query<{
+      id: string;
+      actor_id: string | null;
+      actor_name: string | null;
+      action: string;
+      target: string | null;
+      detail: string | null;
+      created_at: Date;
+    }>(
+      `select id, actor_id, actor_name, action, target, detail, created_at
+       from hq_audit_logs
+       where ($1::text is null or actor_id = $1 or lower(actor_name) = $2)
+       order by created_at desc limit $3`,
+      [accountId, name, Math.min(Math.max(limit, 1), 200)],
+    );
+    return result.rows.map((row) => ({
+      id: row.id,
+      actor: row.actor_name ?? "System",
+      action: row.action,
+      target: row.target,
+      detail: row.detail,
+      createdAt: isoOrNull(row.created_at),
+    }));
+  }
+
+  /** Tenant-scoped security events for the Security settings panel. */
+  async tenantSecurityEvents(token: string, limit = 50) {
+    const session = await this.me(token);
+    const accountId = this.securityScope(session.user);
+    const result = await this.db.query<{
+      id: string;
+      kind: string;
+      severity: string;
+      title: string;
+      body: string | null;
+      resolved: boolean;
+      created_at: Date;
+    }>(
+      `select id, kind, severity, title, body, resolved, created_at
+       from hq_security_events
+       where ($1::text is null or account_id = $1)
+       order by created_at desc limit $2`,
+      [accountId, Math.min(Math.max(limit, 1), 200)],
+    );
+    return result.rows.map((row) => ({
+      id: row.id,
+      kind: row.kind,
+      severity: row.severity,
+      title: row.title,
+      body: row.body,
+      resolved: Boolean(row.resolved),
+      createdAt: isoOrNull(row.created_at),
+    }));
+  }
+
+  /**
+   * Session tokens are never returned in full. Because issueSession keeps one
+   * session per account, revoking by account id is equivalent to revoking the
+   * individual entry while avoiding token exposure to the browser.
+   */
+  async tenantSessions(token: string) {
+    const session = await this.me(token);
+    const accountId = this.securityScope(session.user);
+    const result = await this.db.query<{
+      token: string;
+      account_id: string;
+      account_name: string;
+      email: string;
+      created_at: Date;
+    }>(
+      `select s.token, s.account_id, a.name as account_name, a.email, s.created_at
+       from hq_sessions s
+       join hq_accounts a on a.id = s.account_id
+       where ($1::text is null or s.account_id = $1)
+       order by s.created_at desc`,
+      [accountId],
+    );
+    return result.rows.map((row) => ({
+      accountId: row.account_id,
+      name: row.account_name,
+      email: row.email,
+      tokenHint: `${row.token.slice(0, 6)}…${row.token.slice(-4)}`,
+      current: row.token === session.token,
+      createdAt: isoOrNull(row.created_at),
+    }));
+  }
+
+  async revokeSessions(token: string, accountId?: string) {
+    const session = await this.me(token);
+    const target = this.securityScope(session.user) ?? accountId?.trim() ?? "";
+    if (!target) {
+      throw new BadRequestException("Choose the session to revoke");
+    }
+    const result = await this.db.query(`delete from hq_sessions where account_id = $1`, [target]);
+    await this.recordAudit({
+      actorId: session.user.id,
+      actorName: session.user.name,
+      action: "session.revoke",
+      target,
+    });
+    await this.recordSecurityEvent({
+      kind: "session_revoked",
+      severity: "warning",
+      title: "Session revoked",
+      body: `${session.user.name} revoked a session.`,
+      accountId: target,
+    });
+    return { revoked: result.rowCount ?? 0 };
+  }
+
+  /** Re-auth for the client-side idle/manual lock screen. Does not change the password. */
+  async unlockSession(token: string, password: string) {
+    const { user } = await this.me(token);
+    const account = await this.findAccount("id = $1", [user.id]);
+    if (!account || !verifyPassword(password, account.password)) {
+      throw new UnauthorizedException("Incorrect password");
+    }
+    await this.recordAudit({
+      actorId: user.id,
+      actorName: user.name,
+      action: "session.unlock",
+      target: user.email,
+    });
+    return { ok: true as const };
   }
 
   async securityOverview() {
@@ -1382,7 +1599,7 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
         detail: string | null;
         created_at: Date;
       }>(`select id, actor_id, actor_name, action, target, detail, created_at
-          from hq_audit_logs order by created_at desc limit 200`),
+          from hq_audit_logs order by created_at desc limit 500`),
       this.db.query<{
         id: string;
         kind: string;

@@ -1,7 +1,20 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
-import type { ConsoleSession, SessionLockEvent, SessionLockState } from "../lib/access";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import type {
+  ConsoleSession,
+  SessionLockEvent,
+  SessionLockReason,
+  SessionLockState,
+} from "../lib/access";
 import {
   changePassword,
   fetchConsoleSession,
@@ -11,9 +24,11 @@ import {
   NetworkError,
   readSession,
   registerCompanyConsole,
+  unlockHqSession,
   type CompanySignupInput,
   writeSession,
 } from "../lib/hq-api";
+import { getOrgSettings } from "../lib/hq-setup";
 
 type AuthContextValue = {
   session: ConsoleSession | null;
@@ -31,6 +46,8 @@ type AuthContextValue = {
   ) => Promise<ConsoleSession>;
   logout: () => Promise<void>;
   updatePassword: (current: string, password: string) => Promise<void>;
+  lockSession: (reason?: "manual_lock" | "idle_lock") => void;
+  unlockSession: (password: string) => Promise<void>;
   setSession: (session: ConsoleSession | null) => void;
 };
 
@@ -46,6 +63,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   sessionRef.current = session;
   lockedRef.current = session?.locked ?? null;
+
+  const applyLock = useCallback((reason: SessionLockReason, message: string) => {
+    const current = sessionRef.current;
+    if (!current || current.locked) return;
+    const next = { ...current, locked: { reason, message } };
+    writeSession(next);
+    setSessionState(next);
+  }, []);
 
   useEffect(() => {
     tokenRef.current = session?.token ?? null;
@@ -65,7 +90,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const liveSession = await fetchConsoleSession(stored.token);
         if (!cancelled) {
-          setSessionState(liveSession);
+          // Local locks are browser-only. Keep one across a refresh instead of
+          // replacing it with the server session (which has no knowledge of it).
+          const localLock = stored.locked;
+          const preserveLocalLock =
+            localLock?.reason === "manual_lock" || localLock?.reason === "idle_lock";
+          setSessionState(
+            preserveLocalLock && localLock ? { ...liveSession, locked: localLock } : liveSession,
+          );
           setLive(true);
         }
       } catch (error) {
@@ -105,6 +137,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setLive(true);
         setSessionState((current) => {
           if (!current) return next;
+          // Manual/idle locks live only in this browser. Keep them across
+          // server polls; unlockSession is the only way to clear them.
+          if (
+            current.locked?.reason === "manual_lock" ||
+            current.locked?.reason === "idle_lock"
+          ) {
+            return current;
+          }
           const same =
             current.token === next.token &&
             current.name === next.name &&
@@ -180,6 +220,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => source.close();
   }, [session?.token]);
 
+  // HQ idle lock. The org setting is fetched once per sign-in; activity resets
+  // the countdown. Manual locks use the same LockedScreen and password unlock.
+  useEffect(() => {
+    if (!session?.token) return;
+    let cancelled = false;
+    let timer: number | undefined;
+    let minutes = 0;
+    const events = ["mousemove", "keydown", "click", "scroll", "touchstart"] as const;
+
+    function arm() {
+      if (timer !== undefined) window.clearTimeout(timer);
+      if (minutes <= 0) return;
+      timer = window.setTimeout(() => {
+        applyLock("idle_lock", "HQ locked after a period of inactivity. Enter your password to continue.");
+      }, minutes * 60_000);
+    }
+
+    function onActivity() {
+      if (!lockedRef.current) arm();
+    }
+
+    void getOrgSettings()
+      .then((raw) => {
+        if (cancelled) return;
+        const configured = Number(raw?.sessionTimeoutMinutes ?? 0);
+        minutes = Number.isFinite(configured) && configured > 0 ? configured : 0;
+        if (minutes <= 0) return;
+        arm();
+        for (const event of events) {
+          window.addEventListener(event, onActivity, { passive: true });
+        }
+      })
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+      for (const event of events) window.removeEventListener(event, onActivity);
+    };
+  }, [session?.token, applyLock]);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       session,
@@ -226,8 +307,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!session?.token) throw new Error("Sign in again");
         await changePassword(session.token, current, password);
       },
+      lockSession(reason = "manual_lock") {
+        applyLock(
+          reason,
+          reason === "idle_lock"
+            ? "HQ locked after a period of inactivity. Enter your password to continue."
+            : "HQ locked. Enter your password to continue.",
+        );
+      },
+      async unlockSession(password) {
+        if (!session?.token) throw new Error("Sign in again");
+        await unlockHqSession(session.token, password);
+        const current = sessionRef.current;
+        if (!current) return;
+        const next = { ...current, locked: null };
+        writeSession(next);
+        setSessionState(next);
+      },
     }),
-    [session, loading, live],
+    [session, loading, live, applyLock],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

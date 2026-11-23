@@ -10,6 +10,8 @@ export type StaffUser = {
   role: StaffRole;
   password: string;
   pin: string;
+  /** Derived from whether a till PIN is stored. Never contains a PIN or hash. */
+  hasPin: boolean;
   privileges: Privilege[];
   avatar: string;
 };

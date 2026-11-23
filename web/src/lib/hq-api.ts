@@ -127,6 +127,83 @@ export async function getSecurityOverview(): Promise<SecurityOverview> {
   return api<SecurityOverview>("/api/console/security/overview");
 }
 
+export type TenantLoginEvent = {
+  id: string;
+  accountId: string | null;
+  email: string;
+  success: boolean;
+  reason: string | null;
+  createdAt: string | null;
+};
+
+export type TenantAuditEntry = {
+  id: string;
+  actor: string;
+  action: string;
+  target: string | null;
+  detail: string | null;
+  createdAt: string | null;
+};
+
+export type TenantSecurityEvent = {
+  id: string;
+  kind: string;
+  severity: string;
+  title: string;
+  body: string | null;
+  resolved: boolean;
+  createdAt: string | null;
+};
+
+export type TenantSession = {
+  accountId: string;
+  name: string;
+  email: string;
+  tokenHint: string;
+  current: boolean;
+  createdAt: string | null;
+};
+
+export async function getTenantLogins(token: string, limit = 50) {
+  return api<TenantLoginEvent[]>(`/api/console/security/logins?limit=${limit}`, {
+    headers: authHeaders(token),
+  });
+}
+
+export async function getTenantAudit(token: string, limit = 50) {
+  return api<TenantAuditEntry[]>(`/api/console/security/audit?limit=${limit}`, {
+    headers: authHeaders(token),
+  });
+}
+
+export async function getTenantSecurityEvents(token: string, limit = 50) {
+  return api<TenantSecurityEvent[]>(`/api/console/security/events?limit=${limit}`, {
+    headers: authHeaders(token),
+  });
+}
+
+export async function getTenantSessions(token: string) {
+  return api<TenantSession[]>("/api/console/security/sessions", {
+    headers: authHeaders(token),
+  });
+}
+
+export async function revokeTenantSessions(token: string, accountId?: string) {
+  return api<{ revoked: number }>("/api/console/security/sessions/revoke", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ accountId }),
+  });
+}
+
+export async function unlockHqSession(token: string, password: string) {
+  return api<{ ok: true }>("/api/console/session/unlock", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ password }),
+  });
+}
+
 function asSession(data: {
   token: string;
   user: Omit<ConsoleSession, "token">;
@@ -442,6 +519,8 @@ export type TillStaffMember = {
   username: string;
   email: string;
   role: string;
+  privileges?: string[];
+  hasPin?: boolean;
 };
 
 export async function listTillStaff(): Promise<TillStaffMember[]> {

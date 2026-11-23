@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -17,7 +17,6 @@ import {
   Percent,
   Palette,
   Receipt,
-  Settings2,
   ShoppingCart,
   SlidersHorizontal,
   Store,
@@ -66,6 +65,7 @@ import {
 } from "./settings/AdminPanels";
 import { AppearanceStudio } from "./settings/AppearanceStudio";
 import { InvoiceStudio } from "./settings/InvoiceStudio";
+import { SecurityPanel } from "./settings/SecurityPanel";
 import {
   ReceiptStudio,
   SettingRow,
@@ -146,7 +146,7 @@ export function SettingsManager() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { session, updatePassword } = useAuth();
+  const { session } = useAuth();
   const {
     ready,
     saving: busy,
@@ -164,7 +164,6 @@ export function SettingsManager() {
   const requested = isSection(sectionParam) ? sectionParam : null;
   const active: SettingsSectionId =
     requested && allowed.includes(requested) ? requested : (allowed[0] ?? "general");
-  const [pwdBusy, setPwdBusy] = useState(false);
   const [errors, setErrors] = useState<SettingsFieldErrors>({});
 
   function go(section: SettingsSectionId) {
@@ -238,31 +237,6 @@ export function SettingsManager() {
       await patch({ [key]: value } as Partial<HqOrgSettings>);
     } catch (err) {
       toast.error(err, "Could not save settings");
-    }
-  }
-
-  async function onPassword(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const password = String(form.get("password") ?? "");
-    const confirm = String(form.get("confirm") ?? "");
-    if (password !== confirm) {
-      toast.error("Passwords do not match");
-      return;
-    }
-    if (password.length < (draft?.passwordMinLength ?? 6)) {
-      toast.error(`Password must be at least ${draft?.passwordMinLength ?? 6} characters`);
-      return;
-    }
-    setPwdBusy(true);
-    try {
-      await updatePassword(String(form.get("current") ?? ""), password);
-      toast.success("Password updated.");
-      event.currentTarget.reset();
-    } catch (err) {
-      toast.error(err, "Could not update the password");
-    } finally {
-      setPwdBusy(false);
     }
   }
 
@@ -713,111 +687,15 @@ export function SettingsManager() {
           ) : null}
 
           {active === "security" ? (
-            <>
-              <SettingsCard title="Signed-in account" copy="Who is using HQ right now.">
-                <SettingRow
-                  title={session?.name || "Account"}
-                  description={
-                    session
-                      ? `${session.email || session.username} · ${session.groupName || "Group"}`
-                      : "Not signed in"
-                  }
-                  control={
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-pos-surface-muted px-3 py-1 text-[12px] font-medium text-pos-ink-muted">
-                      <Settings2 size={12} />
-                      Active
-                    </span>
-                  }
-                />
-              </SettingsCard>
-              <SettingsCard
-                title="Password policy"
-                copy="Rules for HQ account passwords and idle session."
-              >
-                <div className="grid gap-3 border-b border-pos-border/50 px-5 py-5 sm:grid-cols-2 sm:px-6">
-                  <Field label="Minimum password length" error={errors.passwordMinLength}>
-                    <input
-                      className={settingsFieldClass(fieldClass, errors.passwordMinLength)}
-                      type="number"
-                      min={6}
-                      max={32}
-                      value={draft.passwordMinLength}
-                      aria-invalid={Boolean(errors.passwordMinLength)}
-                      onChange={(e) =>
-                        onLiveChange({ ...draft, passwordMinLength: Number(e.target.value) })
-                      }
-                    />
-                  </Field>
-                  <Field label="Session timeout (minutes)" error={errors.sessionTimeoutMinutes}>
-                    <input
-                      className={settingsFieldClass(fieldClass, errors.sessionTimeoutMinutes)}
-                      type="number"
-                      min={0}
-                      value={draft.sessionTimeoutMinutes}
-                      aria-invalid={Boolean(errors.sessionTimeoutMinutes)}
-                      onChange={(e) =>
-                        onLiveChange({ ...draft, sessionTimeoutMinutes: Number(e.target.value) })
-                      }
-                    />
-                  </Field>
-                </div>
-                <p className="px-5 pb-4 text-[12px] text-pos-ink-faint sm:px-6">
-                  0 session timeout means HQ stays signed in until logout. Till idle lock is under
-                  Register.
-                </p>
-                <div className="flex justify-end px-5 pb-5 sm:px-6">
-                  <PrimaryButton disabled={busy} onClick={() => void persist(draft)}>
-                    {busy ? "Saving…" : "Save policy"}
-                  </PrimaryButton>
-                </div>
-              </SettingsCard>
-              <SettingsCard
-                title="Password"
-                copy="Change the password for this HQ account."
-              >
-                <form className="space-y-3 px-5 py-5 sm:px-6" onSubmit={onPassword}>
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <Field label="Current password">
-                      <input
-                        className={fieldClass}
-                        name="current"
-                        type="password"
-                        autoComplete="current-password"
-                        required
-                      />
-                    </Field>
-                    <Field label="New password">
-                      <input
-                        className={fieldClass}
-                        name="password"
-                        type="password"
-                        autoComplete="new-password"
-                        required
-                        minLength={draft.passwordMinLength || 6}
-                      />
-                    </Field>
-                    <Field label="Confirm new password">
-                      <input
-                        className={fieldClass}
-                        name="confirm"
-                        type="password"
-                        autoComplete="new-password"
-                        required
-                        minLength={draft.passwordMinLength || 6}
-                      />
-                    </Field>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-3 pt-1">
-                    <PrimaryButton type="submit" disabled={pwdBusy}>
-                      {pwdBusy ? "Updating…" : "Update password"}
-                    </PrimaryButton>
-                    <Link href="/password" className={`${secondaryButtonClass} !py-2`}>
-                      Open full page
-                    </Link>
-                  </div>
-                </form>
-              </SettingsCard>
-            </>
+            <SecurityPanel
+              draft={draft}
+              busy={busy}
+              errors={errors}
+              session={session}
+              granted={granted}
+              onChange={onLiveChange}
+              onSave={() => void persist(draft)}
+            />
           ) : null}
 
           {active === "organization" ? (

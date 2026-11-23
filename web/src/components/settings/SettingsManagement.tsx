@@ -10,6 +10,7 @@ import { PolicyManager } from "./PolicyManager";
 const GROUPS = [
   "Business",
   "People",
+  "Security",
   "Money",
   "Operations",
   "Notifications",
@@ -43,7 +44,7 @@ export function SettingsManagement() {
       <PageHeader
         kicker="Settings"
         title="Settings"
-        copy="Everything that controls how your Simplebks account works — business, people, money, operations, notifications and data."
+        copy="Everything that controls how your Simplebks account works — business, people, security, money, operations, notifications and data."
       />
 
       <div className="mb-6 flex flex-wrap gap-2">

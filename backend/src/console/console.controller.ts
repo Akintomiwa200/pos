@@ -16,7 +16,7 @@ import { memoryStorage } from "multer";
 import { map, Observable } from "rxjs";
 import { CatalogService, type CatalogRow } from "../catalog/catalog.service";
 import { MAX_PRODUCT_IMAGE_BYTES } from "../catalog/cloudinary.service";
-import { ConsoleService, type BillingEvent, type BillingPlan, type DirectoryEvent, type NoticesEvent, type PosEvent, type SessionLockEvent } from "./console.service";
+import { ConsoleService, type BillingEvent, type BillingPlan, type DirectoryEvent, type NoticesEvent, type PosEvent, type SecurityFeedEvent, type SessionLockEvent } from "./console.service";
 import { SetupService, type SettingsEvent } from "./setup.service";
 import type { ConsoleAccount, ConsoleGroup, GroupScope } from "./console.types";
 import type {
@@ -164,6 +164,11 @@ export class ConsoleController {
     return this.consoleService.sessionStream().pipe(map((data) => ({ data })));
   }
 
+  @Sse("security/stream")
+  securityStream(): Observable<{ data: SecurityFeedEvent }> {
+    return this.consoleService.securityStream().pipe(map((data) => ({ data })));
+  }
+
   @Post("password")
   changePassword(
     @Headers("authorization") authorization?: string,
@@ -174,6 +179,51 @@ export class ConsoleController {
       body?.current ?? "",
       body?.password ?? "",
     );
+  }
+
+  @Post("session/unlock")
+  unlockSession(
+    @Headers("authorization") authorization?: string,
+    @Body() body?: { password?: string },
+  ) {
+    return this.consoleService.unlockSession(bearer(authorization), body?.password ?? "");
+  }
+
+  @Get("security/logins")
+  loginHistory(
+    @Headers("authorization") authorization?: string,
+    @Query("limit") limit?: string,
+  ) {
+    return this.consoleService.tenantLoginHistory(bearer(authorization), Number(limit ?? 50));
+  }
+
+  @Get("security/sessions")
+  securitySessions(@Headers("authorization") authorization?: string) {
+    return this.consoleService.tenantSessions(bearer(authorization));
+  }
+
+  @Post("security/sessions/revoke")
+  revokeSession(
+    @Headers("authorization") authorization?: string,
+    @Body() body?: { accountId?: string },
+  ) {
+    return this.consoleService.revokeSessions(bearer(authorization), body?.accountId);
+  }
+
+  @Get("security/events")
+  securityEvents(
+    @Headers("authorization") authorization?: string,
+    @Query("limit") limit?: string,
+  ) {
+    return this.consoleService.tenantSecurityEvents(bearer(authorization), Number(limit ?? 50));
+  }
+
+  @Get("security/audit")
+  securityAudit(
+    @Headers("authorization") authorization?: string,
+    @Query("limit") limit?: string,
+  ) {
+    return this.consoleService.tenantAuditLog(bearer(authorization), Number(limit ?? 50));
   }
 
   @Get("groups")
@@ -488,8 +538,14 @@ export class ConsoleController {
   }
 
   @Post("setup/settings")
-  saveSettings(@Body() body: Partial<HqOrgSettings>) {
-    return this.setup.saveSettings(body);
+  async saveSettings(@Body() body: Partial<HqOrgSettings>) {
+    const saved = await this.setup.saveSettings(body);
+    await this.consoleService.recordActivity({
+      action: "settings.save",
+      target: "organization",
+      detail: Object.keys(body).join(", "),
+    });
+    return saved;
   }
 
   @Get("setup/data")

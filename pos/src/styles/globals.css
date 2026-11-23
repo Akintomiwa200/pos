@@ -789,9 +789,9 @@ button {
   display: grid;
   grid-template-columns: repeat(4, minmax(160px, 1fr));
   gap: 16px;
-  align-items: start;
+  align-items: stretch;
   align-content: start;
-  grid-auto-rows: min-content;
+  grid-auto-rows: auto;
   flex: 1;
   min-height: 0;
   overflow: auto;
@@ -850,7 +850,7 @@ button {
   gap: 8px;
   padding: 14px 14px 16px;
   background: #fff;
-  flex: 0 0 auto;
+  flex: 1 0 auto;
   min-height: 80px;
 }
 

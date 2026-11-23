@@ -7,6 +7,8 @@ export type StaffUser = {
   username: string;
   email: string;
   role: StaffRole;
+  /** True when this staff member has a till PIN set. Never contains a PIN/hash. */
+  hasPin?: boolean;
   privileges: Privilege[];
   avatar: string;
 };

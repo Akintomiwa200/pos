@@ -77,10 +77,10 @@ import {
   closeDay,
   closeShift,
   formatShiftReport,
+  authorizeWithPin,
   openShift,
   printReport,
   recordShiftSale,
-  unlockWithPin,
 } from "./lib/session";
 
 type Screen = "home" | "items" | "payment" | "split" | "paid" | "kds" | "settings" | "saved";
@@ -202,7 +202,7 @@ export default function App() {
   const [rooms, setRooms] = useState(createRooms);
   const [tickets, setTickets] = useState(createKitchenBoard);
   const [screen, setScreen] = useState<Screen>("home");
-  const [category, setCategory] = useState("Cakes");
+  const [category, setCategory] = useState("all");
   const [query, setQuery] = useState("");
   const [lookupNotice, setLookupNotice] = useState("");
   const [cart, setCart] = useState<CartLine[]>([]);
@@ -489,7 +489,7 @@ export default function App() {
     setLoyaltyOpen(false);
     setLoyaltyNumber(null);
     setScreen("home");
-    setCategory("Cakes");
+    setCategory("all");
     setQuery("");
     setLookupNotice("");
     setActiveTableId(null);
@@ -683,6 +683,10 @@ export default function App() {
     return action as Gate;
   }
 
+  function gatePrivilege(gate: Gate): "settings" | "unlock" {
+    return gate === "settings" ? "settings" : "unlock";
+  }
+
   function onMenu(action: MenuAction) {
     if (action === "profile") {
       setDialog("profile");
@@ -708,6 +712,9 @@ export default function App() {
     setPinError("");
     try {
       if (gate === "settings") {
+        if (!unlockedBy.privileges.includes("settings")) {
+          throw new Error("An administrator PIN is required.");
+        }
         setGate(null);
         setScreen("settings");
         return;
@@ -798,7 +805,7 @@ export default function App() {
     setPinBusy(true);
     setPinError("");
     try {
-      const unlockedBy = await unlockWithPin(pin);
+      const unlockedBy = await authorizeWithPin(pin, gatePrivilege(gate));
       await runGate(gate, unlockedBy, pin);
     } catch (error) {
       setPinError(error instanceof Error ? error.message : "PIN rejected.");
@@ -1542,6 +1549,8 @@ export default function App() {
         {screen === "settings" && (
           <SettingsScreen
             items={catalog}
+            staff={session}
+            onLockTerminal={signOut}
             onBack={() => setScreen("home")}
           />
         )}

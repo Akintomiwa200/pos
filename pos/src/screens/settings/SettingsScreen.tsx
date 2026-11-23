@@ -1,21 +1,42 @@
 import { useState, type ReactNode } from "react";
 import {
   ArrowLeft,
+  Bell,
   Bookmark,
   Boxes,
   CreditCard,
+  Database,
   FileText,
   Heart,
+  HelpCircle,
   Keyboard,
+  LayoutGrid,
+  Network,
+  Palette,
   Percent,
+  Plug,
   Printer,
   RotateCcw,
   ScanBarcode,
+  Shield,
+  Store,
   Tag,
 } from "lucide-react";
 import type { CatalogItem } from "../../lib/types";
+import type { StaffUser } from "../../lib/staff";
 import { TillKeysSettings } from "./TillKeysSettings";
 import { LoyaltyHub } from "./LoyaltyPages";
+import { SecuritySettings } from "./SecuritySettings";
+import {
+  CategoriesSettings,
+  DataSyncSettings,
+  GeneralSettings,
+  HelpSettings,
+  IntegrationsSettings,
+  InvoiceSettings,
+  NotificationsSettings,
+  OrganizationSettings,
+} from "./MoreSettingsPages";
 import {
   BarcodeSettings,
   HoldsSettings,
@@ -37,13 +58,25 @@ type Page =
   | "loyalty"
   | "printing"
   | "receipt"
+  | "branding"
   | "payments"
   | "sales"
   | "holds"
-  | "refunds";
+  | "refunds"
+  | "security"
+  | "help"
+  | "general"
+  | "categories"
+  | "invoice"
+  | "notifications"
+  | "data"
+  | "integrations"
+  | "organization";
 
 type Props = {
   items: CatalogItem[];
+  staff: StaffUser;
+  onLockTerminal: () => void;
   onBack: () => void;
 };
 
@@ -59,6 +92,16 @@ const TILES: { id: Page; label: string; icon: typeof Boxes }[] = [
   { id: "printing", label: "Printing", icon: Printer },
   { id: "receipt", label: "Receipt", icon: FileText },
   { id: "payments", label: "Payments", icon: CreditCard },
+  { id: "security", label: "Security", icon: Shield },
+  { id: "help", label: "Help & Training", icon: HelpCircle },
+  { id: "general", label: "General", icon: Store },
+  { id: "branding", label: "Receipt branding", icon: Palette },
+  { id: "invoice", label: "Invoices", icon: FileText },
+  { id: "notifications", label: "Notifications", icon: Bell },
+  { id: "categories", label: "Categories & display", icon: LayoutGrid },
+  { id: "data", label: "Data & Sync", icon: Database },
+  { id: "integrations", label: "Integrations", icon: Plug },
+  { id: "organization", label: "Organization", icon: Network },
 ];
 
 const TITLES: Record<Page, string> = {
@@ -70,14 +113,26 @@ const TITLES: Record<Page, string> = {
   loyalty: "Loyalty",
   printing: "Printing",
   receipt: "Receipt",
+  branding: "Receipt branding",
   payments: "Payments",
   sales: "Sales",
   holds: "Holds",
   refunds: "Refunds",
+  security: "Security",
+  help: "Help & Training",
+  general: "General",
+  categories: "Categories & display",
+  invoice: "Invoices",
+  notifications: "Notifications",
+  data: "Data & Sync",
+  integrations: "Integrations",
+  organization: "Organization",
 };
 
 export function SettingsScreen({
   items,
+  staff,
+  onLockTerminal,
   onBack,
 }: Props) {
   const [page, setPage] = useState<Page>("hub");
@@ -118,7 +173,19 @@ export function SettingsScreen({
           {page === "stock" && <StockSettings items={items} />}
           {page === "printing" && <PrintingSettings />}
           {page === "receipt" && <ReceiptSettings />}
+          {page === "branding" && <ReceiptSettings />}
           {page === "payments" && <PaymentsSettings />}
+          {page === "security" && (
+            <SecuritySettings staff={staff} onLockTerminal={onLockTerminal} />
+          )}
+          {page === "help" && <HelpSettings />}
+          {page === "general" && <GeneralSettings />}
+          {page === "categories" && <CategoriesSettings />}
+          {page === "invoice" && <InvoiceSettings />}
+          {page === "notifications" && <NotificationsSettings />}
+          {page === "data" && <DataSyncSettings />}
+          {page === "integrations" && <IntegrationsSettings />}
+          {page === "organization" && <OrganizationSettings />}
         </PageShell>
       )}
     </section>

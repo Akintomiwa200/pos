@@ -11,6 +11,7 @@ import type { DirectoryRecord } from "../directory/directory.types";
 import { ConsoleService } from "../console/console.service";
 import { avatarFor, fromConsoleUser } from "./web-user";
 import {
+  canAccessSettings,
   canUnlock,
   isSellOnly,
   publicStaff,
@@ -49,6 +50,7 @@ function roleFor(label: string): StaffRole {
 function fromRecord(row: DirectoryRecord): StaffUser {
   const extra = row.extra ?? {};
   const label = roleLabel(extra);
+  const tillPin = str(extra.tillPin);
   return {
     id: row.id,
     name: row.name,
@@ -56,7 +58,8 @@ function fromRecord(row: DirectoryRecord): StaffUser {
     email: str(row.email),
     role: roleFor(label),
     password: hash(str(extra.tillPassword)),
-    pin: hash(str(extra.tillPin)),
+    pin: tillPin ? hash(tillPin) : "",
+    hasPin: Boolean(tillPin),
     privileges: privilegesFor(label),
     avatar: avatarFor(row.name),
   };
@@ -80,10 +83,38 @@ export class StaffService {
     }
   }
 
+  /** Hashed PINs for company staff, keyed by staff id. */
+  private async pinStore(): Promise<Record<string, string>> {
+    try {
+      const raw = await readFile(join(this.dataDir, "staff-pins.json"), "utf8");
+      const parsed = JSON.parse(raw) as unknown;
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? (parsed as Record<string, string>)
+        : {};
+    } catch {
+      return {};
+    }
+  }
+
+  private async savePinStore(store: Record<string, string>) {
+    await mkdir(this.dataDir, { recursive: true });
+    await writeFile(join(this.dataDir, "staff-pins.json"), JSON.stringify(store, null, 2), "utf8");
+  }
+
+  /**
+   * Company staff come from the Setup › Staff directory. Every active staff
+   * member can be given a PIN, even before they have a till username — PIN
+   * sign-in identifies the operator by staff id, not by username.
+   */
   private async users(): Promise<StaffUser[]> {
-    return (await this.roster())
-      .filter((row) => row.active && str(row.extra?.tillUsername))
-      .map(fromRecord);
+    const [roster, pins] = await Promise.all([this.roster(), this.pinStore()]);
+    return roster
+      .filter((row) => row.active)
+      .map((row) => {
+        const base = fromRecord(row);
+        const pin = pins[base.id] ?? base.pin;
+        return { ...base, pin, hasPin: Boolean(pin) };
+      });
   }
 
   async list() {
@@ -92,12 +123,20 @@ export class StaffService {
 
   async login(username: string, password: string) {
     const name = username.trim().toLowerCase();
+    if (!name || !password.trim()) {
+      await this.audit(null, "staff.login.failed", name || "blank", "password");
+      throw new UnauthorizedException("Wrong username or password.");
+    }
     const user = (await this.users()).find(
       (staff) =>
         staff.password === hash(password) &&
         (staff.username.toLowerCase() === name || staff.email.toLowerCase() === name),
     );
-    if (!user) throw new UnauthorizedException("Wrong username or password.");
+    if (!user) {
+      await this.audit(null, "staff.login.failed", name, "password");
+      throw new UnauthorizedException("Wrong username or password.");
+    }
+    await this.audit(user, "staff.login.password", user.username, `Role: ${user.role}`);
     return {
       token: `dev-${user.id}`,
       user: publicStaff(user),
@@ -112,8 +151,10 @@ export class StaffService {
     }
     const user = (await this.users()).find((staff) => staff.id === staffId);
     if (!user || user.pin !== hash(trimmed)) {
+      await this.audit(null, "staff.login.failed", staffId, "PIN");
       throw new UnauthorizedException("Wrong PIN.");
     }
+    await this.audit(user, "staff.login.pin", user.username, `Role: ${user.role}`);
     return {
       token: `dev-${user.id}`,
       user: publicStaff(user),
@@ -124,8 +165,37 @@ export class StaffService {
   async unlock(pin: string) {
     const user = (await this.users()).find((staff) => staff.pin === hash(pin.trim()));
     if (!user || !canUnlock(user)) {
+      await this.audit(user ?? null, "staff.pin.authorize.failed", user?.username ?? "unknown", "PIN");
       throw new UnauthorizedException("This PIN cannot unlock that action.");
     }
+    await this.audit(user, "staff.pin.authorize", user.username, `Role: ${user.role}`);
+    return publicStaff(user);
+  }
+
+  /** PIN plus required privilege — enforced on the server, not only in the till UI. */
+  async authorizePrivilege(pin: string, privilege: "settings" | "unlock") {
+    const user = (await this.users()).find(
+      (staff) => staff.pin !== "" && staff.pin === hash(pin.trim()),
+    );
+    const allowed = user
+      ? privilege === "settings"
+        ? canAccessSettings(user)
+        : canUnlock(user)
+      : false;
+    if (!user || !allowed) {
+      await this.audit(
+        user ?? null,
+        "staff.pin.authorize.failed",
+        user?.username ?? "unknown",
+        `Required privilege: ${privilege}`,
+      );
+      throw new UnauthorizedException(
+        privilege === "settings"
+          ? "An administrator PIN is required."
+          : "This PIN does not have supervisor privileges.",
+      );
+    }
+    await this.audit(user, "staff.pin.authorize", user.username, `Role: ${user.role}; required: ${privilege}`);
     return publicStaff(user);
   }
 
@@ -154,6 +224,22 @@ export class StaffService {
     return match ? match[1].trim() : "";
   }
 
+  /** Every till operation is mirrored into HQ's audit log for Super Admin. */
+  private async audit(
+    actor: { id?: string; name?: string; role?: string } | null,
+    action: string,
+    target?: string,
+    detail?: string,
+  ) {
+    await this.console.recordActivity({
+      actorId: actor?.id,
+      actorName: actor ? `${actor.name ?? "Staff"}${actor.role ? ` (${actor.role})` : ""}` : undefined,
+      action,
+      target,
+      detail,
+    });
+  }
+
   private async saveRoster(roster: DirectoryRecord[]) {
     await mkdir(join(this.dataDir, "directories"), { recursive: true });
     await writeFile(
@@ -163,30 +249,13 @@ export class StaffService {
     );
   }
 
-  async managePin(
-    staffId: string,
+  /** Shared set/clear logic for both the HQ endpoint and the credential-checked local endpoint. */
+  private async writePin(
+    roster: DirectoryRecord[],
+    index: number,
     pin: string | null | undefined,
-    authorization: string | undefined,
   ) {
-    let actor: { id?: string; username?: string; groupId?: string; name?: string } = {};
-    try {
-      actor = (await this.console.me(this.bearer(authorization)))?.user ?? {};
-    } catch {
-      actor = {};
-    }
-    const isAdmin = actor.groupId === "g-admin";
-    const roster = await this.roster();
-    const index = roster.findIndex((row) => row.id === staffId);
-    if (index < 0) {
-      throw new NotFoundException("That staff member is not on the till roster.");
-    }
-    const row = roster[index];
-    const ownUsername = String(row.extra?.tillUsername || "").toLowerCase();
-    const actorUsername = String(actor.username || "").toLowerCase();
-    const isSelf = ownUsername !== "" && ownUsername === actorUsername;
-    if (!isAdmin && !isSelf) {
-      throw new UnauthorizedException("Only an admin or the staff member themselves can set this PIN.");
-    }
+    const row = roster[index]!;
     const value = pin === null || pin === undefined ? "" : String(pin).trim();
     const extras: Record<string, string | number | boolean | null> = {
       ...(row.extra ?? {}),
@@ -208,6 +277,107 @@ export class StaffService {
       name: row.name,
       hasPin: Boolean(extras.tillPin),
     };
+  }
+
+  /** Set or clear a PIN for a company staff member. */
+  private async writePinFor(target: StaffUser, pin: string | null | undefined) {
+    const value = pin === null || pin === undefined ? "" : String(pin).trim();
+    if (value !== "" && !/^\d{4,10}$/.test(value)) {
+      throw new BadRequestException("PIN must be 4 to 10 digits.");
+    }
+    const store = await this.pinStore();
+    if (value === "") delete store[target.id];
+    else store[target.id] = hash(value);
+    await this.savePinStore(store);
+
+    // Keep the legacy directory field in sync so Setup > Staff and older
+    // sign-in paths agree with the Security panel.
+    if (!target.id.startsWith("web:")) {
+      const roster = await this.roster();
+      const index = roster.findIndex((row) => row.id === target.id);
+      if (index >= 0) await this.writePin(roster, index, value === "" ? null : value);
+    }
+    return { id: target.id, name: target.name, hasPin: value !== "" };
+  }
+
+  /**
+   * Terminal-side PIN management. The caller proves it is the staff member (or
+   * a supervisor) with the current password or current PIN instead of a token.
+   */
+  async managePinLocal(
+    staffId: string,
+    currentPassword: string | undefined,
+    currentPin: string | undefined,
+    pin: string | null | undefined,
+  ) {
+    const target = (await this.users()).find((user) => user.id === staffId);
+    if (!target) {
+      throw new NotFoundException("That staff member is not on the till roster.");
+    }
+    const password = str(currentPassword);
+    const pinAttempt = str(currentPin);
+    const row = (await this.roster()).find((entry) => entry.id === target.id);
+    const passwordOk =
+      password !== "" && Boolean(row && hash(str(row.extra?.tillPassword)) === hash(password));
+    const pinOk = pinAttempt !== "" && target.pin !== "" && target.pin === hash(pinAttempt);
+    if (!passwordOk && !pinOk) {
+      await this.audit(null, "staff.pin.change.failed", target.name, "Credential check failed");
+      throw new UnauthorizedException(
+        "Enter the correct current password or current supervisor PIN.",
+      );
+    }
+    const result = await this.writePinFor(target, pin);
+    await this.audit(
+      { id: target.id, name: target.name, role: target.role },
+      result.hasPin ? "staff.pin.set" : "staff.pin.clear",
+      result.name,
+      `Role: ${target.role}; via: ${passwordOk ? "password" : "PIN"}`,
+    );
+    return result;
+  }
+
+  async managePin(
+    staffId: string,
+    pin: string | null | undefined,
+    authorization: string | undefined,
+  ) {
+    let actor: {
+      id?: string;
+      username?: string;
+      groupId?: string;
+      name?: string;
+      scope?: string;
+      privileges?: string[];
+    } = {};
+    try {
+      actor = (await this.console.me(this.bearer(authorization)))?.user ?? {};
+    } catch {
+      actor = {};
+    }
+    const isAdmin = Boolean(
+      actor.privileges?.includes("*") ||
+        actor.scope === "producer" ||
+        actor.groupId === "g-admin" ||
+        actor.groupId === "g-super-admin",
+    );
+    const target = (await this.users()).find((user) => user.id === staffId);
+    if (!target) {
+      throw new NotFoundException("That staff member is not on the till roster.");
+    }
+    const actorUsername = String(actor.username ?? "").toLowerCase();
+    const isSelf = target.username !== "" && target.username.toLowerCase() === actorUsername;
+    if (!isAdmin && !isSelf) {
+      await this.audit(null, "staff.pin.change.failed", target.name, "Not admin or self");
+      throw new UnauthorizedException("Only an admin or the staff member themselves can set this PIN.");
+    }
+    const result = await this.writePinFor(target, pin);
+    await this.audit(
+      { id: actor.id, name: actor.name ?? actor.username, role: isAdmin ? "HQ admin" : "self" },
+      result.hasPin ? "staff.pin.set" : "staff.pin.clear",
+      result.name,
+      `Role: ${target.role}; via: ${isAdmin ? "HQ admin" : "self"}`,
+    );
+    return result;
   }
 
   private async loadShifts() {
@@ -256,6 +426,7 @@ export class StaffService {
     this.shifts.unshift(shift);
     this.dayClosedAt = null;
     await this.persistShifts();
+    await this.audit(user, "staff.shift.open", shift.id, `Role: ${user.role}`);
     return shift;
   }
 
@@ -279,6 +450,8 @@ export class StaffService {
     if (!shift) return null;
     shift.closedAt = new Date().toISOString();
     await this.persistShifts();
+    const user = await this.findById(staffId);
+    await this.audit(user ?? { id: staffId, name: shift.staffName }, "staff.shift.close", shift.id, `Tickets: ${shift.salesCount}`);
     return shift;
   }
 
@@ -297,6 +470,7 @@ export class StaffService {
     }
     this.dayClosedAt = at;
     await this.persistShifts();
+    await this.audit(null, "staff.day.close", at, `Shifts closed: ${this.shifts.length}`);
     return { closedAt: at, shifts: await this.todayShifts() };
   }
 

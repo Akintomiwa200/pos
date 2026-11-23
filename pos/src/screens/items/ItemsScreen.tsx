@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { ChevronRight, Filter, Plus, Search, X } from "lucide-react";
 import type { CatalogItem } from "../../lib/types";
 import { formatMoney, sellPrice } from "../../lib/types";
@@ -116,11 +116,12 @@ export function ItemsScreen({
   const activeCategory =
     filterCategories === null
       ? mode === "items"
-        ? [category]
+        ? (!category || category === "all" || category === "combos" ? [] : [category])
         : []
       : filterCategories;
 
   const visibleItems = useMemo(() => {
+    if (category === "combos" && filterCategories === null) return [];
     const lowQty = Math.max(0, settings.lowStockQty);
     const rows = items.filter((item) => {
       if (settings.hiddenCategories.includes(item.category)) return false;
@@ -146,7 +147,7 @@ export function ItemsScreen({
       ordered.sort((a, b) => b.onHand - a.onHand);
     }
     return ordered;
-  }, [items, settings, activeCategory, stock, price, sort, branchId]);
+  }, [items, settings, activeCategory, stock, price, sort, branchId, category, filterCategories]);
 
   const families = useMemo(() => groupIntoFamilies(visibleItems), [visibleItems]);
 
@@ -168,6 +169,12 @@ export function ItemsScreen({
       );
     });
   }, [combos, query]);
+
+  const showCombos =
+    Boolean(query.trim()) ||
+    category === "combos" ||
+    (activeCategory.length === 0 && (filterCategories === null || filterCategories.length === 0));
+  const combosToRender = showCombos ? matchingCombos : [];
 
   const activeFilters = useMemo(() => {
     const rows: { key: string; label: string; clear: () => void }[] = [];
@@ -217,7 +224,9 @@ export function ItemsScreen({
   useEffect(() => {
     if (mode !== "items" || chips.length === 0) return;
     if (filterCategories !== null) return;
-    if (!chips.includes(category)) onCategory(chips[0]!);
+    if (category && category !== "all" && category !== "combos" && !chips.includes(category)) {
+      onCategory("all");
+    }
   }, [mode, chips, category, onCategory, filterCategories]);
 
   useEffect(() => {
@@ -250,7 +259,7 @@ export function ItemsScreen({
 
   function toggleCategory(name: string) {
     setFilterCategories((current) => {
-      const base = current ?? (mode === "items" ? [category] : []);
+      const base = current ?? (mode === "items" && category && category !== "all" && category !== "combos" ? [category] : []);
       const next = base.includes(name)
         ? base.filter((row) => row !== name)
         : [...base, name];
@@ -283,7 +292,12 @@ export function ItemsScreen({
         ? "All items"
         : filterCategories && filterCategories.length > 1
           ? `${filterCategories.length} categories`
-          : filterCategories?.[0] ?? category;
+          : filterCategories?.[0] ??
+            (!category || category === "all"
+              ? "All items"
+              : category === "combos"
+                ? "Combos"
+                : category);
 
   return (
     <section className="catalog">
@@ -392,8 +406,11 @@ export function ItemsScreen({
                   <div className="filter-chips">
                     <button
                       type="button"
-                      className={`chip ${activeCategory.length === 0 ? "active" : ""}`}
-                      onClick={() => setFilterCategories([])}
+                      className={`chip ${activeCategory.length === 0 && category !== "combos" ? "active" : ""}`}
+                      onClick={() => {
+                        setFilterCategories([]);
+                        onCategory("all");
+                      }}
                     >
                       All categories
                     </button>
@@ -443,13 +460,33 @@ export function ItemsScreen({
       ) : null}
       {mode === "items" && (
         <div className="chips" role="tablist" aria-label="Categories">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={(!category || category === "all") && (filterCategories === null || filterCategories.length === 0)}
+            className={`chip ${(!category || category === "all") && (filterCategories === null || filterCategories.length === 0) ? "active" : ""}`}
+            onClick={() => pickChip("all")}
+          >
+            All
+          </button>
+          {combos.length > 0 && (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={category === "combos" && filterCategories === null}
+              className={`chip ${category === "combos" && filterCategories === null ? "active" : ""}`}
+              onClick={() => pickChip("combos")}
+            >
+              Combos
+            </button>
+          )}
           {chips.map((name) => (
             <button
               key={name}
               type="button"
               role="tab"
-              aria-selected={activeCategory.includes(name) && activeCategory.length === 1}
-              className={`chip ${activeCategory.includes(name) ? "active" : ""}`}
+              aria-selected={activeCategory.includes(name) && activeCategory.length === 1 && category !== "combos"}
+              className={`chip ${activeCategory.includes(name) && activeCategory.length === 1 && category !== "combos" ? "active" : ""}`}
               onClick={() => pickChip(name)}
             >
               {name}
@@ -457,7 +494,7 @@ export function ItemsScreen({
           ))}
         </div>
       )}
-      {visibleItems.length === 0 && matchingCombos.length === 0 ? (
+      {visibleItems.length === 0 && combosToRender.length === 0 ? (
         <div className="catalog-empty">
           <div className="catalog-empty-icon" aria-hidden="true">
             <Search size={26} strokeWidth={1.8} />
@@ -468,7 +505,11 @@ export function ItemsScreen({
               : filteredOut
                 ? "No items match these filters"
                 : mode === "items"
-                  ? `No items in ${category}`
+                  ? category === "combos"
+                    ? "No combos available"
+                    : !category || category === "all"
+                      ? "Catalogue is empty"
+                      : `No items in ${category}`
                   : "Catalogue is empty"}
           </h2>
           <p>
@@ -498,147 +539,130 @@ export function ItemsScreen({
           ) : null}
         </div>
       ) : (
-        <>
-          {matchingCombos.length > 0 ? (
-            <div className="combo-section">
-              <div className="combo-section-head">
-                <h2>Combos</h2>
-                <span>
-                  {matchingCombos.length} set
-                  {matchingCombos.length === 1 ? "" : "s"}
-                </span>
+        <div className="grid">
+          {combosToRender.map((combo) => (
+            <article className="card card-combo" key={`combo-${combo.id}`}>
+              <button
+                type="button"
+                className="card-hit"
+                onClick={() => onAddCombo(combo)}
+              >
+                <div className="card-img-fallback combo-fallback">
+                  {combo.name.slice(0, 2).toUpperCase()}
+                  <span className="combo-badge">COMBO</span>
+                </div>
+              </button>
+              <div className="card-foot">
+                <div className="card-body">
+                  <strong className="card-name">{combo.name}</strong>
+                  <div className="price">
+                    {formatMoney(combo.priceMinor)}
+                  </div>
+                  <div
+                    className={`card-stock${
+                      combo.availableSets <= 0
+                        ? " out"
+                        : combo.availableSets <= settings.lowStockQty
+                          ? " low"
+                          : ""
+                    }`}
+                  >
+                    {combo.components.length} product
+                    {combo.components.length === 1 ? "" : "s"} in set
+                    {combo.availableSets > 0
+                      ? ` · ${combo.availableSets} available`
+                      : " · Out of stock"}
+                  </div>
+                </div>
+                <button
+                  className="add"
+                  type="button"
+                  onClick={() => onAddCombo(combo)}
+                  aria-label={`Add ${combo.name}`}
+                >
+                  <Plus size={16} strokeWidth={2.4} />
+                </button>
               </div>
-              <div className="grid combo-grid">
-                {matchingCombos.map((combo) => (
-                  <article className="card card-combo" key={combo.id}>
-                    <button
-                      type="button"
-                      className="card-hit"
-                      onClick={() => onAddCombo(combo)}
-                    >
-                      <div className="card-img-fallback combo-fallback">
-                        {combo.name.slice(0, 2).toUpperCase()}
-                        <span className="combo-badge">COMBO</span>
-                      </div>
-                    </button>
-                    <div className="card-foot">
-                      <div className="card-body">
-                        <strong className="card-name">{combo.name}</strong>
-                        <div className="price">
-                          {formatMoney(combo.priceMinor)}
-                        </div>
-                        <div
-                          className={`card-stock${
-                            combo.availableSets <= 0
-                              ? " out"
-                              : combo.availableSets <= settings.lowStockQty
-                                ? " low"
-                                : ""
-                          }`}
-                        >
-                          {combo.components.length} product
-                          {combo.components.length === 1 ? "" : "s"} in set
-                          {combo.availableSets > 0
-                            ? ` · ${combo.availableSets} available`
-                            : " · Out of stock"}
-                        </div>
-                      </div>
-                      <button
-                        className="add"
-                        type="button"
-                        onClick={() => onAddCombo(combo)}
-                        aria-label={`Add ${combo.name}`}
-                      >
-                        <Plus size={16} strokeWidth={2.4} />
-                      </button>
+            </article>
+          ))}
+          {families.map((family) => {
+            const members = family.members;
+            const multi = members.length > 1;
+            const item = multi
+              ? members.find((row) => row.id === picks[family.key]) ??
+                family.base
+              : members[0]!;
+            return (
+              <article className="card" key={family.key}>
+                <button
+                  type="button"
+                  className="card-hit"
+                  onClick={() => onAdd(item)}
+                >
+                  {item.image ? (
+                    <img
+                      src={item.image}
+                      alt=""
+                      onError={(event) => {
+                        const target = event.currentTarget;
+                        target.onerror = null;
+                        target.src = "";
+                      }}
+                    />
+                  ) : (
+                    <div className="card-img-fallback">
+                      {item.name.slice(0, 2).toUpperCase()}
                     </div>
-                  </article>
-                ))}
-              </div>
-            </div>
-          ) : null}
-          {visibleItems.length > 0 && (
-            <div className="grid">
-              {families.map((family) => {
-                const members = family.members;
-                const multi = members.length > 1;
-                const item = multi
-                  ? members.find((row) => row.id === picks[family.key]) ??
-                    family.base
-                  : members[0]!;
-                return (
-                  <article className="card" key={family.key}>
-                    <button
-                      type="button"
-                      className="card-hit"
-                      onClick={() => onAdd(item)}
-                    >
-                      {item.image ? (
-                        <img
-                          src={item.image}
-                          alt=""
-                          onError={(event) => {
-                            const target = event.currentTarget;
-                            target.onerror = null;
-                            target.src = "";
-                          }}
-                        />
-                      ) : (
-                        <div className="card-img-fallback">
-                          {item.name.slice(0, 2).toUpperCase()}
-                        </div>
-                      )}
-                    </button>
-                    {multi ? (
-                      <div className="variant-chips">
-                        {members.map((member) => (
-                          <button
-                            type="button"
-                            key={member.id}
-                            className={`chip ${member.id === item.id ? "active" : ""}`}
-                            onClick={() => chooseVariant(family.key, member.id)}
-                          >
-                            {memberLabel(member)}
-                          </button>
-                        ))}
+                  )}
+                </button>
+                {multi ? (
+                  <div className="variant-chips">
+                    {members.map((member) => (
+                      <button
+                        type="button"
+                        key={member.id}
+                        className={`chip ${member.id === item.id ? "active" : ""}`}
+                        onClick={() => chooseVariant(family.key, member.id)}
+                      >
+                        {memberLabel(member)}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                <div className="card-foot">
+                  <div className="card-body">
+                    <strong className="card-name">{item.name}</strong>
+                    <div className="price">
+                      {formatMoney(sellPrice(item, branchId))}
+                      <span className="price-unit">
+                        {" "}
+                        {formatPricePer(item.unit ?? "each", item.unitLabel)}
+                      </span>
+                    </div>
+                    {item.onHand <= settings.lowStockQty && item.onHand > 0 ? (
+                      <div className="card-stock low">
+                        {formatStock(
+                          item.onHand,
+                          item.unit ?? "each",
+                          item.packSize ?? 1,
+                          item.unitLabel,
+                        )}
                       </div>
                     ) : null}
-                    <div className="card-foot">
-                      <div className="card-body">
-                        <strong className="card-name">{item.name}</strong>
-                        <div className="price">
-                          {formatMoney(sellPrice(item, branchId))}
-                          <span className="price-unit">
-                            {" "}
-                            {formatPricePer(item.unit ?? "each", item.unitLabel)}
-                          </span>
-                        </div>
-                        {item.onHand <= settings.lowStockQty && item.onHand > 0 ? (
-                          <div className="card-stock low">
-                            {formatStock(
-                              item.onHand,
-                              item.unit ?? "each",
-                              item.packSize ?? 1,
-                              item.unitLabel,
-                            )}
-                          </div>
-                        ) : null}
-                      </div>
-                      <button
-                        className="add"
-                        type="button"
-                        onClick={() => onAdd(item)}
-                        aria-label={`Add ${item.name}`}
-                      >
-                        <Plus size={16} strokeWidth={2.4} />
-                      </button>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          )}
-        </>
+                  </div>
+                  <button
+                    className="add"
+                    type="button"
+                    onClick={() => onAdd(item)}
+                    aria-label={`Add ${item.name}`}
+                  >
+                    <Plus size={16} strokeWidth={2.4} />
+                  </button>
+                </div>
+              </article>
+            );
+          })}
+        </div>
       )}
     </section>
   );

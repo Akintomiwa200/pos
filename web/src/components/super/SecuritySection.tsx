@@ -29,8 +29,6 @@ import {
 import { SetupHeader, SetupStat } from "@/components/setup/SetupChrome";
 import { ManagerSkeleton } from "@/components/Skeleton";
 import { useThemeColors } from "@/hooks/useThemeColors";
-import { useLiveDirectory } from "@/lib/live-directory";
-import { useLivePos } from "@/lib/live-pos";
 import { getSecurityOverview, type SecurityOverview } from "@/lib/hq-api";
 
 function LiveBadge({ live }: { live: boolean }) {
@@ -49,20 +47,36 @@ function LiveBadge({ live }: { live: boolean }) {
 function useOverview() {
   const [data, setData] = useState<SecurityOverview | null>(null);
   const [ready, setReady] = useState(false);
+  const [live, setLive] = useState(false);
   useEffect(() => {
     let mounted = true;
-    getSecurityOverview()
-      .then((row) => {
+    async function refresh() {
+      try {
+        const row = await getSecurityOverview();
         if (mounted) setData(row);
-      })
-      .finally(() => {
+      } finally {
         if (mounted) setReady(true);
-      });
+      }
+    }
+    const source = new EventSource("/api/console/security/stream");
+    source.onopen = () => {
+      if (mounted) setLive(true);
+    };
+    source.onerror = () => {
+      if (mounted) setLive(false);
+    };
+    source.onmessage = () => {
+      // Every audit, login, and security event publishes a refresh signal.
+      if (!mounted) return;
+      void refresh();
+    };
+    void refresh();
     return () => {
       mounted = false;
+      source.close();
     };
   }, []);
-  return { data, ready };
+  return { data, ready, live };
 }
 
 function SeverityDot({ severity }: { severity: string }) {
@@ -115,9 +129,8 @@ function EmptyCard({ children }: { children: React.ReactNode }) {
 
 function SecurityDashboard() {
   const colors = useThemeColors();
-  const { live, ready: posReady } = useLivePos();
-  const { data, ready: dataReady } = useOverview();
-  if (!posReady || !dataReady || !data) return <ManagerSkeleton variant="table" />;
+  const { data, ready: dataReady, live } = useOverview();
+  if (!dataReady || !data) return <ManagerSkeleton variant="table" />;
 
   const logins = data.logins;
   const events = data.events;
@@ -335,8 +348,7 @@ function SecurityDashboard() {
 
 function LoginActivityPage() {
   const colors = useThemeColors();
-  const { live } = useLivePos();
-  const { data, ready } = useOverview();
+  const { data, ready, live } = useOverview();
   if (!ready || !data) return <ManagerSkeleton variant="table" />;
 
   const logins = data.logins;
@@ -425,8 +437,7 @@ function LoginActivityPage() {
 
 function SessionsPage() {
   const colors = useThemeColors();
-  const { live } = useLivePos();
-  const { data, ready } = useOverview();
+  const { data, ready, live } = useOverview();
   if (!ready || !data) return <ManagerSkeleton variant="table" />;
 
   const sessions = data.sessions;
@@ -533,20 +544,37 @@ function SessionsPage() {
 }
 
 function AuditLogsPage() {
-  const { live } = useLivePos();
-  const { data, ready } = useOverview();
+  const { data, ready, live } = useOverview();
+  const [query, setQuery] = useState("");
   if (!ready || !data) return <ManagerSkeleton variant="table" />;
 
   const audit = data.audit;
+  const needle = query.trim().toLowerCase();
+  const rows = needle
+    ? audit.recent.filter((row) =>
+        `${row.actor} ${row.action} ${row.target} ${row.detail}`.toLowerCase().includes(needle),
+      )
+    : audit.recent;
 
   return (
     <div>
       <SetupHeader
         kicker="Producer · Security"
         title="Audit logs"
-        copy="Administrative actions and configuration changes."
+        copy="Every recorded operation — HQ accounts, PIN changes, till authorisations and configuration changes — refreshed live."
         action={<LiveBadge live={live} />}
       />
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <input
+          className="w-full max-w-sm rounded-xl border border-pos-border bg-pos-surface px-4 py-2.5 text-[13px] text-pos-ink outline-none focus:border-pos-primary"
+          placeholder="Search actor, action, target or detail…"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+        <span className="text-[12px] text-pos-ink-faint">
+          {rows.length} of {audit.recent.length} recent operations
+        </span>
+      </div>
       <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <SetupStat label="Today" value={String(audit.today)} hint="Actions recorded" tone="accent" />
         <SetupStat label="This week" value={String(audit.week)} hint="All actions" />
@@ -557,9 +585,9 @@ function AuditLogsPage() {
         <div className="border-b border-pos-border/60 px-5 py-4 text-[15px] font-semibold text-pos-ink">
           Audit trail
         </div>
-        {audit.recent.length === 0 ? (
+        {rows.length === 0 ? (
           <div className="px-5 py-10 text-center text-sm text-pos-ink-faint">
-            No administrative actions recorded yet. Sign-ins, password changes, and account edits appear here.
+            No operations match. Sign-ins, PIN changes, till actions and account edits appear here.
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -574,7 +602,7 @@ function AuditLogsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-pos-border/45">
-                {audit.recent.map((row) => (
+                {rows.map((row) => (
                   <tr key={row.id} className="hover:bg-pos-surface-muted/60">
                     <td className="px-5 py-3 font-medium text-pos-ink">{row.actor}</td>
                     <td className="px-5 py-3">
@@ -600,8 +628,7 @@ function AuditLogsPage() {
 
 function SecurityEventsPage() {
   const colors = useThemeColors();
-  const { live } = useLivePos();
-  const { data, ready } = useOverview();
+  const { data, ready, live } = useOverview();
   if (!ready || !data) return <ManagerSkeleton variant="table" />;
 
   const events = data.events;

@@ -453,7 +453,7 @@ export function LoyaltySettings() {
 }
 
 export function ReceiptSettings() {
-  const [settings] = useSettings();
+  const [settings, patch] = useSettings();
   const sampleLines = [
     {
       id: "sample-coke",
@@ -585,6 +585,23 @@ export function ReceiptSettings() {
           </button>
         </SetRow>
       </SetCard>
+      <SetCard title="Till receipt options">
+        <SetRow
+          label="Print a duplicate for the customer?"
+          hint="Adds an extra copy after payment. Copies from HQ are applied as well."
+        >
+          <Toggle
+            on={settings.printDuplicateReceipt}
+            onChange={(printDuplicateReceipt) => patch({ printDuplicateReceipt })}
+          />
+        </SetRow>
+        <SetRow label="Show SKU on receipt lines?" hint="Prints the product code beside each item.">
+          <Toggle
+            on={settings.showSkuOnReceipt}
+            onChange={(showSkuOnReceipt) => patch({ showSkuOnReceipt })}
+          />
+        </SetRow>
+      </SetCard>
       <SetCard title="What HQ is sending">
         <SetRow label="Title">{settings.storeName || "—"}</SetRow>
         <SetRow label="Branch">{settings.receiptLocation || "—"}</SetRow>
@@ -597,6 +614,45 @@ export function ReceiptSettings() {
         <SetRow label="Auto-print after payment?">
           {settings.autoPrintReceipt ? "On" : "Off"}
         </SetRow>
+      </SetCard>
+      <SetCard title="HQ receipt field visibility">
+        <p className="set-lede">
+          These come from web Settings → Receipts and update on this till automatically. Change
+          them in HQ, not here.
+        </p>
+        <div className="grid gap-x-6 sm:grid-cols-2">
+          {[
+            ["Brand colour", settings.receiptBrandColor || "—"],
+            ["Barcode value", settings.receiptBarcodeValue || "—"],
+            ["Cashier name", settings.receiptShowCashier ? "On" : "Off"],
+            ["Barcode", settings.receiptShowBarcode ? "On" : "Off"],
+            ["Ticket number", settings.receiptShowTicketNumber ? "On" : "Off"],
+            ["Date and time", settings.receiptShowDate ? "On" : "Off"],
+            ["Customer", settings.receiptShowCustomer ? "On" : "Off"],
+            ["Customer phone", settings.receiptShowCustomerPhone ? "On" : "Off"],
+            ["Till name", settings.receiptShowTill ? "On" : "Off"],
+            ["Tender", settings.receiptShowTender ? "On" : "Off"],
+            ["Change", settings.receiptShowChange ? "On" : "Off"],
+            ["Loyalty", settings.receiptShowLoyalty ? "On" : "Off"],
+            ["Loyalty balance", settings.receiptShowLoyaltyBalance ? "On" : "Off"],
+            ["Points redeemed", settings.receiptShowLoyaltyRedeemed ? "On" : "Off"],
+            ["Points earned", settings.receiptShowLoyaltyEarned ? "On" : "Off"],
+            ["Gift card", settings.receiptShowGiftCard ? "On" : "Off"],
+            ["Gift card balance", settings.receiptShowGiftCardBalance ? "On" : "Off"],
+            ["Title", settings.receiptShowTitle ? "On" : "Off"],
+            ["Address", settings.receiptShowAddress ? "On" : "Off"],
+            ["Email", settings.receiptShowEmail ? "On" : "Off"],
+            ["Phone", settings.receiptShowPhone ? "On" : "Off"],
+            ["Header note", settings.receiptShowHeader ? "On" : "Off"],
+            ["Footer note", settings.receiptShowFooter ? "On" : "Off"],
+            ["Discount", settings.receiptShowDiscount ? "On" : "Off"],
+            ["Powered by", settings.receiptShowPoweredBy ? "On" : "Off"],
+          ].map(([label, value]) => (
+            <SetRow key={label} label={label}>
+              {value}
+            </SetRow>
+          ))}
+        </div>
       </SetCard>
     </>
   );

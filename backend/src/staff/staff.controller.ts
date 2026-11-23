@@ -10,6 +10,25 @@ export class StaffController {
     return this.staff.list();
   }
 
+  /** Authenticated by the current credential in the body; no bearer token needed. */
+  @Post("pin/local")
+  pinLocal(
+    @Body()
+    body: {
+      staffId?: string;
+      currentPassword?: string;
+      currentPin?: string;
+      pin?: string | null;
+    },
+  ) {
+    return this.staff.managePinLocal(
+      body.staffId ?? "",
+      body.currentPassword,
+      body.currentPin,
+      body.pin === undefined ? null : body.pin,
+    );
+  }
+
   @Post("pin")
   pin(
     @Body() body: { staffId?: string; pin?: string | null },
@@ -25,6 +44,14 @@ export class StaffController {
   @Post("unlock")
   unlock(@Body() body: { pin?: string }) {
     return this.staff.unlock(body.pin ?? "");
+  }
+
+  /** Role-aware PIN authorisation for till gates such as Settings or supervisor actions. */
+  @Post("authorize")
+  authorize(
+    @Body() body: { pin?: string; privilege?: "settings" | "unlock" },
+  ) {
+    return this.staff.authorizePrivilege(body.pin ?? "", body.privilege ?? "unlock");
   }
 
   @Get("shift")

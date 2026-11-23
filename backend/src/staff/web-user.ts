@@ -68,6 +68,7 @@ export function fromConsoleUser(u: WebUserLike): StaffUser | null {
     privileges,
     password: "",
     pin: "",
+    hasPin: false,
     avatar: avatarFor(u.name),
   };
 }

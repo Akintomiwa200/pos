@@ -801,11 +801,16 @@ function PlatformMonthChart({
         className="mt-1 grid pr-[56px]"
         style={{ gridTemplateColumns: `repeat(${Math.max(data.length, 1)}, minmax(0, 1fr))` }}
       >
-        {data.map((row, index) => (
-          <div key={`${row.month}-${index}`} className="flex min-w-0 flex-col items-center">
+        {data.map((row, rowIndex) => (
+          <div key={`${row.month}-${rowIndex}`} className="flex min-w-0 flex-col items-center">
             <div className="flex -space-x-1.5">
-              {(row.people ?? faces).slice(0, row.faces).map((person, index) => (
-                <Avatar key={`${row.month}-${person.name}`} name={person.name} size={20} index={index} />
+              {(row.people ?? faces).slice(0, row.faces).map((person, personIndex) => (
+                <Avatar
+                  key={`${row.month}-${personIndex}-${person.name}`}
+                  name={person.name}
+                  size={20}
+                  index={personIndex}
+                />
               ))}
             </div>
             <span className="mt-1 max-w-full truncate text-[12px] text-pos-ink-faint">{row.month}</span>

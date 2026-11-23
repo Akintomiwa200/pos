@@ -87,7 +87,10 @@ export default function RootLayout({
       <head>
         <ThemeScript />
       </head>
-      <body className="bg-pos-bg font-sans text-pos-ink antialiased">
+      <body
+        className="bg-pos-bg font-sans text-pos-ink antialiased"
+        suppressHydrationWarning
+      >
         <ThemeProvider>
           <AuthProvider>
             <ScrollbarEnhancer />

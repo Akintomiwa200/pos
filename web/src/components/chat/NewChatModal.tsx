@@ -35,11 +35,11 @@ export function NewChatModal({
     setTitle("");
     setSelected([]);
     setLoading(true);
-    listChatTargets()
+    listChatTargets(self?.id ?? "")
       .then((rows) => setTargets(rows))
       .catch(() => toast.error("Could not load chat contacts."))
       .finally(() => setLoading(false));
-  }, [open]);
+  }, [open, self?.id]);
 
   const people = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -60,6 +60,7 @@ export function NewChatModal({
         memberIds: [target.id],
         name: target.name,
         createdBy: self ?? undefined,
+        viewerId: self?.id ?? "",
       });
       onCreated(conversation);
     } catch (err) {
@@ -78,6 +79,7 @@ export function NewChatModal({
         memberIds: selected,
         name: title.trim() || undefined,
         createdBy: self ?? undefined,
+        viewerId: self?.id ?? "",
       });
       onCreated(conversation);
     } catch (err) {

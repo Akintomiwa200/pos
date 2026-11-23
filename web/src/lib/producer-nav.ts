@@ -15,6 +15,7 @@ import {
   LayoutDashboard,
   Lock,
   Megaphone,
+  MessageSquare,
   Percent,
   Receipt,
   ScrollText,
@@ -51,6 +52,7 @@ export const PRODUCER_NAV: NavSection[] = [
       link("super-home", "Dashboard", "/admin", LayoutDashboard),
       link("super-activity", "Activity", "/admin/activity", Activity),
       link("super-notifications", "Notifications", "/admin/notifications", Bell),
+      link("super-chat", "Chat", "/chat", MessageSquare),
     ],
   },
   {

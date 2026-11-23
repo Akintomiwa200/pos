@@ -73,18 +73,23 @@ type CreateChatInput = {
   memberIds?: string[];
   name?: string;
   createdBy?: { id?: string; name?: string };
+  viewerId: string;
 };
 
-export async function listChatConversations() {
-  return api<ChatConversation[]>("/api/chat/conversations");
+function viewerQuery(viewerId: string) {
+  return `viewerId=${encodeURIComponent(viewerId)}`;
 }
 
-export async function getChatThread(id: string) {
-  return api<ChatThread>(`/api/chat/conversations/${id}`);
+export async function listChatConversations(viewerId: string) {
+  return api<ChatConversation[]>(`/api/chat/conversations?${viewerQuery(viewerId)}`);
 }
 
-export async function listChatTargets() {
-  return api<ChatTarget[]>("/api/chat/targets");
+export async function getChatThread(id: string, viewerId: string) {
+  return api<ChatThread>(`/api/chat/conversations/${id}?${viewerQuery(viewerId)}`);
+}
+
+export async function listChatTargets(viewerId: string) {
+  return api<ChatTarget[]>(`/api/chat/targets?${viewerQuery(viewerId)}`);
 }
 
 export async function createChatConversation(input: CreateChatInput) {
@@ -97,33 +102,36 @@ export async function createChatConversation(input: CreateChatInput) {
 export async function sendChatMessage(
   id: string,
   text: string,
-  extra?: { senderName?: string; senderId?: string; kind?: "text" | "system" },
+  extra: { senderName?: string; senderId?: string; kind?: "text" | "system" } | undefined,
+  viewerId: string,
 ) {
   return api<ChatMessage>(`/api/chat/conversations/${id}/messages`, {
     method: "POST",
-    body: JSON.stringify({ text, ...extra }),
+    body: JSON.stringify({ text, ...extra, viewerId }),
   });
 }
 
 export async function sendChatTyping(
   id: string,
   state: "on" | "off",
-  name?: string,
+  name: string | undefined,
+  viewerId: string,
 ) {
   return api<{ ok: true }>(`/api/chat/conversations/${id}/typing`, {
     method: "POST",
-    body: JSON.stringify({ name, state }),
+    body: JSON.stringify({ name, state, viewerId }),
   });
 }
 
 export async function sendCallSignal(
   id: string,
   signal: CallSignal,
-  from?: { id?: string; name?: string },
+  from: { id?: string; name?: string } | undefined,
+  viewerId: string,
 ) {
   return api<{ ok: true }>(`/api/chat/conversations/${id}/calls`, {
     method: "POST",
-    body: JSON.stringify({ signal, from }),
+    body: JSON.stringify({ signal, from, viewerId }),
   });
 }
 
@@ -137,9 +145,10 @@ export async function sendChatPresence(accountId?: string, name?: string) {
 export async function patchChatConversation(
   id: string,
   body: Partial<Pick<ChatConversation, "locationEnabled" | "active" | "location">>,
+  viewerId: string,
 ) {
   return api<ChatConversation>(`/api/chat/conversations/${id}`, {
     method: "PATCH",
-    body: JSON.stringify(body),
+    body: JSON.stringify({ ...body, viewerId }),
   });
 }

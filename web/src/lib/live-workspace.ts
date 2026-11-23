@@ -93,9 +93,11 @@ export type TypingState = {
 };
 
 export function useLiveChat(opts?: {
+  viewerId?: string;
   onMessage?: (conversationId: string, message: ChatMessage) => void;
   onCall?: (conversationId: string, signal: CallSignal, at: string) => void;
 }) {
+  const viewerId = opts?.viewerId ?? "";
   const [conversations, setConversations] = useState<ChatConversation[]>([]);
   const [live, setLive] = useState(false);
   const [typing, setTyping] = useState<Record<string, TypingState>>({});
@@ -109,8 +111,14 @@ export function useLiveChat(opts?: {
   onCallRef.current = onCall;
 
   useEffect(() => {
+    if (!viewerId) return;
     let cancelled = false;
-    const source = new EventSource("/api/chat/stream");
+    setConversations([]);
+    setTyping({});
+    setPresenceMap({});
+    const source = new EventSource(
+      `/api/chat/stream?viewerId=${encodeURIComponent(viewerId)}`,
+    );
 
     source.onopen = () => {
       if (!cancelled) setLive(true);
@@ -197,7 +205,7 @@ export function useLiveChat(opts?: {
       cancelled = true;
       source.close();
     };
-  }, []);
+  }, [viewerId]);
 
   return { conversations, setConversations, live, typing, presenceMap };
 }

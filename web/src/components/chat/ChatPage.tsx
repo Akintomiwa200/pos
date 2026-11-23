@@ -62,6 +62,26 @@ function dayLabel(iso: string) {
   return day.toLocaleDateString("en-NG", { weekday: "long" });
 }
 
+/** Live SSE and the POST response can race; keep one row per message id. */
+function upsertMessage(current: ChatMessage[], message: ChatMessage) {
+  const index = current.findIndex((row) => row.id === message.id);
+  if (index === -1) return [...current, message];
+  const next = current.slice();
+  next[index] = message;
+  return next;
+}
+
+function visibleMessages(messages: ChatMessage[]) {
+  const seen = new Set<string>();
+  return messages
+    .filter((message) => {
+      if (seen.has(message.id)) return false;
+      seen.add(message.id);
+      return true;
+    })
+    .sort((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id));
+}
+
 function Avatar({
   name,
   src,
@@ -107,9 +127,7 @@ export function ChatPage() {
 
   const onLiveMessage = useCallback((conversationId: string, message: ChatMessage) => {
     if (conversationId === activeIdRef.current) {
-      setMessages((current) =>
-        current.some((m) => m.id === message.id) ? current : [...current, message],
-      );
+      setMessages((current) => upsertMessage(current, message));
     }
   }, []);
 
@@ -123,6 +141,7 @@ export function ChatPage() {
   );
 
   const { conversations, setConversations, live, typing, presenceMap } = useLiveChat({
+    viewerId: self?.id ?? "",
     onMessage: onLiveMessage,
     onCall: onLiveCall,
   });
@@ -154,7 +173,7 @@ export function ChatPage() {
     peerName,
     initialMode: "audio",
     onSignal: (sig) => {
-      if (activeId) void sendCallSignal(activeId, sig, self ?? undefined);
+      if (activeId) void sendCallSignal(activeId, sig, self ?? undefined, self?.id ?? "");
     },
   });
 
@@ -165,7 +184,7 @@ export function ChatPage() {
   async function loadList(preferId?: string) {
     let rows = conversations;
     if (!rows.length) {
-      rows = await listChatConversations();
+      rows = await listChatConversations(self?.id ?? "");
       setConversations(rows);
     }
     const nextId = preferId ?? activeId ?? rows[0]?.id ?? null;
@@ -175,7 +194,7 @@ export function ChatPage() {
 
   async function openThread(id: string, list = conversations) {
     setActiveId(id);
-    const thread = await getChatThread(id);
+    const thread = await getChatThread(id, self?.id ?? "");
     setActive(thread.conversation);
     setMessages(thread.messages);
     const fromList = list.find((row) => row.id === id);
@@ -201,10 +220,10 @@ export function ChatPage() {
   // Send outgoing typing indicators
   useEffect(() => {
     if (!activeId || !draft.trim()) return;
-    void sendChatTyping(activeId, "on", self?.name ?? "You");
+    void sendChatTyping(activeId, "on", self?.name ?? "You", self?.id ?? "");
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
-      void sendChatTyping(activeId, "off", self?.name ?? "You");
+      void sendChatTyping(activeId, "off", self?.name ?? "You", self?.id ?? "");
     }, 1200);
     return () => {
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
@@ -229,7 +248,7 @@ export function ChatPage() {
 
   const messageGroups = useMemo(() => {
     const groups: Array<{ label: string; items: ChatMessage[] }> = [];
-    for (const message of messages) {
+    for (const message of visibleMessages(messages)) {
       const label = dayLabel(message.at);
       const last = groups[groups.length - 1];
       if (last?.label === label) last.items.push(message);
@@ -242,8 +261,13 @@ export function ChatPage() {
     if (!activeId || !draft.trim() || busy) return;
     setBusy(true);
     try {
-      const message = await sendChatMessage(activeId, draft.trim());
-      setMessages((current) => [...current, message]);
+      const message = await sendChatMessage(
+        activeId,
+        draft.trim(),
+        { senderId: self?.id, senderName: self?.name || "You" },
+        self?.id ?? "",
+      );
+      setMessages((current) => upsertMessage(current, message));
       setDraft("");
       setConversations((current) =>
         current
@@ -273,7 +297,7 @@ export function ChatPage() {
             onClick={() => {
               setShowNewChat(true);
               if (!targets.length) {
-                listChatTargets().then(setTargets).catch(() => {});
+                listChatTargets(self?.id ?? "").then(setTargets).catch(() => {});
               }
             }}
             className="mb-3 flex w-full items-center justify-center gap-2 rounded-full bg-pos-primary px-3.5 py-2.5 text-sm font-medium text-white shadow-pos-primary transition hover:opacity-90"
@@ -545,9 +569,11 @@ export function ChatPage() {
                   }`}
                   onClick={async () => {
                     try {
-                      const next = await patchChatConversation(active.id, {
-                        locationEnabled: !active.locationEnabled,
-                      });
+                      const next = await patchChatConversation(
+                        active.id,
+                        { locationEnabled: !active.locationEnabled },
+                        self?.id ?? "",
+                      );
                       setActive(next);
                       setConversations((current) =>
                         current.map((row) => (row.id === next.id ? { ...row, ...next } : row)),

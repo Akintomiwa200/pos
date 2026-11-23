@@ -273,6 +273,9 @@ export function canAccessPath(
     pathname === "/super" ||
     pathname.startsWith("/super/");
   if (scope === "producer") {
+    // Chat is a shared HQ workspace, not a tenant module, so Super Admin and
+    // other producer-scoped staff can use it without leaving their console.
+    if (pathMatchesHref(pathname, "/chat")) return true;
     if (!producerPath) return false;
     if (privileges.includes("*")) return true;
     const hrefs = collectHrefs(filterNav(departments, privileges, "producer"));

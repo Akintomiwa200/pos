@@ -21,7 +21,13 @@ export type WebUserLike = {
   avatarUrl?: string | null;
 };
 
-/** Super Admin is an HQ-only role and must never reach the till login roster. */
+export type Rank = "super" | "admin" | "staff";
+
+/**
+ * Super Admin is an explicit HQ-only identity. Producer scope or a wildcard is
+ * not enough on its own — otherwise every producer role collapses into the
+ * top rank and can reach the platform desk.
+ */
 export function isSuperAdmin(user: {
   groupId?: string | null;
   groupName?: string | null;
@@ -34,11 +40,32 @@ export function isSuperAdmin(user: {
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]/g, "");
-  return (
-    groupId === "g-super-admin" ||
-    role === "superadmin" ||
-    (user.scope === "producer" && Boolean(user.privileges?.includes("*")))
-  );
+  return groupId === "g-super-admin" || role === "superadmin";
+}
+
+/** Tenant Admin manages one company team; a wildcard tenant role is the same rank. */
+export function isTenantAdmin(user: {
+  groupId?: string | null;
+  groupName?: string | null;
+  roleName?: string | null;
+  scope?: string | null;
+  privileges?: string[] | null;
+}) {
+  if (user.scope === "producer" || isSuperAdmin(user)) return false;
+  const groupId = (user.groupId ?? "").trim().toLowerCase();
+  return groupId === "g-admin" || Boolean(user.privileges?.includes("*"));
+}
+
+export function rankFor(user: {
+  groupId?: string | null;
+  groupName?: string | null;
+  roleName?: string | null;
+  scope?: string | null;
+  privileges?: string[] | null;
+}): Rank {
+  if (isSuperAdmin(user)) return "super";
+  if (isTenantAdmin(user)) return "admin";
+  return "staff";
 }
 
 /**

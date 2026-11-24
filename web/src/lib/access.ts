@@ -13,6 +13,7 @@ import {
 import { PRODUCER_NAV, producerAccessTree } from "./producer-nav";
 
 export type GroupScope = "tenant" | "producer";
+export type Rank = "super" | "admin" | "staff";
 
 export type SessionLockReason =
   | "account_deactivated"
@@ -52,6 +53,8 @@ export type ConsoleAccount = {
   username: string;
   password: string;
   groupId: string;
+  /** Owning company; platform accounts have no company. */
+  companyId?: string | null;
   active: boolean;
   /** Profile picture URL (uploaded via My Profile). */
   avatarUrl?: string | null;
@@ -65,11 +68,16 @@ export type ConsoleSession = {
   username: string;
   groupId: string;
   groupName: string;
+  companyId?: string | null;
   scope?: GroupScope;
   departments: Array<DepartmentName | "*">;
   privileges: string[];
   /** Profile picture URL, kept in sync with the account directory. */
   avatarUrl?: string | null;
+  /** Rank is issued by the server; never inferred from client-side privileges. */
+  rank?: Rank;
+  isSuperAdmin?: boolean;
+  isTenantAdmin?: boolean;
   /** Set while the account or company subscription is locked (pages blocked). */
   locked?: SessionLockState | null;
 };
@@ -80,6 +88,15 @@ export function groupScope(group: { scope?: GroupScope } | null | undefined): Gr
 
 export function sessionScope(session: { scope?: GroupScope } | null | undefined): GroupScope {
   return session?.scope === "producer" ? "producer" : "tenant";
+}
+
+export function sessionRank(
+  session: { rank?: Rank; isSuperAdmin?: boolean; isTenantAdmin?: boolean } | null | undefined,
+): Rank {
+  if (session?.rank) return session.rank;
+  if (session?.isSuperAdmin) return "super";
+  if (session?.isTenantAdmin) return "admin";
+  return "staff";
 }
 
 export const SESSION_KEY = "hq.session.v1";
@@ -265,6 +282,7 @@ export function canAccessPath(
   departments: Array<DepartmentName | "*">,
   privileges: string[],
   scope: GroupScope = "tenant",
+  rank: Rank = "staff",
 ) {
   if (isAlwaysAllowed(pathname)) return true;
   const producerPath =
@@ -272,14 +290,15 @@ export function canAccessPath(
     pathname.startsWith("/admin/") ||
     pathname === "/super" ||
     pathname.startsWith("/super/");
-  if (scope === "producer") {
-    // Chat is a shared HQ workspace, not a tenant module, so Super Admin and
-    // other producer-scoped staff can use it without leaving their console.
+  if (scope === "producer" || rank === "super") {
+    if (rank !== "super") return false;
+    // Chat is part of the Super Admin HQ workspace, not a tenant module.
     if (pathMatchesHref(pathname, "/chat")) return true;
     if (!producerPath) return false;
-    if (privileges.includes("*")) return true;
     const hrefs = collectHrefs(filterNav(departments, privileges, "producer"));
-    return hrefs.some((href) => pathMatchesHref(pathname, href));
+    return (
+      privileges.includes("*") || hrefs.some((href) => pathMatchesHref(pathname, href))
+    );
   }
   if (producerPath) return false;
   if (privileges.includes("*")) return true;
@@ -297,8 +316,10 @@ export function firstAllowedPath(
   departments: Array<DepartmentName | "*">,
   privileges: string[],
   scope: GroupScope = "tenant",
+  rank: Rank = "staff",
 ) {
-  if (scope === "producer") {
+  if (scope === "producer" || rank === "super") {
+    if (rank !== "super") return "/help";
     if (privileges.includes("*")) return "/admin";
     const hrefs = collectHrefs(filterNav(departments, privileges, "producer"));
     return hrefs[0] ?? "/admin";
@@ -313,8 +334,16 @@ export function homePathForSession(session: {
   departments: Array<DepartmentName | "*">;
   privileges: string[];
   scope?: GroupScope;
+  rank?: Rank;
+  isSuperAdmin?: boolean;
+  isTenantAdmin?: boolean;
 }) {
-  return firstAllowedPath(session.departments, session.privileges, sessionScope(session));
+  return firstAllowedPath(
+    session.departments,
+    session.privileges,
+    sessionScope(session),
+    sessionRank(session),
+  );
 }
 
 /** Derive department flags from which sidebar sections have any granted privileges. */

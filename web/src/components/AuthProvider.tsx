@@ -183,7 +183,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!session?.token) return;
-    const source = new EventSource("/api/console/session/stream");
+    const source = new EventSource(
+      `/api/console/session/stream?token=${encodeURIComponent(session.token)}`,
+    );
     source.onmessage = (event) => {
       let payload: SessionStreamEvent | null = null;
       try {

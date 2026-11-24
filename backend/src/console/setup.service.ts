@@ -42,6 +42,15 @@ export class SetupService implements OnModuleInit {
   private settings: HqOrgSettings = SEED_SETTINGS;
   private readonly settingsEvents = new Subject<SettingsEvent>();
   readonly orgChanges = new Subject<void>();
+  private resolveReady: () => void = () => undefined;
+  private readonly ready = new Promise<void>((resolve) => {
+    this.resolveReady = resolve;
+  });
+
+  /** Other services must not read the company id until legacy data is normalised. */
+  whenReady() {
+    return this.ready;
+  }
 
   constructor(private readonly db: DbService) {}
 
@@ -60,7 +69,19 @@ export class SetupService implements OnModuleInit {
       ...SEED_SETTINGS,
       ...this.pick<HqOrgSettings>(stored, "settings", SEED_SETTINGS),
     };
+    // Legacy records stored the default company with an empty id. Give it a
+    // stable tenant id so account ownership can be scoped in the directory.
+    if (!this.company.id) {
+      this.company = { ...this.company, id: nid("co") };
+    }
     await this.persist();
+    this.notifyOrg();
+    this.resolveReady();
+  }
+
+  /** Create a distinct tenant company; onboarding always gets a fresh id. */
+  async createCompany(input: Partial<HqCompany>) {
+    return this.persistCompany(input, input.id?.trim() || nid("co"));
   }
 
   private notifyOrg() {
@@ -109,13 +130,18 @@ export class SetupService implements OnModuleInit {
   }
 
   async saveCompany(input: Partial<HqCompany>) {
+    // The company id is tenant ownership, never a client-editable setting.
+    return this.persistCompany(input, this.company.id);
+  }
+
+  private async persistCompany(input: Partial<HqCompany>, id: string) {
     const name = input.name?.trim() || this.company.name;
     if (!name) throw new BadRequestException("Company name is required");
     this.company = {
       ...this.company,
       ...input,
       logoUrl: input.logoUrl !== undefined ? input.logoUrl : this.company.logoUrl ?? null,
-      id: this.company.id,
+      id: id || nid("co"),
       name,
       legalName: input.legalName?.trim() ?? this.company.legalName,
       rc: input.rc?.trim() ?? this.company.rc,

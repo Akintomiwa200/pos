@@ -17,7 +17,9 @@ export function SuperNotifications() {
   useEffect(() => {
     if (!session?.token) return;
     let cancelled = false;
-    const source = new EventSource("/api/console/notifications/stream");
+    const source = new EventSource(
+      `/api/console/notifications/stream?token=${encodeURIComponent(session.token)}`,
+    );
     source.onmessage = (event) => {
       try {
         const payload = JSON.parse(event.data) as { items?: HqNotice[]; unread?: number };

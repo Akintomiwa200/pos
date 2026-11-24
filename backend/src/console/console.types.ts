@@ -30,6 +30,8 @@ export type ConsoleAccount = {
   username: string;
   password: string;
   groupId: string;
+  /** Owning company/tenant. Null for platform (Super Admin) accounts. */
+  companyId?: string | null;
   active: boolean;
   /** Google subject id when linked / signed up with Google */
   googleId?: string | null;
@@ -50,6 +52,8 @@ export type HqNotice = {
   createdAt: string;
   readAt: string | null;
   derived?: boolean;
+  /** Owning company/tenant. Null notices are platform-only. */
+  companyId?: string | null;
 };
 
 /** Built-in roles that ship with HQ and cannot be deleted. */

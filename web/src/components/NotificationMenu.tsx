@@ -42,23 +42,27 @@ export function NotificationMenu({ token }: { token: string }) {
 
   useEffect(() => {
     let cancelled = false;
-    const source = new EventSource("/api/console/notifications/stream");
-    source.onmessage = (event) => {
-      try {
-        const payload = JSON.parse(event.data) as {
-          items?: HqNotice[];
-          unread?: number;
-        };
-        if (cancelled) return;
-        if (Array.isArray(payload.items)) {
-          setItems(payload.items);
-          setUnread(payload.unread ?? 0);
-          setReady(true);
+    const source = token
+      ? new EventSource(`/api/console/notifications/stream?token=${encodeURIComponent(token)}`)
+      : null;
+    if (source) {
+      source.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data) as {
+            items?: HqNotice[];
+            unread?: number;
+          };
+          if (cancelled) return;
+          if (Array.isArray(payload.items)) {
+            setItems(payload.items);
+            setUnread(payload.unread ?? 0);
+            setReady(true);
+          }
+        } catch {
+          // ignore malformed frames
         }
-      } catch {
-        // ignore malformed frames
-      }
-    };
+      };
+    }
     void load()
       .catch(() => undefined)
       .finally(() => setReady(true));
@@ -67,7 +71,7 @@ export function NotificationMenu({ token }: { token: string }) {
     }, 30000);
     return () => {
       cancelled = true;
-      source.close();
+      source?.close();
       window.clearInterval(timer);
     };
   }, [token]);

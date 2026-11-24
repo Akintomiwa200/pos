@@ -9,7 +9,7 @@ import {
   OnModuleInit,
   UnauthorizedException,
 } from "@nestjs/common";
-import { Observable, Subject } from "rxjs";
+import { map, Observable, Subject } from "rxjs";
 import { DbService } from "../db/db.service";
 import {
   isDefaultGroupId,
@@ -22,6 +22,7 @@ import {
   type HqNotice,
 } from "./console.types";
 import { hashPassword, isHashedPassword, verifyPassword } from "../catalog/password.util";
+import { isSuperAdmin, isTenantAdmin, rankFor } from "../staff/web-user";
 import { SetupService } from "./setup.service";
 import { EmailService } from "../email/email.service";
 import type { HqCompany, HqBranch, HqStore } from "./setup.types";
@@ -62,6 +63,7 @@ type AccountRow = {
   username: string;
   password_hash: string;
   group_id: string;
+  company_id: string | null;
   active: boolean;
   google_id: string | null;
   auth_provider: string;
@@ -84,6 +86,7 @@ type NoticeRow = {
   derived: boolean;
   read_at: Date | null;
   created_at: Date;
+  company_id: string | null;
 };
 
 type TillRow = {
@@ -109,6 +112,15 @@ export type DirectoryEvent = {
   groups: ConsoleGroup[];
   at: string;
 };
+
+/** Viewer context for the live directory. Tenants never receive platform people. */
+export type DirectoryViewer = {
+  isSuperAdmin?: boolean;
+  companyId?: string | null;
+};
+
+/** Viewer context for notifications; platform notices are Super Admin only. */
+export type NoticeViewer = DirectoryViewer;
 
 export type PosEvent = {
   type: "pos";
@@ -219,6 +231,12 @@ export type SessionStreamEvent =
   | SessionLockEvent
   | { type: "privileges"; at: string };
 
+/** Per-connection identity for the session stream. */
+export type SessionViewer = {
+  accountId: string;
+  isSuperAdmin?: boolean;
+};
+
 /** Signal for Super Admin's live security/operation feed. */
 export type SecurityFeedEvent = {
   type: "security";
@@ -257,16 +275,22 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
         `ensureSuperAdmin failed: ${err instanceof Error ? err.message : String(err)}`,
       ),
     );
-    void this.ensureDefaultSubscription().catch((err) =>
-      this.logger.error(
-        `ensureDefaultSubscription failed: ${err instanceof Error ? err.message : String(err)}`,
-      ),
-    );
+    void this.setup
+      .whenReady()
+      .then(async () => {
+        await this.backfillAccountCompanies();
+        await this.ensureDefaultSubscription();
+        await this.evaluateSubscriptionLock();
+      })
+      .catch((err) =>
+        this.logger.error(
+          `tenant bootstrap failed: ${err instanceof Error ? err.message : String(err)}`,
+        ),
+      );
     this.subscriptionTimer = setInterval(
       () => void this.evaluateSubscriptionLock().catch(() => undefined),
       60_000,
     );
-    void this.evaluateSubscriptionLock().catch(() => undefined);
   }
 
   async onModuleDestroy() {
@@ -297,6 +321,7 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
       username: row.username,
       password: row.password_hash,
       groupId: row.group_id,
+      companyId: row.company_id ?? null,
       active: row.active,
       googleId: row.google_id,
       authProvider:
@@ -317,6 +342,7 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
       body: row.body,
       href: row.href,
       derived: row.derived,
+      companyId: row.company_id ?? null,
       createdAt: isoOrNull(row.created_at)!,
       readAt: isoOrNull(row.read_at),
     };
@@ -443,7 +469,7 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
   // ---------- accounts ----------
 
   private static ACCOUNT_COLUMNS =
-    "id, name, email, username, password_hash, group_id, active, google_id, auth_provider, email_verified, avatar_url";
+    "id, name, email, username, password_hash, group_id, company_id, active, google_id, auth_provider, email_verified, avatar_url";
 
   private async findAccount(where: string, params: unknown[]): Promise<ConsoleAccount | undefined> {
     const result = await this.db.query<AccountRow>(
@@ -453,9 +479,19 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
     return result.rows[0] ? this.mapAccount(result.rows[0]) : undefined;
   }
 
-  async listAccounts() {
+  async listAccounts(options?: { companyId?: string }) {
+    const companyId = options?.companyId;
     const result = await this.db.query<AccountRow>(
-      `select ${ConsoleService.ACCOUNT_COLUMNS} from hq_accounts order by created_at, id`,
+      `select ${ConsoleService.ACCOUNT_COLUMNS} from hq_accounts a
+       where $1::text is null or (
+         a.company_id = $1
+         and not exists (
+           select 1 from hq_groups g
+           where g.id = a.group_id and g.scope = 'producer'
+         )
+       )
+       order by a.created_at, a.id`,
+      [companyId ?? null],
     );
     return result.rows.map((row) => publicAccount(this.mapAccount(row)));
   }
@@ -478,14 +514,27 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  private async directorySnapshot(): Promise<DirectoryEvent> {
-    const [accounts, groups] = await Promise.all([this.listAccounts(), this.listGroups()]);
+  /** Shared events are published globally, then narrowed for each subscriber. */
+  private scopeDirectoryEvent(event: DirectoryEvent, viewer?: DirectoryViewer): DirectoryEvent {
+    if (!viewer || viewer.isSuperAdmin) return event;
+    const groups = event.groups.filter((group) => (group.scope ?? "tenant") === "tenant");
+    const groupIds = new Set(groups.map((group) => group.id));
+    const companyId = viewer.companyId ?? "__none__";
     return {
-      type: "directory",
-      accounts,
+      ...event,
+      accounts: event.accounts.filter(
+        (account) => account.companyId === companyId && groupIds.has(account.groupId),
+      ),
       groups,
-      at: new Date().toISOString(),
     };
+  }
+
+  private async directorySnapshot(viewer?: DirectoryViewer): Promise<DirectoryEvent> {
+    const [accounts, groups] = await Promise.all([this.listAccounts(), this.listGroups()]);
+    return this.scopeDirectoryEvent(
+      { type: "directory", accounts, groups, at: new Date().toISOString() },
+      viewer,
+    );
   }
 
   private publishDirectory() {
@@ -494,12 +543,14 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
       .catch(() => undefined);
   }
 
-  directoryStream(): Observable<DirectoryEvent> {
+  directoryStream(viewer?: DirectoryViewer): Observable<DirectoryEvent> {
     return new Observable((subscriber) => {
-      void this.directorySnapshot()
+      void this.directorySnapshot(viewer)
         .then((event) => subscriber.next(event))
         .catch(() => undefined);
-      const sub = this.directoryEvents.subscribe(subscriber);
+      const sub = this.directoryEvents
+        .pipe(map((event) => this.scopeDirectoryEvent(event, viewer)))
+        .subscribe(subscriber);
       return () => sub.unsubscribe();
     });
   }
@@ -567,7 +618,7 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
         scope?: string;
       }
     >(
-      `select a.id, a.name, a.email, a.username, a.password_hash, a.group_id, a.active,
+      `select a.id, a.name, a.email, a.username, a.password_hash, a.group_id, a.company_id, a.active,
               a.google_id, a.auth_provider, a.email_verified, a.avatar_url,
               g.name as group_name, g.departments, g.privileges,
               coalesce(g.scope, 'tenant') as scope
@@ -580,14 +631,22 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
     );
     const row = result.rows[0];
     if (!row) throw new UnauthorizedException("Sign in again");
+    const identity = {
+      groupId: row.group_id,
+      groupName: row.group_name,
+      scope: row.scope === "producer" ? "producer" : "tenant",
+      privileges: row.privileges as string[],
+      companyId: row.company_id ?? null,
+    };
     return {
       token,
       user: {
         ...publicAccount(this.mapAccount(row)),
-        groupName: row.group_name,
-        scope: row.scope === "producer" ? "producer" : "tenant",
+        ...identity,
         departments: row.departments as Array<DepartmentName | "*">,
-        privileges: row.privileges as string[],
+        rank: rankFor(identity),
+        isSuperAdmin: isSuperAdmin(identity),
+        isTenantAdmin: isTenantAdmin(identity),
       },
     };
   }
@@ -639,14 +698,22 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
       token,
       account.id,
     ]);
+    const identity = {
+      groupId: group.id,
+      groupName: group.name,
+      scope: group.scope ?? "tenant",
+      privileges: group.privileges,
+      companyId: account.companyId ?? null,
+    };
     return this.attachSessionLock({
       token,
       user: {
         ...publicAccount(account),
-        groupName: group.name,
-        scope: group.scope ?? "tenant",
+        ...identity,
         departments: group.departments,
-        privileges: group.privileges,
+        rank: rankFor(identity),
+        isSuperAdmin: isSuperAdmin(identity),
+        isTenantAdmin: isTenantAdmin(identity),
       },
     });
   }
@@ -703,7 +770,13 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
 
   async requireProducer(token: string) {
     const session = await this.me(token);
-    if (session.user.scope !== "producer") {
+    const identity = {
+      groupId: session.user.groupId,
+      groupName: session.user.groupName,
+      scope: session.user.scope,
+      privileges: session.user.privileges,
+    };
+    if (!isSuperAdmin(identity)) {
       throw new ForbiddenException("Only Super Admin can use this desk");
     }
     return session;
@@ -741,20 +814,9 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
     const adminGroup = this.tenantAdminGroup(groups);
     if (!adminGroup) throw new BadRequestException("Administrator group is missing");
 
-    await this.saveAccount(
-      {
-        name,
-        email,
-        username,
-        password,
-        groupId: adminGroup.id,
-        active: true,
-        authProvider: "password",
-      },
-      { skipWelcomeEmail: true },
-    );
-
-    const company = await this.setup.saveCompany({
+    // Persist the tenant first so the owner is created with a unique company id.
+    const company = await this.setup.createCompany({
+      id: "",
       name: companyName,
       legalName: input.company?.legalName?.trim() || companyName,
       email: input.company?.email?.trim() || email,
@@ -767,12 +829,26 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
       tin: input.company?.tin?.trim() || "",
     });
 
+    await this.saveAccount(
+      {
+        name,
+        email,
+        username,
+        password,
+        groupId: adminGroup.id,
+        active: true,
+        authProvider: "password",
+      },
+      { skipWelcomeEmail: true, companyId: company.id },
+    );
+
     await this.pushNotice({
       key: `company.onboarded:${company.id}:${Date.now()}`,
       type: "company.onboarded",
       title: "Company onboarded",
       body: `${company.name} was created with owner ${name}.`,
       href: noticeHref,
+      companyId: company.id,
     });
 
     const owner = await this.findAccount(
@@ -890,21 +966,9 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
       username = `${usernameBase.slice(0, 20)}${suffix}`;
     }
 
-    await this.saveAccount(
-      {
-        name: profile.name || companyName,
-        email: profile.email,
-        username,
-        password: generateSessionToken().slice(0, 24),
-        groupId: adminGroup.id,
-        active: true,
-        googleId: profile.sub,
-        authProvider: "google",
-      },
-      { skipWelcomeEmail: true },
-    );
-
-    const company = await this.setup.saveCompany({
+    // Create the tenant first; a Google owner must inherit its company id.
+    const company = await this.setup.createCompany({
+      id: "",
       name: companyName,
       legalName: input.company?.legalName?.trim() || companyName,
       email: input.company?.email?.trim() || profile.email,
@@ -917,12 +981,27 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
       tin: input.company?.tin?.trim() || "",
     });
 
+    await this.saveAccount(
+      {
+        name: profile.name || companyName,
+        email: profile.email,
+        username,
+        password: generateSessionToken().slice(0, 24),
+        groupId: adminGroup.id,
+        active: true,
+        googleId: profile.sub,
+        authProvider: "google",
+      },
+      { skipWelcomeEmail: true, companyId: company.id },
+    );
+
     await this.pushNotice({
       key: `company.onboarded.google:${company.id}:${Date.now()}`,
       type: "company.onboarded",
       title: "Company onboarded with Google",
       body: `${company.name} was created via Google by ${profile.email}.`,
       href: "/setup/others/company",
+      companyId: company.id,
     });
 
     const account = await this.findAccount("google_id = $1", [profile.sub]);
@@ -1031,8 +1110,13 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
         `Password must be at least ${this.minimumPasswordLength()} characters`,
       );
     }
-    const result = await this.db.query<{ id: string; name: string; email: string }>(
-      `select a.id, a.name, a.email
+    const result = await this.db.query<{
+      id: string;
+      name: string;
+      email: string;
+      company_id: string | null;
+    }>(
+      `select a.id, a.name, a.email, a.company_id
        from hq_password_resets r
        join hq_accounts a on a.id = r.account_id
        where r.token = $1 and r.expires_at > now()`,
@@ -1056,6 +1140,7 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
       title: "Password reset",
       body: `${account.name} set a new HQ password. Existing sessions were signed out.`,
       href: "/setup/users/account",
+      companyId: account.company_id ?? null,
     });
     return { ok: true as const };
   }
@@ -1140,6 +1225,9 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
       welcomePassword?: string;
       skipWelcomeEmail?: boolean;
       actorScope?: GroupScope;
+      actorIsSuperAdmin?: boolean;
+      actorCompanyId?: string | null;
+      companyId?: string | null;
       internal?: boolean;
     },
   ) {
@@ -1173,6 +1261,14 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
         throw new BadRequestException("Super Admin is reserved for the designated account");
       }
     }
+    const platformRole = group.scope === "producer" || groupId === "g-super-admin";
+    const companyId = platformRole
+      ? null
+      : options?.actorCompanyId !== undefined
+        ? options.actorCompanyId
+        : options?.companyId !== undefined
+          ? options.companyId
+          : (this.setup.getCompany()?.id ?? null);
     const existing = input.id
       ? await this.findAccount("id = $1", [input.id])
       : undefined;
@@ -1181,6 +1277,14 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
       [existing?.id ?? null, email, username],
     );
     if (duplicate) throw new BadRequestException("Email or username already in use");
+    if (
+      !options?.internal &&
+      existing &&
+      existing.companyId !== companyId &&
+      !options?.actorIsSuperAdmin
+    ) {
+      throw new ForbiddenException("You cannot move an account outside your company");
+    }
     if (
       !options?.internal &&
       existing &&
@@ -1217,14 +1321,15 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
 
     const avatarUrl = input.avatarUrl !== undefined ? input.avatarUrl : existing?.avatarUrl ?? null;
     await this.db.query(
-      `insert into hq_accounts (id, name, email, username, password_hash, group_id, active, google_id, auth_provider, avatar_url)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      `insert into hq_accounts (id, name, email, username, password_hash, group_id, company_id, active, google_id, auth_provider, avatar_url)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        on conflict (id) do update
        set name = excluded.name,
            email = excluded.email,
            username = excluded.username,
            password_hash = excluded.password_hash,
            group_id = excluded.group_id,
+           company_id = excluded.company_id,
            active = excluded.active,
            google_id = excluded.google_id,
            auth_provider = excluded.auth_provider,
@@ -1236,6 +1341,7 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
         username,
         passwordHash,
         groupId,
+        companyId,
         input.active ?? existing?.active ?? true,
         googleId,
         authProvider,
@@ -1250,6 +1356,7 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
       username,
       password: passwordHash,
       groupId,
+      companyId,
       active: input.active ?? existing?.active ?? true,
       googleId,
       authProvider:
@@ -1287,6 +1394,7 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
           ? `${next.name} (${next.username}) joined a producer department.`
           : `${next.name} (${next.username}) joined. Review the group in Setup → Users.`,
         href: producer ? "/admin/accounts" : "/setup/users/account",
+        companyId: producer ? null : (next.companyId ?? null),
       });
     }
     const promotedToProducer =
@@ -1303,7 +1411,7 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
     return publicAccount(next);
   }
 
-  async deleteAccount(id: string) {
+  async deleteAccount(id: string, actor?: { isSuperAdmin: boolean; companyId?: string | null }) {
     const admins = await this.db.query<{ count: string }>(
       `select count(*)::text as count
        from hq_accounts a
@@ -1312,6 +1420,9 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
     );
     const target = await this.findAccount("id = $1", [id]);
     if (!target) throw new NotFoundException("Account not found");
+    if (actor && !actor.isSuperAdmin && target.companyId !== (actor.companyId ?? null)) {
+      throw new ForbiddenException("You cannot manage accounts outside your company");
+    }
     if (
       target.email.toLowerCase() === this.superAdminEmail() ||
       target.groupId === "g-super-admin"
@@ -2175,6 +2286,7 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
       title: `Invoice ${row.invoice_no} paid`,
       body: `${row.company_name} settled ${row.label || row.invoice_no} via ${provider}.`,
       href: "/admin/billing/invoices",
+      companyId: row.company_id,
     });
     await this.recordAudit({
       action: "invoice.paid",
@@ -2245,6 +2357,7 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
       title: `${plan.name} assigned to ${companyName}`,
       body: `The subscription is now live. Manage it under Billing → Subscriptions.`,
       href: "/admin/billing/subscriptions",
+      companyId: targetCompanyId,
     });
     await this.recordAudit({ action: "plan.assigned", target: companyName, detail: plan.name });
     this.publishBilling();
@@ -2356,12 +2469,28 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
     return state;
   }
 
-  sessionStream(): Observable<SessionStreamEvent> {
+  private sessionEventForViewer(
+    event: SessionStreamEvent,
+    viewer?: SessionViewer,
+  ): SessionStreamEvent | null {
+    if (!viewer || viewer.isSuperAdmin) return event;
+    if (event.type === "privileges") return event;
+    if (event.reason === "subscription_expired" || event.reason === "subscription_renewed") {
+      return event;
+    }
+    return event.accountId === viewer.accountId ? event : null;
+  }
+
+  sessionStream(viewer?: SessionViewer): Observable<SessionStreamEvent> {
     return new Observable((subscriber) => {
+      const emit = (event: SessionStreamEvent) => {
+        const scoped = this.sessionEventForViewer(event, viewer);
+        if (scoped) subscriber.next(scoped);
+      };
       void this.evaluateSubscriptionLock()
         .then((state) => {
-          if (state.expired) {
-            subscriber.next({
+          if (state.expired && !viewer?.isSuperAdmin) {
+            emit({
               type: "lock",
               reason: "subscription_expired",
               message: state.message ?? "Your subscription has ended.",
@@ -2370,16 +2499,25 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
           }
         })
         .catch(() => undefined);
-      const sub = this.sessionEvents.subscribe(subscriber);
+      const sub = this.sessionEvents.subscribe(emit);
       return () => sub.unsubscribe();
     });
   }
 
   /** Attach a lock state to sessions of tenant accounts whose subscription ran out. */
-  private async attachSessionLock<T extends { user: { scope?: string } }>(
+  private async attachSessionLock<
+    T extends {
+      user: {
+        scope?: string;
+        groupId?: string | null;
+        groupName?: string | null;
+        privileges?: string[];
+      };
+    },
+  >(
     payload: T,
   ): Promise<T & { locked?: { reason: "subscription_expired"; message: string } }> {
-    if (payload.user.scope === "producer") return payload;
+    if (isSuperAdmin(payload.user)) return payload;
     const state = await this.subscriptionLockState().catch<{ expired: boolean; message?: string }>(
       () => ({ expired: false }),
     );
@@ -2410,8 +2548,8 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
       return;
     }
     await this.db.query(
-      `insert into hq_notices (id, key, type, title, body, href, derived)
-       values ($1, $2, $3, $4, $5, $6, $7)`,
+      `insert into hq_notices (id, key, type, title, body, href, derived, company_id)
+       values ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [
         `n-${generateSessionToken().slice(0, 16)}`,
         input.key ?? null,
@@ -2420,6 +2558,7 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
         input.body,
         input.href,
         Boolean(input.derived),
+        input.companyId ?? null,
       ],
     );
     await this.db.query(
@@ -2432,7 +2571,7 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
 
   private async ensureDerived(
     key: string,
-    input: Pick<HqNotice, "type" | "title" | "body" | "href">,
+    input: Pick<HqNotice, "type" | "title" | "body" | "href" | "companyId">,
   ): Promise<boolean> {
     const exists = await this.db.query(
       `select 1 from hq_notices where key = $1 limit 1`,
@@ -2440,8 +2579,8 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
     );
     if (exists.rowCount) return false;
     await this.db.query(
-      `insert into hq_notices (id, key, type, title, body, href, derived)
-       values ($1, $2, $3, $4, $5, $6, true)`,
+      `insert into hq_notices (id, key, type, title, body, href, derived, company_id)
+       values ($1, $2, $3, $4, $5, $6, true, $7)`,
       [
         `n-${generateSessionToken().slice(0, 16)}`,
         key,
@@ -2449,6 +2588,7 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
         input.title,
         input.body,
         input.href,
+        input.companyId ?? null,
       ],
     );
     return true;
@@ -2470,6 +2610,7 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
           title: `${till.name} subscription ended`,
           body: `Renew ${till.name} at ${till.branchName || "HQ"} to keep the till licensed.`,
           href: "/setup/others/till",
+          companyId: this.setup.getCompany()?.id ?? null,
         });
       } else if (till.subscriptionExpiresAt) {
         const at = Date.parse(till.subscriptionExpiresAt);
@@ -2482,6 +2623,7 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
             title: `${till.name} expires in ${days} day${days === 1 ? "" : "s"}`,
             body: `Renew the subscription in Setup → Till before it locks the device.`,
             href: "/setup/others/till",
+            companyId: this.setup.getCompany()?.id ?? null,
           });
         }
       }
@@ -2495,6 +2637,7 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
             title: `${till.name} is offline`,
             body: `No heartbeat from ${till.branchName || till.name} for over two minutes.`,
             href: "/setup/others/till",
+            companyId: this.setup.getCompany()?.id ?? null,
           });
         }
       }
@@ -2511,11 +2654,26 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
     this.publishNotices();
   }
 
-  async listNotifications() {
+  private noticeCompany(viewer?: NoticeViewer) {
+    if (!viewer || viewer.isSuperAdmin) return null;
+    return viewer.companyId ?? "__none__";
+  }
+
+  private scopeNoticesEvent(event: NoticesEvent, viewer?: NoticeViewer): NoticesEvent {
+    const companyId = this.noticeCompany(viewer);
+    if (!companyId) return event;
+    const items = event.items.filter((item) => item.companyId === companyId);
+    return { ...event, items, unread: items.filter((item) => !item.readAt).length };
+  }
+
+  async listNotifications(viewer?: NoticeViewer) {
     await this.syncDerivedNotices();
     const result = await this.db.query<NoticeRow>(
-      `select id, key, type, title, body, href, derived, read_at, created_at
-       from hq_notices order by created_at desc`,
+      `select id, key, type, title, body, href, derived, read_at, created_at, company_id
+       from hq_notices
+       where $1::text is null or company_id = $1
+       order by created_at desc`,
+      [this.noticeCompany(viewer)],
     );
     const items = result.rows.map((row) => this.mapNotice(row));
     return {
@@ -2524,10 +2682,12 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  async markNoticeRead(id: string) {
+  async markNoticeRead(id: string, viewer?: NoticeViewer) {
     const existing = await this.db.query<NoticeRow>(
-      `select id, key, type, title, body, href, derived, read_at, created_at from hq_notices where id = $1`,
-      [id],
+      `select id, key, type, title, body, href, derived, read_at, created_at, company_id
+       from hq_notices
+       where id = $1 and ($2::text is null or company_id = $2)`,
+      [id, this.noticeCompany(viewer)],
     );
     const row = existing.rows[0];
     if (!row) throw new NotFoundException("Notification not found");
@@ -2539,8 +2699,12 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
     return this.mapNotice(row);
   }
 
-  async markAllNoticesRead() {
-    await this.db.query(`update hq_notices set read_at = now() where read_at is null`);
+  async markAllNoticesRead(viewer?: NoticeViewer) {
+    await this.db.query(
+      `update hq_notices set read_at = now()
+       where read_at is null and ($1::text is null or company_id = $1)`,
+      [this.noticeCompany(viewer)],
+    );
     this.publishNotices();
     return { ok: true as const };
   }
@@ -2548,7 +2712,7 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
   private publishNotices() {
     if (this.noticePublishing) return;
     this.noticePublishing = true;
-    void this.listNotifications()
+    void this.listNotifications({ isSuperAdmin: true })
       .then((data) =>
         this.noticesEvents.next({ ...data, at: new Date().toISOString() }),
       )
@@ -2558,12 +2722,13 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
       });
   }
 
-  noticesStream(): Observable<NoticesEvent> {
+  noticesStream(viewer?: NoticeViewer): Observable<NoticesEvent> {
     return new Observable((subscriber) => {
-      void this.listNotifications()
-        .then((data) => subscriber.next({ ...data, at: new Date().toISOString() }))
+      const emit = (event: NoticesEvent) => subscriber.next(this.scopeNoticesEvent(event, viewer));
+      void this.listNotifications(viewer)
+        .then((data) => emit({ ...data, at: new Date().toISOString() }))
         .catch(() => undefined);
-      const sub = this.noticesEvents.subscribe(subscriber);
+      const sub = this.noticesEvents.subscribe(emit);
       return () => sub.unsubscribe();
     });
   }
@@ -2579,6 +2744,7 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
       title: "Sale recorded",
       body: `${sale.cashierName || "Till"} closed ticket ${sale.ticketId} for ${naira}.`,
       href: "/reports/sales/invoice/list",
+      companyId: this.setup.getCompany()?.id ?? null,
     });
   }
 
@@ -2612,6 +2778,23 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
       authProvider: account.authProvider,
       producer,
     });
+  }
+
+  /** Existing tenant accounts inherit the current company; platform roles stay unscoped. */
+  private async backfillAccountCompanies() {
+    const companyId = this.setup.getCompany()?.id;
+    if (!companyId) return;
+    await this.db.query(
+      `update hq_accounts a
+          set company_id = $1
+        where a.company_id is null
+          and a.group_id <> 'g-super-admin'
+          and not exists (
+            select 1 from hq_groups g
+            where g.id = a.group_id and g.scope = 'producer'
+          )`,
+      [companyId],
+    );
   }
 
   private superAdminEmail() {
@@ -2695,6 +2878,7 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
           title: "Super Admin welcome sent",
           body: `Welcome email sent to ${email}.`,
           href: "/admin",
+          companyId: null,
         });
       } else if (!this.email.isConfigured()) {
         this.logger.warn(
@@ -2936,6 +3120,7 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
         title: `${name} issued`,
         body: `Enter the till code on that device at ${store.name} · ${branch.name} to activate ${tillProductLabel(product)} for one year.`,
         href: "/setup/others/till",
+        companyId: this.setup.getCompany()?.id ?? null,
       });
     }
     this.publishPos();
@@ -2959,6 +3144,7 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
       title: `${till.name} code regenerated`,
       body: "The previous code no longer works. Enter the new code on that till.",
       href: "/setup/others/till",
+      companyId: this.setup.getCompany()?.id ?? null,
     });
     this.publishPos();
     return (await this.getRawTill(id))!;
@@ -3001,6 +3187,7 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
       title: `${till.name} activated`,
       body: `The till at ${till.branchName || "the branch"} is licensed until ${new Date(subscriptionExpiresAt!).toLocaleDateString("en-NG")}.`,
       href: "/setup/others/till",
+      companyId: this.setup.getCompany()?.id ?? null,
     });
     if (!hadLicence && subscriptionExpiresAt) {
       await this.issueInvoice({
@@ -3094,6 +3281,7 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
       title: `${till.name} renewed`,
       body: `Subscription now runs until ${new Date(subscriptionExpiresAt).toLocaleDateString("en-NG")}.`,
       href: "/setup/others/till",
+      companyId: this.setup.getCompany()?.id ?? null,
     });
     await this.issueInvoice({
       tillId: till.id,
@@ -3129,6 +3317,7 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
       title: `${till.name} removed from its device`,
       body: "The till code still works. Enter it on the replacement device to re-activate here.",
       href: "/setup/others/till",
+      companyId: this.setup.getCompany()?.id ?? null,
     });
     this.publishPos();
     return (await this.getRawTill(id))!;
@@ -3181,6 +3370,7 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
       title: `${till.name} renewed`,
       body: `Payment ${provider} confirmed. Subscription now runs until ${new Date(subscriptionExpiresAt).toLocaleDateString("en-NG")}.`,
       href: "/setup/others/till",
+      companyId: this.setup.getCompany()?.id ?? null,
     });
     this.publishPos();
     this.publishBilling();

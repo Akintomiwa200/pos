@@ -1,6 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { SESSION_KEY } from "./access";
 import type { CrmEvent, CrmSnapshot } from "./hq-crm";
 import type { ChatConversation, ChatEvent, ChatMessage, ChatPresence, CallSignal } from "./hq-chat";
+
+function chatSessionToken() {
+  if (typeof window === "undefined") return "";
+  try {
+    const raw = window.localStorage.getItem(SESSION_KEY);
+    return raw ? (JSON.parse(raw) as { token?: string }).token ?? "" : "";
+  } catch {
+    return "";
+  }
+}
 
 function applyCrmEvent(current: CrmSnapshot, event: CrmEvent): CrmSnapshot {
   if (event.type === "snapshot") return event.data;
@@ -117,7 +128,7 @@ export function useLiveChat(opts?: {
     setTyping({});
     setPresenceMap({});
     const source = new EventSource(
-      `/api/chat/stream?viewerId=${encodeURIComponent(viewerId)}`,
+      `/api/chat/stream?viewerId=${encodeURIComponent(viewerId)}&token=${encodeURIComponent(chatSessionToken())}`,
     );
 
     source.onopen = () => {

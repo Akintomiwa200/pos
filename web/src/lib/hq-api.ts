@@ -29,13 +29,28 @@ function writeLocal<T>(key: string, value: T) {
   window.localStorage.setItem(key, JSON.stringify(value));
 }
 
+function currentSessionToken(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    const raw = window.localStorage.getItem(SESSION_KEY);
+    return raw ? (JSON.parse(raw) as { token?: string }).token ?? "" : "";
+  } catch {
+    return "";
+  }
+}
+
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
+  const token = currentSessionToken();
   try {
     response = await fetch(path, {
       cache: "no-store",
       ...init,
-      headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(init?.headers ?? {}),
+      },
     });
   } catch {
     throw new NetworkError(`${init?.method ?? "GET"} ${path}`);
@@ -420,6 +435,7 @@ export type HqNotice = {
   createdAt: string;
   readAt: string | null;
   derived?: boolean;
+  companyId?: string | null;
 };
 
 export async function listNotifications(token: string) {

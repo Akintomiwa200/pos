@@ -9,6 +9,7 @@ import {
   Query,
   Sse,
   UploadedFile,
+  UnauthorizedException,
   UseInterceptors,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
@@ -136,14 +137,20 @@ export class ConsoleController {
 
   @Get("notifications")
   async notifications(@Headers("authorization") authorization?: string) {
-    await this.consoleService.me(bearer(authorization));
-    return this.consoleService.listNotifications();
+    const me = await this.consoleService.me(bearer(authorization));
+    return this.consoleService.listNotifications({
+      isSuperAdmin: Boolean(me.user.isSuperAdmin),
+      companyId: me.user.companyId,
+    });
   }
 
   @Post("notifications/read-all")
   async readAllNotifications(@Headers("authorization") authorization?: string) {
-    await this.consoleService.me(bearer(authorization));
-    return this.consoleService.markAllNoticesRead();
+    const me = await this.consoleService.me(bearer(authorization));
+    return this.consoleService.markAllNoticesRead({
+      isSuperAdmin: Boolean(me.user.isSuperAdmin),
+      companyId: me.user.companyId,
+    });
   }
 
   @Post("notifications/:id/read")
@@ -151,22 +158,47 @@ export class ConsoleController {
     @Headers("authorization") authorization?: string,
     @Param("id") id?: string,
   ) {
-    await this.consoleService.me(bearer(authorization));
-    return this.consoleService.markNoticeRead(id ?? "");
+    const me = await this.consoleService.me(bearer(authorization));
+    return this.consoleService.markNoticeRead(id ?? "", {
+      isSuperAdmin: Boolean(me.user.isSuperAdmin),
+      companyId: me.user.companyId,
+    });
   }
 
   @Sse("notifications/stream")
-  notificationsStream(): Observable<{ data: NoticesEvent }> {
-    return this.consoleService.noticesStream().pipe(map((data) => ({ data })));
+  async notificationsStream(
+    @Query("token") token?: string,
+    @Headers("authorization") authorization?: string,
+  ): Promise<Observable<{ data: NoticesEvent }>> {
+    const me = await this.consoleService.me(token?.trim() || bearer(authorization));
+    return this.consoleService
+      .noticesStream({
+        isSuperAdmin: Boolean(me.user.isSuperAdmin),
+        companyId: me.user.companyId,
+      })
+      .pipe(map((data) => ({ data })));
   }
 
   @Sse("session/stream")
-  sessionStream(): Observable<{ data: SessionStreamEvent }> {
-    return this.consoleService.sessionStream().pipe(map((data) => ({ data })));
+  async sessionStream(
+    @Query("token") token?: string,
+    @Headers("authorization") authorization?: string,
+  ): Promise<Observable<{ data: SessionStreamEvent }>> {
+    const me = await this.consoleService.me(token?.trim() || bearer(authorization));
+    return this.consoleService
+      .sessionStream({
+        accountId: me.user.id,
+        isSuperAdmin: Boolean(me.user.isSuperAdmin),
+      })
+      .pipe(map((data) => ({ data })));
   }
 
   @Sse("security/stream")
-  securityStream(): Observable<{ data: SecurityFeedEvent }> {
+  async securityStream(
+    @Query("token") token?: string,
+    @Headers("authorization") authorization?: string,
+  ): Promise<Observable<{ data: SecurityFeedEvent }>> {
+    await this.consoleService.requireProducer(token?.trim() || bearer(authorization));
     return this.consoleService.securityStream().pipe(map((data) => ({ data })));
   }
 
@@ -258,8 +290,12 @@ export class ConsoleController {
   }
 
   @Get("groups")
-  groups() {
-    return this.consoleService.listGroups();
+  async groups(@Headers("authorization") authorization?: string) {
+    const me = await this.consoleService.me(bearer(authorization)).catch(() => null);
+    const groups = await this.consoleService.listGroups();
+    if (me?.user.isSuperAdmin) return groups;
+    if (!me) throw new UnauthorizedException("Sign in again");
+    return groups.filter((group) => (group.scope ?? "tenant") === "tenant");
   }
 
   @Post("groups")
@@ -270,7 +306,7 @@ export class ConsoleController {
     let actorScope: GroupScope | undefined;
     try {
       const me = await this.consoleService.me(bearer(authorization));
-      actorScope = me.user.scope === "producer" ? "producer" : "tenant";
+      actorScope = me.user.isSuperAdmin ? "producer" : "tenant";
     } catch {
       actorScope = undefined;
     }
@@ -283,13 +319,26 @@ export class ConsoleController {
   }
 
   @Get("accounts")
-  accounts() {
-    return this.consoleService.listAccounts();
+  async accounts(@Headers("authorization") authorization?: string) {
+    const me = await this.consoleService.me(bearer(authorization)).catch(() => null);
+    if (!me) throw new UnauthorizedException("Sign in again");
+    return this.consoleService.listAccounts(
+      me.user.isSuperAdmin ? undefined : { companyId: me.user.companyId ?? "__none__" },
+    );
   }
 
   @Sse("directory/stream")
-  directoryStream(): Observable<{ data: DirectoryEvent }> {
-    return this.consoleService.directoryStream().pipe(map((data) => ({ data })));
+  async directoryStream(
+    @Query("token") token?: string,
+    @Headers("authorization") authorization?: string,
+  ): Promise<Observable<{ data: DirectoryEvent }>> {
+    const me = await this.consoleService.me(token?.trim() || bearer(authorization));
+    return this.consoleService
+      .directoryStream({
+        isSuperAdmin: Boolean(me.user.isSuperAdmin),
+        companyId: me.user.companyId,
+      })
+      .pipe(map((data) => ({ data })));
   }
 
   @Post("accounts")
@@ -297,30 +346,35 @@ export class ConsoleController {
     @Body() body: Partial<ConsoleAccount>,
     @Headers("authorization") authorization?: string,
   ) {
-    let invitedBy: string | undefined;
-    let actorScope: GroupScope | undefined;
-    try {
-      const me = await this.consoleService.me(bearer(authorization));
-      invitedBy = me.user.name;
-      actorScope = me.user.scope === "producer" ? "producer" : "tenant";
-    } catch {
-      invitedBy = undefined;
-      actorScope = undefined;
-    }
+    const me = await this.consoleService.me(bearer(authorization)).catch(() => null);
+    if (!me) throw new UnauthorizedException("Sign in again");
+    const isSuperAdmin = Boolean(me.user.isSuperAdmin);
     return this.consoleService.saveAccount(body, {
-      invitedBy,
-      actorScope,
+      invitedBy: me.user.name,
+      actorScope: isSuperAdmin ? "producer" : "tenant",
+      actorIsSuperAdmin: isSuperAdmin,
+      actorCompanyId: isSuperAdmin ? undefined : (me.user.companyId ?? null),
+      companyId: isSuperAdmin ? (body.companyId ?? undefined) : undefined,
       welcomePassword: body.password?.trim() || undefined,
     });
   }
 
   @Delete("accounts/:id")
-  deleteAccount(@Param("id") id: string) {
-    return this.consoleService.deleteAccount(id);
+  async deleteAccount(
+    @Param("id") id: string,
+    @Headers("authorization") authorization?: string,
+  ) {
+    const me = await this.consoleService.me(bearer(authorization)).catch(() => null);
+    if (!me) throw new UnauthorizedException("Sign in again");
+    return this.consoleService.deleteAccount(id, {
+      isSuperAdmin: Boolean(me.user.isSuperAdmin),
+      companyId: me.user.companyId ?? null,
+    });
   }
 
   @Get("security/overview")
-  securityOverview() {
+  async securityOverview(@Headers("authorization") authorization: string) {
+    await this.consoleService.requireProducer(bearer(authorization));
     return this.consoleService.securityOverview();
   }
 

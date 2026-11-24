@@ -10,7 +10,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Observable, Subject, type Subscription } from "rxjs";
 import { ConsoleService } from "../console/console.service";
-import { isSuperAdmin } from "../staff/web-user";
+import { isSuperAdmin, isTenantAdmin, rankFor, type Rank } from "../staff/web-user";
 import {
   type CallSignal,
   type ChatConversation,
@@ -29,6 +29,7 @@ type ChatAccount = {
   name: string;
   username: string;
   groupId: string;
+  companyId?: string | null;
   active: boolean;
   avatarUrl?: string | null;
 };
@@ -43,6 +44,8 @@ type ChatGroup = {
 type ChatAccess = {
   id: string;
   scope: ChatScope;
+  companyId: string | null;
+  rank: Rank;
   isSuperAdmin: boolean;
   isTenantAdmin: boolean;
   accounts: Map<string, ChatAccount>;
@@ -51,13 +54,6 @@ type ChatAccess = {
 
 function groupScope(group?: ChatGroup): ChatScope {
   return group?.scope === "producer" ? "producer" : "tenant";
-}
-
-function isAdminGroup(group?: ChatGroup) {
-  return (
-    group?.id === "g-admin" ||
-    (groupScope(group) === "tenant" && Boolean(group?.privileges.includes("*")))
-  );
 }
 
 @Injectable()
@@ -101,11 +97,25 @@ export class ChatService implements OnModuleInit {
     return [...this.presences.values()].sort((a, b) => b.at.localeCompare(a.at));
   }
 
+  /** A client-supplied account id is never accepted without a matching session token. */
+  private async assertCaller(viewerId: string, token?: string) {
+    if (!viewerId || !token) throw new UnauthorizedException("Sign in to use chat");
+    const session = await this.console.me(token).catch(() => null);
+    if (!session || session.user.id !== viewerId) {
+      throw new UnauthorizedException("Sign in to use chat");
+    }
+    return session;
+  }
+
   /** Resolve the caller from the account directory so visibility is server-enforced. */
-  private async access(viewerId: string): Promise<ChatAccess> {
-    if (!viewerId) throw new UnauthorizedException("Sign in to use chat");
+  private async access(viewerId: string, token?: string): Promise<ChatAccess> {
+    const session = await this.assertCaller(viewerId, token);
+    const viewer = session.user;
     const [accounts, groups] = await Promise.all([
-      this.console.listAccounts(),
+      // Tenants never receive platform accounts in their directory.
+      this.console.listAccounts(
+        viewer.isSuperAdmin ? undefined : { companyId: viewer.companyId ?? "__none__" },
+      ),
       this.console.listGroups(),
     ]);
     const account = accounts.find((row) => row.id === viewerId);
@@ -114,16 +124,20 @@ export class ChatService implements OnModuleInit {
     }
     const group = groups.find((row) => row.id === account.groupId);
     const scope = groupScope(group);
+    const identity = {
+      groupId: account.groupId,
+      groupName: group?.name,
+      scope,
+      privileges: group?.privileges,
+      companyId: account.companyId,
+    };
     return {
       id: account.id,
       scope,
-      isSuperAdmin: isSuperAdmin({
-        groupId: account.groupId,
-        groupName: group?.name,
-        scope,
-        privileges: group?.privileges,
-      }),
-      isTenantAdmin: scope === "tenant" && isAdminGroup(group),
+      companyId: viewer.companyId ?? null,
+      rank: rankFor(identity),
+      isSuperAdmin: isSuperAdmin(identity),
+      isTenantAdmin: isTenantAdmin(identity),
       accounts: new Map(accounts.map((row) => [row.id, row])),
       groups: new Map(groups.map((row) => [row.id, row])),
     };
@@ -141,12 +155,12 @@ export class ChatService implements OnModuleInit {
       privileges: group?.privileges,
     });
 
-    // Super Admin is reachable only from a tenant admin console (or another
-    // producer account); regular tenant staff never see it as a chat target.
-    if (superAdmin) return access.isSuperAdmin || access.isTenantAdmin;
-    if (scope === "producer") return access.scope === "producer";
-    if (access.scope === "producer") {
-      return access.isSuperAdmin ? isAdminGroup(group) : false;
+    // Company consoles only ever see people inside their own company.
+    // Platform accounts (Super Admin / producer roles) are never chat targets
+    // for tenant Admin or staff.
+    if (!access.isSuperAdmin) {
+      if (superAdmin || scope === "producer") return false;
+      return Boolean(access.companyId && account.companyId === access.companyId);
     }
     return true;
   }
@@ -154,17 +168,15 @@ export class ChatService implements OnModuleInit {
   private canSeeConversation(access: ChatAccess, conversation: ChatConversation) {
     if (conversation.kind === "customer") return access.scope === "tenant";
     if (!conversation.memberIds.includes(access.id)) return false;
-    return conversation.memberIds.every(
-      (id) => !access.accounts.has(id) || this.isAccountVisible(access, id),
-    );
+    return conversation.memberIds.every((id) => this.isAccountVisible(access, id));
   }
 
   private visibleConversations(access: ChatAccess) {
     return this.sortedConversations().filter((row) => this.canSeeConversation(access, row));
   }
 
-  private async visibleConversation(id: string, viewerId: string) {
-    const access = await this.access(viewerId);
+  private async visibleConversation(id: string, viewerId: string, token?: string) {
+    const access = await this.access(viewerId, token);
     const conversation = this.conversations.find((row) => row.id === id);
     if (!conversation || !this.canSeeConversation(access, conversation)) {
       throw new NotFoundException("Conversation not found");
@@ -190,11 +202,11 @@ export class ChatService implements OnModuleInit {
     return event;
   }
 
-  stream(viewerId: string): Observable<ChatEvent> {
+  stream(viewerId: string, token?: string): Observable<ChatEvent> {
     return new Observable((subscriber) => {
       let cancelled = false;
       let sub: Subscription | undefined;
-      void this.access(viewerId)
+      void this.access(viewerId, token)
         .then((access) => {
           if (cancelled) return;
           subscriber.next({
@@ -219,13 +231,13 @@ export class ChatService implements OnModuleInit {
     return [...this.conversations].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
 
-  async listConversations(viewerId: string) {
-    const access = await this.access(viewerId);
+  async listConversations(viewerId: string, token?: string) {
+    const access = await this.access(viewerId, token);
     return this.visibleConversations(access);
   }
 
-  async getThread(id: string, viewerId: string): Promise<ChatThread> {
-    const access = await this.access(viewerId);
+  async getThread(id: string, viewerId: string, token?: string): Promise<ChatThread> {
+    const access = await this.access(viewerId, token);
     const conversation = this.conversations.find((row) => row.id === id);
     if (!conversation || !this.canSeeConversation(access, conversation)) {
       throw new NotFoundException("Conversation not found");
@@ -237,8 +249,8 @@ export class ChatService implements OnModuleInit {
   }
 
   /** People the caller may start a chat with, scoped by role and tenant. */
-  async listChatTargets(viewerId: string): Promise<ChatTarget[]> {
-    const access = await this.access(viewerId);
+  async listChatTargets(viewerId: string, token?: string): Promise<ChatTarget[]> {
+    const access = await this.access(viewerId, token);
     return [...access.accounts.values()]
       .filter((account) => account.id !== access.id && this.isAccountVisible(access, account.id))
       .map((account) => ({
@@ -257,10 +269,11 @@ export class ChatService implements OnModuleInit {
     name?: string;
     createdBy?: { id?: string; name?: string };
     viewerId: string;
+    token?: string;
   }) {
     const kind = input.kind === "group" ? "group" : input.kind === "customer" ? "customer" : "direct";
     const memberIds = Array.from(new Set((input.memberIds ?? []).filter(Boolean)));
-    const access = await this.access(input.viewerId);
+    const access = await this.access(input.viewerId, input.token);
     const from = input.createdBy?.id || access.id;
     if (from !== access.id) throw new ForbiddenException("You cannot start a chat as another account");
     if (kind === "customer" && access.scope !== "tenant") {
@@ -329,10 +342,11 @@ export class ChatService implements OnModuleInit {
     conversationId: string,
     body: { text?: string; senderName?: string; senderId?: string; kind?: "text" | "system" },
     viewerId: string,
+    token?: string,
   ) {
     const text = body.text?.trim();
     if (!text) throw new BadRequestException("Message text is required");
-    const { access, conversation } = await this.visibleConversation(conversationId, viewerId);
+    const { access, conversation } = await this.visibleConversation(conversationId, viewerId, token);
 
     const isSystem = body.kind === "system";
     const self = access.accounts.get(access.id);
@@ -361,8 +375,9 @@ export class ChatService implements OnModuleInit {
     id: string,
     body: Partial<Pick<ChatConversation, "locationEnabled" | "active" | "location">>,
     viewerId: string,
+    token?: string,
   ) {
-    const { conversation } = await this.visibleConversation(id, viewerId);
+    const { conversation } = await this.visibleConversation(id, viewerId, token);
     if (typeof body.locationEnabled === "boolean") {
       conversation.locationEnabled = body.locationEnabled;
     }
@@ -377,8 +392,9 @@ export class ChatService implements OnModuleInit {
     conversationId: string,
     body: { name?: string; state?: "on" | "off" },
     viewerId: string,
+    token?: string,
   ) {
-    await this.visibleConversation(conversationId, viewerId);
+    await this.visibleConversation(conversationId, viewerId, token);
     const event = {
       type: "typing" as const,
       conversationId,
@@ -394,8 +410,9 @@ export class ChatService implements OnModuleInit {
     conversationId: string,
     body: { signal?: CallSignal; from?: { id?: string; name?: string } },
     viewerId: string,
+    token?: string,
   ) {
-    const { access } = await this.visibleConversation(conversationId, viewerId);
+    const { access } = await this.visibleConversation(conversationId, viewerId, token);
     if (!body.signal?.type) throw new BadRequestException("Call signal is required");
     const { from: _from, ...baseSignal } = body.signal;
     const self = access.accounts.get(access.id);
@@ -409,8 +426,9 @@ export class ChatService implements OnModuleInit {
   }
 
   /** Mark an account as online. Callers should ping every ~15s while on the chat page. */
-  touchPresence(accountId: string, name?: string) {
+  async touchPresence(accountId: string, name?: string, token?: string) {
     if (!accountId) throw new BadRequestException("accountId is required");
+    await this.assertCaller(accountId, token);
     const at = new Date().toISOString();
     const heading = name?.trim() || this.presences.get(accountId)?.name || "Someone";
     this.presences.set(accountId, { accountId, name: heading, at });

@@ -26,6 +26,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { useAuth } from "@/components/AuthProvider";
 import { SetupHeader, SetupStat } from "@/components/setup/SetupChrome";
 import { ManagerSkeleton } from "@/components/Skeleton";
 import { useThemeColors } from "@/hooks/useThemeColors";
@@ -48,6 +49,7 @@ function useOverview() {
   const [data, setData] = useState<SecurityOverview | null>(null);
   const [ready, setReady] = useState(false);
   const [live, setLive] = useState(false);
+  const { session } = useAuth();
   useEffect(() => {
     let mounted = true;
     async function refresh() {
@@ -58,24 +60,29 @@ function useOverview() {
         if (mounted) setReady(true);
       }
     }
-    const source = new EventSource("/api/console/security/stream");
-    source.onopen = () => {
-      if (mounted) setLive(true);
-    };
-    source.onerror = () => {
-      if (mounted) setLive(false);
-    };
-    source.onmessage = () => {
-      // Every audit, login, and security event publishes a refresh signal.
-      if (!mounted) return;
-      void refresh();
-    };
+    const token = session?.token ?? "";
+    const source = token
+      ? new EventSource(`/api/console/security/stream?token=${encodeURIComponent(token)}`)
+      : null;
+    if (source) {
+      source.onopen = () => {
+        if (mounted) setLive(true);
+      };
+      source.onerror = () => {
+        if (mounted) setLive(false);
+      };
+      source.onmessage = () => {
+        // Every audit, login, and security event publishes a refresh signal.
+        if (!mounted) return;
+        void refresh();
+      };
+    }
     void refresh();
     return () => {
       mounted = false;
-      source.close();
+      source?.close();
     };
-  }, []);
+  }, [session?.token]);
   return { data, ready, live };
 }
 

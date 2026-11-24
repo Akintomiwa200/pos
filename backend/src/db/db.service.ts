@@ -87,6 +87,18 @@ export class DbService implements OnModuleInit {
     } catch {
       /* already present */
     }
+    try {
+      await this.query(`alter table hq_accounts add column if not exists company_id text`);
+    } catch {
+      /* already present */
+    }
+    try {
+      await this.query(
+        `create index if not exists hq_accounts_company_id_idx on hq_accounts (company_id)`,
+      );
+    } catch {
+      /* already present */
+    }
     await this.query(`create table if not exists hq_sessions (
       token text primary key,
       account_id text not null references hq_accounts(id) on delete cascade,
@@ -115,6 +127,18 @@ export class DbService implements OnModuleInit {
       read_at timestamptz,
       created_at timestamptz not null default now()
     )`);
+    try {
+      await this.query(`alter table hq_notices add column if not exists company_id text`);
+    } catch {
+      /* already present */
+    }
+    try {
+      await this.query(
+        `create index if not exists hq_notices_company_id_idx on hq_notices (company_id)`,
+      );
+    } catch {
+      /* already present */
+    }
     await this.query(`create table if not exists hq_tills (
       id text primary key,
       name text not null,

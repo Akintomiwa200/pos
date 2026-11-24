@@ -2,7 +2,13 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { canAccessPath, filterNav, firstAllowedPath, sessionScope } from "../lib/access";
+import {
+  canAccessPath,
+  filterNav,
+  firstAllowedPath,
+  sessionRank,
+  sessionScope,
+} from "../lib/access";
 import { useOrgLocale } from "../lib/org-locale";
 import { ConsoleHeader } from "./ConsoleHeader";
 import { useAuth } from "./AuthProvider";
@@ -41,7 +47,8 @@ export function ConsoleShell({ children }: { children: React.ReactNode }) {
     if (loading || !session) return;
 
     const scope = sessionScope(session);
-    const allowed = canAccessPath(pathname, session.departments, session.privileges, scope);
+    const rank = sessionRank(session);
+    const allowed = canAccessPath(pathname, session.departments, session.privileges, scope, rank);
     if (allowed) {
       lastAllowedRef.current = pathname;
       return;
@@ -51,11 +58,11 @@ export function ConsoleShell({ children }: { children: React.ReactNode }) {
     const previousOk =
       previous &&
       previous !== pathname &&
-      canAccessPath(previous, session.departments, session.privileges, scope);
+      canAccessPath(previous, session.departments, session.privileges, scope, rank);
 
     const fallback = previousOk
       ? previous
-      : firstAllowedPath(session.departments, session.privileges, scope);
+      : firstAllowedPath(session.departments, session.privileges, scope, rank);
 
     if (fallback && fallback !== pathname) {
       router.replace(fallback);
@@ -71,9 +78,10 @@ export function ConsoleShell({ children }: { children: React.ReactNode }) {
   }
 
   const scope = sessionScope(session);
+  const rank = sessionRank(session);
   const nav = filterNav(session.departments, session.privileges, scope);
-  const allowed = canAccessPath(pathname, session.departments, session.privileges, scope);
-  const homeHref = firstAllowedPath(session.departments, session.privileges, scope);
+  const allowed = canAccessPath(pathname, session.departments, session.privileges, scope, rank);
+  const homeHref = firstAllowedPath(session.departments, session.privileges, scope, rank);
 
   return (
     <div className="flex h-svh overflow-hidden bg-pos-bg">

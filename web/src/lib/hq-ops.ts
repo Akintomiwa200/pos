@@ -76,6 +76,7 @@ export type StockMovement = {
   reason?: string;
   staff?: string;
   runId?: string;
+  companyId?: string | null;
 };
 
 export async function listStockLevels(lowOnly = false): Promise<StockLevel[]> {

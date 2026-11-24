@@ -11,17 +11,17 @@
     "lint": "eslint \"{src,test}/**/*.ts\""
   },
   "dependencies": {
-    "@nestjs/common": "^11.2.1",
-    "@nestjs/core": "^11.2.1",
-    "@nestjs/platform-express": "^11.2.1",
+    "@nestjs/common": "^11.2.11",
+    "@nestjs/core": "^11.2.11",
+    "@nestjs/platform-express": "^11.2.11",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
-    "cloudinary": "^2.10.1",
+    "cloudinary": "^2.11.0",
     "dotenv": "^17.4.2",
-    "express": "^5.2.1",
-    "multer": "^2.2.0",
-    "nodemailer": "^9.0.5",
-    "pg": "^8.23.0",
+    "express": "^5.3.0",
+    "multer": "^2.5.0",
+    "nodemailer": "^9.1.1",
+    "pg": "^8.23.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2"
   },
@@ -30,12 +30,12 @@
     "@nestjs/schematics": "^11.1.0",
     "@types/dotenv": "^8.2.3",
     "@types/express": "^5.0.6",
-    "@types/multer": "^2.2.0",
-    "@types/node": "^26.2.0",
-    "@types/nodemailer": "^8.0.1",
+    "@types/multer": "^2.3.0",
+    "@types/node": "^26.6.6",
+    "@types/nodemailer": "^8.0.2",
     "@types/pg": "^8.23.1",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
-    "typescript": "^6.0.2"
+    "typescript": "^6.0.3"
   }
 }

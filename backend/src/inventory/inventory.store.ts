@@ -1,4 +1,4 @@
-import { NotFoundException } from "@nestjs/common";
+import { BadRequestException, NotFoundException } from "@nestjs/common";
 import { CatalogService } from "../catalog/catalog.service";
 
 export type StockLevel = {
@@ -28,6 +28,7 @@ export type StockMovement = {
   reason?: string;
   staff?: string;
   runId?: string;
+  companyId?: string | null;
 };
 
 export type MovementInput = {
@@ -42,6 +43,7 @@ export type MovementInput = {
   reason?: string;
   staff?: string;
   runId?: string;
+  companyId?: string | null;
 };
 
 export function levelFromItem(
@@ -119,11 +121,24 @@ export class InventoryStore {
       .find((row) => row.id === (input.itemId ?? "").trim());
     if (!item) throw new NotFoundException("Item not found in catalog");
 
-    let quantity = Math.round(input.quantity ?? 0);
+    const quantityInput = input.quantity ?? 0;
+    if (!Number.isFinite(quantityInput) || !Number.isInteger(quantityInput)) {
+      throw new BadRequestException("Stock quantities must be whole numbers");
+    }
+    if (
+      typeof input.countedOnHand === "number" &&
+      (!Number.isFinite(input.countedOnHand) ||
+        !Number.isInteger(input.countedOnHand) ||
+        input.countedOnHand < 0)
+    ) {
+      throw new BadRequestException("Physical counts must be whole numbers of zero or more");
+    }
+
+    let quantity = Math.round(quantityInput);
     if (type !== "transfer") {
-      if (typeof input.countedOnHand === "number" && Number.isFinite(input.countedOnHand)) {
-        quantity = Math.round(input.countedOnHand) - item.onHand;
-        this.catalog.update(item.id, { onHand: Math.max(0, Math.round(input.countedOnHand)) });
+      if (typeof input.countedOnHand === "number") {
+        quantity = input.countedOnHand - item.onHand;
+        this.catalog.update(item.id, { onHand: input.countedOnHand });
       } else if (quantity !== 0) {
         this.catalog.update(item.id, { onHand: Math.max(0, item.onHand + quantity) });
       }
@@ -146,6 +161,7 @@ export class InventoryStore {
       reason: input.reason?.trim() || undefined,
       staff: input.staff?.trim() || undefined,
       runId: input.runId?.trim() || undefined,
+      companyId: input.companyId ?? null,
     };
     const rows = await this.movements();
     await writeMovements(this.file, [movement, ...rows].slice(0, 5000));

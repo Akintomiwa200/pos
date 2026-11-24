@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronRight, HelpCircle, Menu, Search } from "lucide-react";
+import { ChevronRight, LifeBuoy, Menu, Search } from "lucide-react";
 import { AccountSwitcher } from "./AccountSwitcher";
 import { NotificationMenu } from "./NotificationMenu";
 import { filterAccessNav } from "../lib/access";
@@ -165,12 +165,12 @@ export function ConsoleHeader({
         {onOpenHelp ? (
           <button
             type="button"
-            className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-pos-surface text-pos-primary shadow-pos-sm transition hover:bg-pos-primary-soft"
-            aria-label="Open help"
-            title="Help"
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-pos-surface text-pos-ink-muted shadow-pos-sm transition hover:text-pos-primary"
+            aria-label="Open help and support"
+            title="Help & support"
             onClick={onOpenHelp}
           >
-            <HelpCircle size={18} strokeWidth={1.8} />
+            <LifeBuoy size={18} strokeWidth={1.8} />
           </button>
         ) : null}
         <NotificationMenu token={session.token} />

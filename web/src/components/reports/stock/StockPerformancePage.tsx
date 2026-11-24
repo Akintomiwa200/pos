@@ -61,7 +61,7 @@ export function StockPerformancePage() {
     `${row.unitsSold.toLocaleString()} units · ${naira(row.revenueMinor)}`;
 
   const listBlock = (
-    rows: Array<{ name: string; unitsSold: number; revenueMinor: number }>,
+    rows: Array<{ itemId: string; name: string; unitsSold: number; revenueMinor: number }>,
     empty: string,
   ) =>
     rows.length === 0 ? (
@@ -69,7 +69,7 @@ export function StockPerformancePage() {
     ) : (
       <ol className="divide-y divide-pos-border/60">
         {rows.map((row, index) => (
-          <li key={row.name} className="flex items-center gap-3 py-3">
+          <li key={`${row.itemId}-${index}`} className="flex items-center gap-3 py-3">
             <span
               className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-[11px] font-bold ${
                 index === 0 ? "bg-pos-primary text-white" : "bg-pos-surface-muted text-pos-ink-muted"
@@ -142,7 +142,7 @@ export function StockPerformancePage() {
               <p className="py-8 text-center text-sm text-pos-ink-faint">No unsold stock on the shelf.</p>
             ) : (
               rows.dead.map((row, index) => (
-                <li key={row.itemId} className="flex items-center gap-3 py-3">
+                <li key={`${row.itemId}-${index}`} className="flex items-center gap-3 py-3">
                   <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-pos-surface-muted text-[11px] font-bold text-pos-ink-muted">
                     {index + 1}
                   </span>

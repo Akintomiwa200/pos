@@ -163,7 +163,92 @@ export const HELP_TOPICS: HelpTopic[] = [
 
 export const HELP_SECTIONS = ["Basics", "Modules", "Settings", "Support"] as const;
 
-/** Preset Q&A shown to staff. Matching is keyword-based (AI layer lives in AiHelpModal). */
+/** App-specific next steps used to turn saved topics into practical answers. */
+const TOPIC_STEPS: Record<string, string[]> = {
+  start: [
+    "Sign in with your HQ account.",
+    "Use the sidebar to open Dashboard for an overview.",
+    "Menu items change with your group privileges.",
+  ],
+  products: [
+    "Open Products from the main menu.",
+    "Add items, categories, brands, packs and barcodes.",
+    "Use stock pages to check levels after items are saved.",
+  ],
+  orders: [
+    "Open Analytics → Orders.",
+    "Draft the purchase order and approve it.",
+    "Send it to the supplier, then receive stock when it arrives.",
+  ],
+  customers: [
+    "Open Workspace → Customers.",
+    "Manage the directory, groups, credits and loyalty cards.",
+    "Use gift cards from the same area when needed.",
+  ],
+  crm: [
+    "Open Support / CRM.",
+    "Choose Contacts, Deals, Tickets or Projects.",
+    "Track work in the pipeline and activity views.",
+  ],
+  chat: [
+    "Open Chat from the sidebar.",
+    "Pick a conversation from the inbox.",
+    "Reply in the center column while viewing the customer profile.",
+  ],
+  transactions: [
+    "Open Transactions → Payments.",
+    "Review spend analysis and the history tabs.",
+    "Find refunds and expenses in the same area.",
+  ],
+  reports: [
+    "Open Analytics → Stock for stock reports.",
+    "Use Account → Balances for party balances.",
+    "Open Account → Books / Statements for trial balance and financials.",
+  ],
+  account: [
+    "Open Account → Audit for the daily checklist.",
+    "Review X/Z reports, tenders, tickets and exceptions.",
+    "Use Books, Statements and Ledgers for financial detail.",
+  ],
+  till: [
+    "Open Point of Sales / Till under Settings.",
+    "Issue a till code for the POS station.",
+    "Manage store locations and branches from the same area.",
+  ],
+  users: [
+    "Open Settings → Users.",
+    "Create an account and assign it to a group.",
+    "The group decides which sidebar pages that user can open.",
+  ],
+  settings: [
+    "Open Settings for company details.",
+    "Update tax, payment gateway and import/export options.",
+    "Billing stays under the same settings area.",
+  ],
+  install: [
+    "Open the public support page.",
+    "Download the current desktop or Android build.",
+    "Check releases if an install fails.",
+  ],
+  github: [
+    "Open the project repository.",
+    "Search existing issues before opening a new one.",
+    "Include the page and steps when reporting a bug.",
+  ],
+};
+
+function stepsForTopic(topicId?: string): string[] | undefined {
+  if (!topicId) return undefined;
+  return TOPIC_STEPS[topicId] ? [...TOPIC_STEPS[topicId]!] : undefined;
+}
+
+function followUpsFor(presetId: string, pathname: string): HelpPreset[] {
+  return presetsForPath(pathname)
+    .filter((preset) => preset.id !== presetId)
+    .slice(0, 3);
+}
+
+/** Preset Q&A shown in the help panel. Matching is keyword-based over local guide content. */
 export type HelpPreset = {
   id: string;
   question: string;
@@ -384,17 +469,23 @@ export function matchHelpTopics(query: string, limit = 3): HelpTopic[] {
     .map((row) => row.topic);
 }
 
-/** Resolve a staff question to a preset answer (AI matching lives in AiHelpModal). */
-export function buildAssistantReply(query: string, pathname: string): {
+export type HelpReply = {
   text: string;
   topics: HelpTopic[];
-} {
+  steps?: string[];
+  followUps?: HelpPreset[];
+};
+
+/** Resolve a staff question into a practical answer built from saved app guides. */
+export function buildHelpReply(query: string, pathname: string): HelpReply {
   const preset = matchHelpPreset(query);
   if (preset) {
     const topic = HELP_TOPICS.find((t) => t.id === preset.topicId);
     return {
       text: preset.answer,
       topics: topic ? [topic] : [],
+      steps: stepsForTopic(preset.topicId),
+      followUps: followUpsFor(preset.id, pathname),
     };
   }
 
@@ -402,25 +493,49 @@ export function buildAssistantReply(query: string, pathname: string): {
   const contextual = topicForPath(pathname);
 
   if (matches.length) {
-    const primary = matches[0];
-    let text = primary.summary;
-    if (primary.href && !primary.external) {
-      text += ` Open **${primary.title}** from the sidebar, or use the link below.`;
-    } else if (primary.external) {
-      text += ` You can open the external page from the link below.`;
-    }
-    return { text, topics: matches.slice(0, 2) };
+    const primary = matches[0]!;
+    const text = primary.href
+      ? `Here’s the closest saved guide for **${primary.title}**: ${primary.summary}`
+      : `Here’s the closest saved guide: ${primary.summary}`;
+    return {
+      text,
+      topics: matches.slice(0, 2),
+      steps: stepsForTopic(primary.id),
+      followUps: presetsForPath(pathname).slice(0, 3),
+    };
   }
 
   if (contextual) {
     return {
-      text: `No preset answer matched that question. On this page you’re looking at **${contextual.title}**: ${contextual.summary} Try one of the suggested questions, or open the Help center.`,
+      text: `I couldn’t find an exact saved answer for that. You’re on **${pageName(pathname)}**, so the closest guide is **${contextual.title}**: ${contextual.summary}`,
       topics: [contextual],
+      steps: stepsForTopic(contextual.id),
+      followUps: presetsForPath(pathname).slice(0, 3),
     };
   }
 
   return {
-    text: "No preset answer matched that question. Try one of the suggested questions below, or open the Help center for the full guide.",
+    text: "I couldn’t find an exact saved answer for that. Start with the main areas of the app below, or open the Help center for the full guide.",
     topics: HELP_TOPICS.filter((t) => ["start", "products", "crm"].includes(t.id)),
+    steps: [
+      "Use the sidebar to find the area you need.",
+      "Choose one of the common questions for a step-by-step answer.",
+      "Open the Help center if you need the full guide.",
+    ],
+    followUps: presetsForPath(pathname).slice(0, 3),
   };
+}
+
+function pageName(pathname: string): string {
+  if (pathname === "/crm") return "Support / CRM";
+  if (pathname.startsWith("/setup/items")) return "Products";
+  if (pathname.startsWith("/orders")) return "Orders";
+  if (pathname.startsWith("/chat")) return "Chat";
+  if (pathname.startsWith("/transactions")) return "Transactions";
+  if (pathname.startsWith("/reports")) return "Reports";
+  if (pathname.startsWith("/audit")) return "Account / Audit";
+  if (pathname.startsWith("/setup/users")) return "Users";
+  if (pathname.startsWith("/setup")) return "Settings";
+  if (pathname.startsWith("/help")) return "Help center";
+  return "this page";
 }

@@ -12,7 +12,7 @@ import {
 import { useOrgLocale } from "../lib/org-locale";
 import { ConsoleHeader } from "./ConsoleHeader";
 import { useAuth } from "./AuthProvider";
-import { AiHelpModal } from "./help/AiHelpModal";
+import { HelpPanel } from "./help/HelpPanel";
 import { LockedScreen } from "./LockedScreen";
 import { Sidebar } from "./Sidebar";
 import { ConsoleChromeSkeleton } from "./Skeleton";
@@ -109,7 +109,7 @@ export function ConsoleShell({ children }: { children: React.ReactNode }) {
           </div>
         </main>
       </div>
-      <AiHelpModal open={helpOpen} onOpenChange={setHelpOpen} />
+      <HelpPanel open={helpOpen} onOpenChange={setHelpOpen} />
     </div>
   );
 }

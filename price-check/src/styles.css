@@ -66,6 +66,15 @@ input {
   background: rgba(255, 255, 255, 0.4);
 }
 
+.pc-camera-btn {
+  opacity: 0.75;
+}
+
+.pc-camera-btn:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.4);
+}
+
 .pc-error-dot {
   width: 12px;
   height: 12px;

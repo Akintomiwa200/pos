@@ -5,7 +5,7 @@ dark kitchens**. Run sales at the till, manage your business from a web HQ
 console, look up prices on the shop floor, and keep everything in sync through
 one shared API.
 
-This repository is a **monorepo** of four applications that work together. There
+This repository is a **monorepo** of five applications that work together. There
 is no single root `package.json` — each app is installed and run from its own
 folder with **pnpm**.
 
@@ -76,6 +76,7 @@ run as Node processes or **Windows Services** on a back-office server.
 | **HQ Console** | [`web/`](web/) | http://localhost:3000 | Next.js 16, React 19, Tailwind 4 | Back-office web app + public marketing site |
 | **Till** | [`pos/`](pos/) | http://localhost:1420 | Vite 8, React 19, Tauri 2 | Cashier terminal (browser, Windows EXE, Android APK) |
 | **Price Check** | [`price-check/`](price-check/) | http://localhost:1430 | Vite 8, React 19, Tauri 2 | Handheld lookup (browser, Windows EXE, Android APK) |
+| **Label Studio** | [`label-studio/`](label-studio/) | http://localhost:1431 | Vite 8, React 19, Tauri 2 | Barcode and shelf-label printing utility |
 
 ### API (`backend/`)
 

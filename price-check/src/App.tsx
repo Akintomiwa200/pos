@@ -113,6 +113,15 @@ export default function App() {
       </form>
 
       <div className="pc-settings-corner">
+        {canScanCamera() ? (
+          <button
+            className="pc-icon-btn pc-settings-btn pc-camera-btn"
+            onClick={() => setCameraOpen(true)}
+            aria-label="Scan barcode with camera"
+          >
+            <Camera size={20} />
+          </button>
+        ) : null}
         <button
           className="pc-icon-btn pc-settings-btn"
           onClick={() => setSettingsOpen(true)}

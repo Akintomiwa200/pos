@@ -2,8 +2,8 @@
 
 Welcome to the POS documentation hub. This project is a full point-of-sale
 platform for **supermarkets, hotels, restaurants, and dark kitchens**. It
-includes a till terminal, an HQ web console, a shared API, and a price-check
-handheld app.
+includes a till terminal, an HQ web console, a shared API, a price-check
+handheld app, and a label printing studio.
 
 ## Who should read what
 
@@ -22,6 +22,7 @@ handheld app.
 | **API** | [`backend/`](../backend/) | http://localhost:3001/api | Shared backend for all clients |
 | **Till** | [`pos/`](../pos/) | http://localhost:1420 | Cashier terminal for sales, payments, shifts |
 | **Price Check** | [`price-check/`](../price-check/) | http://localhost:1430 | Barcode / product lookup on the shop floor |
+| **Label Studio** | [`label-studio/`](../label-studio/) | http://localhost:1431 | Barcode generation and label printing |
 
 The till and HQ console proxy `/api` to the backend during development.
 Packaged till and price-check builds must point at a reachable API URL.

@@ -13,7 +13,7 @@ For installation of Windows EXE, Android APK, or server services, see
 ## Table of contents
 
 1. [What is POS?](#what-is-pos)
-2. [The four apps](#the-four-apps)
+2. [The five apps](#the-five-apps)
 3. [Getting started](#getting-started)
 4. [HQ console overview](#hq-console-overview)
 5. [Products and catalog](#products-and-catalog)
@@ -21,15 +21,16 @@ For installation of Windows EXE, Android APK, or server services, see
 7. [Tills and stores](#tills-and-stores)
 8. [Using the till (cashier)](#using-the-till-cashier)
 9. [Price check handheld](#price-check-handheld)
-10. [Customers, loyalty, and gift cards](#customers-loyalty-and-gift-cards)
-11. [Purchase orders](#purchase-orders)
-12. [Support workspace](#support-workspace)
-13. [Live chat](#live-chat)
-14. [Transactions and payments](#transactions-and-payments)
-15. [Users and access control](#users-and-access-control)
-16. [Organization settings](#organization-settings)
-17. [Help inside the console](#help-inside-the-console)
-18. [Troubleshooting](#troubleshooting)
+10. [Label studio](#label-studio)
+11. [Customers, loyalty, and gift cards](#customers-loyalty-and-gift-cards)
+12. [Purchase orders](#purchase-orders)
+13. [Support workspace](#support-workspace)
+14. [Live chat](#live-chat)
+15. [Transactions and payments](#transactions-and-payments)
+16. [Users and access control](#users-and-access-control)
+17. [Organization settings](#organization-settings)
+18. [Help inside the console](#help-inside-the-console)
+19. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -51,7 +52,7 @@ and dark kitchens** (tables, rooms, kitchen display, and more on the till).
 
 ---
 
-## The four apps
+## The five apps
 
 ```text
 ┌─────────────────┐     ┌─────────────────┐
@@ -78,6 +79,7 @@ and dark kitchens** (tables, rooms, kitchen display, and more on the till).
 | **HQ Console** | Owners, managers, back-office staff | Office PC, laptop, browser |
 | **Till** | Cashiers, wait staff, front desk | Cashier PC, Android tablet |
 | **Price Check** | Floor staff checking prices | Handheld scanner, phone |
+| **Label Studio** | Back-office or store staff printing shelf labels | Office PC, label printer workstation |
 | **API** | Installed by IT; users do not open it directly | Server or back-office PC |
 
 The till and price-check apps **do not store your business data locally**. They
@@ -314,6 +316,23 @@ price without opening the full till.
 
 Useful for shelf labelling, customer enquiries, and stock checks on the shop
 floor.
+
+---
+
+## Label studio
+
+Label Studio prints barcode and shelf labels from the live product catalog.
+
+1. Open the app (default `http://localhost:1431`) and connect it to the POS API
+   in **Settings** if needed.
+2. Search for a product, then confirm or override its barcode. Products without
+   a barcode can generate a free EAN-13, which is saved back to the catalog.
+3. Choose the barcode type, label size (including custom sizes), orientation,
+   copies, and whether the price should appear.
+4. Check the live preview, choose a detected printer, then print or download it
+   as a PNG.
+
+Recent prints stay in the local history so labels can be repeated quickly.
 
 ---
 

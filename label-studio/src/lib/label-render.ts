@@ -6,9 +6,11 @@ export const LABEL_PRESETS = [
   { key: "40x40", widthMm: 40, heightMm: 40, label: "40 x 40 mm", hint: "Square sticker" },
   { key: "58x40", widthMm: 58, heightMm: 40, label: "58 x 40 mm", hint: "Wide shelf label" },
   { key: "60x50", widthMm: 60, heightMm: 50, label: "60 x 50 mm", hint: "Large label" },
+  { key: "custom", widthMm: 50, heightMm: 25, label: "Custom size", hint: "Set your own paper size" },
 ] as const;
 
 export type LabelPreset = (typeof LABEL_PRESETS)[number];
+export type BarcodeFormat = "auto" | "CODE128" | "EAN13";
 
 export const LABEL_DPI = 300;
 const MM2PX = LABEL_DPI / 25.4;
@@ -21,6 +23,11 @@ export function ean13CheckDigit(digits: string) {
     sum += Number(d[i]) * (i % 2 === 0 ? 1 : 3);
   }
   return (10 - (sum % 10)) % 10;
+}
+
+export function isValidEan13(value: string) {
+  const d = value.replace(/\D/g, "");
+  return d.length === 13 && ean13CheckDigit(d.slice(0, 12)) === Number(d[12]);
 }
 
 export function makeValidBarcode(existing: string[]) {
@@ -36,12 +43,13 @@ export function makeValidBarcode(existing: string[]) {
   return "";
 }
 
-function pickFormat(value: string) {
-  const digits = value.replace(/\D/g, "");
-  if (digits.length === 13 && ean13CheckDigit(digits.slice(0, 12)) === Number(digits[12])) {
-    return "EAN13";
-  }
-  return "CODE128";
+export function detectBarcodeFormat(value: string): Exclude<BarcodeFormat, "auto"> {
+  return isValidEan13(value) ? "EAN13" : "CODE128";
+}
+
+function pickFormat(value: string, requested: BarcodeFormat = "auto") {
+  if (requested === "EAN13" || requested === "CODE128") return requested;
+  return detectBarcodeFormat(value);
 }
 
 function wrapLines(ctx: CanvasRenderingContext2D, text: string, maxWidth: number, maxLines: number) {
@@ -70,6 +78,7 @@ export function renderLabelDataUrl(opts: {
   showPrice: boolean;
   widthMm: number;
   heightMm: number;
+  format?: BarcodeFormat;
 }) {
   const bcValue = opts.barcode.trim();
   const widthPx = Math.max(120, Math.round(opts.widthMm * MM2PX));
@@ -113,15 +122,23 @@ export function renderLabelDataUrl(opts: {
   const bcCanvas = document.createElement("canvas");
   bcCanvas.width = innerW;
   bcCanvas.height = bcH;
+  const requestedFormat = opts.format ?? "auto";
   try {
     JsBarcode(bcCanvas, bcValue, {
-      format: pickFormat(bcValue),
+      format: pickFormat(bcValue, requestedFormat),
       width: 2,
       height: bcH,
       margin: 0,
       displayValue: false,
     });
   } catch {
+    if (requestedFormat !== "auto") {
+      throw new Error(
+        requestedFormat === "EAN13"
+          ? "That barcode is not a valid 13-digit EAN-13 value."
+          : "That barcode cannot be drawn as Code 128.",
+      );
+    }
     try {
       JsBarcode(bcCanvas, bcValue, {
         format: "CODE128",

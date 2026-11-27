@@ -17,6 +17,7 @@ This repository is a small monorepo of apps that talk to one API:
 | HQ | `web/` | Next.js console on port 3000 |
 | Till | `pos/` | Vite terminal on port 1420 |
 | Price check | `price-check/` | Vite handheld on port 1430 |
+| Label studio | `label-studio/` | Vite label printer on port 1431 |
 
 Keep changes focused. Prefer one concern per pull request (for example “till
 activation”, not “activation plus receipt layout plus CI”).

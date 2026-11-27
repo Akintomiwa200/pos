@@ -175,9 +175,28 @@ export const TRANSFER_DATASETS: TransferDataset[] = [
       field("expectedAt", "expected at", "date", ["expected at", "expected date", "delivery date"]),
       field("status", "status", "text", ["status", "state"]),
       field("total", "total", "money", ["total", "total minor", "amount"], { apiKey: "totalMinor", minor: true }),
+      field("lines", "lines", "text", ["lines", "line items", "items"], {
+        get: (row) =>
+          Array.isArray(row.lines)
+            ? row.lines
+                .map((line) => {
+                  const item = line as Record<string, unknown>;
+                  return `${item.name ?? item.itemId ?? ""}|${item.quantity ?? 1}|${item.unitPriceMinor ?? 0}`;
+                })
+                .join(";")
+            : "",
+      }),
       field("notes", "notes", "text", ["notes", "note", "memo", "description"]),
     ],
-    sample: { kind: "purchase-order", party: "Supplier Ltd", at: "2026-02-03", status: "draft", total: "25000", notes: "Restock" },
+    sample: {
+      kind: "purchase-order",
+      party: "Supplier Ltd",
+      at: "2026-02-03",
+      status: "draft",
+      total: "25000",
+      lines: "Paracetamol|10|1500;Vitamin C|5|2000",
+      notes: "Restock",
+    },
   },
   {
     id: "combos",
@@ -191,10 +210,20 @@ export const TRANSFER_DATASETS: TransferDataset[] = [
       field("name", "name", "text", ["name", "combo", "bundle"], { required: true }),
       field("description", "description", "text", ["description", "desc", "note"]),
       moneyField("price", "price", "priceMinor", ["price", "selling price", "combo price"]),
-      field("components", "components", "text", ["components", "items", "products"]),
+      field("components", "components", "text", ["components", "items", "products"], {
+        get: (row) =>
+          Array.isArray(row.components)
+            ? row.components
+                .map((component) => {
+                  const item = component as Record<string, unknown>;
+                  return `${item.itemId ?? ""}:${item.quantity ?? 1}`;
+                })
+                .join(";")
+            : "",
+      }),
       field("active", "active", "boolean", boolAliases),
     ],
-    sample: { name: "Family meal", description: "2 mains + 2 drinks", price: "1500", active: "yes" },
+    sample: { name: "Family meal", description: "2 mains + 2 drinks", price: "1500", components: "item-1:2;item-2:1", active: "yes" },
   },
   {
     id: "ledger-accounts",
@@ -391,13 +420,13 @@ export const TRANSFER_DATASETS: TransferDataset[] = [
     description: "Ticket history posted from every till (read-only).",
     endpoint: "/api/sales",
     fields: [
-      field("id", "id", "id", idAliases),
-      field("ticket", "ticket", "text", ["ticket", "ticket id", "receipt"]),
-      field("at", "date", "date", ["date", "at", "sold at"]),
-      field("customer", "customer", "text", ["customer", "customer name"]),
+      field("id", "id", "id", idAliases, { apiKey: "ticketId", get: (row) => String(row.ticketId ?? row.id ?? "") }),
+      field("ticket", "ticket", "text", ["ticket", "ticket id", "receipt"], { apiKey: "ticketId" }),
+      field("at", "date", "date", ["date", "at", "sold at"], { apiKey: "paidAt" }),
+      field("customer", "customer", "text", ["customer", "customer name"], { apiKey: "customerName" }),
       field("total", "total", "money", ["total", "total minor", "amount"], { apiKey: "totalMinor", minor: true }),
-      field("payment", "payment", "text", ["payment", "payment method", "method"]),
-      field("store", "store", "text", ["store", "branch"]),
+      field("payment", "payment", "text", ["payment", "payment method", "method"], { apiKey: "tender" }),
+      field("store", "store", "text", ["store", "branch"], { apiKey: "storeName" }),
     ],
     sample: {},
   },
@@ -405,15 +434,14 @@ export const TRANSFER_DATASETS: TransferDataset[] = [
     id: "inventory",
     label: "Inventory",
     group: "Transactions",
-    description: "Stock on hand by product and store (read-only).",
+    description: "Stock on hand by product (read-only).",
     endpoint: "/api/inventory",
     fields: [
-      field("id", "id", "id", idAliases),
-      field("product", "product", "text", ["product", "product name", "item"]),
+      field("id", "id", "id", idAliases, { apiKey: "itemId" }),
+      field("product", "product", "text", ["product", "product name", "item"], { get: (row) => String(row.name ?? row.itemId ?? "") }),
       field("sku", "sku", "text", ["sku", "code"]),
-      field("store", "store", "text", ["store", "branch"]),
       field("onHand", "on hand", "number", ["on hand", "quantity", "qty", "stock"]),
-      field("reorderLevel", "reorder level", "number", ["reorder level", "minimum"]),
+      field("reorderLevel", "reorder level", "number", ["reorder level", "minimum"], { apiKey: "reorderPoint" }),
     ],
     sample: {},
   },

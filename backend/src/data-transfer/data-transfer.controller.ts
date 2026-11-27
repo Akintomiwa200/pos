@@ -7,8 +7,8 @@ export class DataTransferController {
 
   /** Datasets with live counts — the export/import screens read this on load. */
   @Get("datasets")
-  datasets() {
-    return { datasets: this.service.datasets() };
+  async datasets() {
+    return { datasets: await this.service.datasets() };
   }
 
   @Post("import")

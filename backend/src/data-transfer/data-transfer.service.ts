@@ -9,20 +9,74 @@ import { DirectoryName } from "../directory/directory.types";
 import { ExpensesService } from "../expenses/expenses.service";
 import { LedgerService } from "../ledger/ledger.service";
 import { OrdersService } from "../orders/orders.service";
+import type { DocLine } from "../orders/orders.types";
 import { ProductionService } from "../production/production.service";
+import type { ComboComponent } from "../combos/combo.types";
 
 type Row = Record<string, unknown>;
 
 type Handler = {
   keys: readonly string[];
-  list: () => unknown[];
+  list: () => unknown[] | Promise<unknown[]>;
   save?: (row: Row) => unknown | Promise<unknown>;
   bulk?: (rows: Row[]) => { created: number; updated: number } | Promise<{ created: number; updated: number }>;
   /** Last chance to fill required fields on a row coming from a flat file. */
   prepare?: (row: Row) => Row;
+  /** Row-level validation that is reported without aborting the whole import. */
+  validate?: (row: Row) => string | undefined;
   defaults?: () => Row;
   label?: string;
 };
+
+function numeric(value: unknown, fallback = 0) {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function splitPacked(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map((row) => String(row).trim()).filter(Boolean);
+  if (typeof value !== "string") return [];
+  return value
+    .split(";")
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function parseDocLine(value: unknown): DocLine | null {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const row = value as Row;
+    const name = String(row.name ?? row.itemName ?? "").trim();
+    if (!name && !String(row.itemId ?? "").trim()) return null;
+    return {
+      itemId: String(row.itemId ?? "").trim(),
+      name: name || String(row.itemId).trim(),
+      quantity: Math.max(1, Math.round(numeric(row.quantity, 1))),
+      unitPriceMinor: Math.max(0, Math.round(numeric(row.unitPriceMinor ?? row.priceMinor, 0))),
+      receivedQty: Math.max(0, Math.round(numeric(row.receivedQty, 0))),
+    };
+  }
+  const parts = String(value ?? "").split("|").map((part) => part.trim());
+  const name = parts[0] ?? "";
+  if (!name) return null;
+  return {
+    itemId: /^[A-Za-z0-9_-]+$/.test(name) ? name : "",
+    name,
+    quantity: Math.max(1, Math.round(numeric(parts[1], 1))),
+    unitPriceMinor: Math.max(0, Math.round(numeric(parts[2], 0))),
+  };
+}
+
+function parseComboComponent(value: unknown): ComboComponent | null {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const row = value as Row;
+    const itemId = String(row.itemId ?? row.id ?? "").trim();
+    return itemId ? { itemId, quantity: Math.max(1, Math.round(numeric(row.quantity, 1))) } : null;
+  }
+  const [itemId, quantity] = String(value ?? "")
+    .split(":")
+    .map((part) => part.trim());
+  return itemId ? { itemId, quantity: Math.max(1, Math.round(numeric(quantity, 1))) } : null;
+}
 
 export type TransferImportResult = {
   created: number;
@@ -86,17 +140,37 @@ export class DataTransferService {
       },
       orders: {
         label: "party",
-        keys: ["id", "kind", "number", "party", "at", "expectedAt", "status", "notes"],
+        keys: [
+          "id", "kind", "number", "party", "at", "expectedAt", "status", "totalMinor", "lines", "notes",
+          "createdBy", "submittedAt", "approvedAt", "approvedBy", "rejectedAt", "rejectedBy",
+          "rejectionReason", "receivedAt",
+        ],
         list: () => this.orders.list(),
         save: (row) => this.orders.save(row),
         prepare: (row) => {
-          const total = typeof row.totalMinor === "number" ? row.totalMinor : 0;
+          const lines = splitPacked(row.lines)
+            .map(parseDocLine)
+            .filter((line): line is DocLine => !!line);
+          const explicitTotal = Math.max(0, Math.round(numeric(row.totalMinor, 0)));
+          const resolvedLines = lines.length
+            ? lines
+            : explicitTotal > 0
+              ? [{ itemId: "", name: "Imported total", quantity: 1, unitPriceMinor: explicitTotal }]
+              : [];
           return {
             ...row,
             at: String(row.at || new Date().toISOString()),
-            lines: [{ itemId: "", name: "Imported line", quantity: 1, unitPriceMinor: total }],
+            lines: resolvedLines,
+            totalMinor: resolvedLines.reduce(
+              (sum, line) => sum + line.quantity * line.unitPriceMinor,
+              0,
+            ),
           };
         },
+        validate: (row) =>
+          Array.isArray(row.lines) && row.lines.length > 0
+            ? undefined
+            : "Add at least one line (name|qty|price-minor) or a total",
         defaults: () => ({ kind: "purchase-order", status: "draft" }),
       },
       combos: {
@@ -104,6 +178,16 @@ export class DataTransferService {
         keys: ["id", "name", "description", "priceMinor", "components", "active"],
         list: () => this.combos.list(),
         save: (row) => this.combos.create(row),
+        prepare: (row) => ({
+          ...row,
+          components: splitPacked(row.components)
+            .map(parseComboComponent)
+            .filter((component): component is ComboComponent => !!component),
+        }),
+        validate: (row) =>
+          Array.isArray(row.components) && row.components.length > 0
+            ? undefined
+            : "Add at least one component (item-id:qty)",
       },
       "ledger-accounts": {
         label: "name",
@@ -163,18 +247,20 @@ export class DataTransferService {
       "directory-customers": {
         label: "name",
         keys: ["id", "name", "phone", "email", "address", "note", "active"],
-        list: () => [] as Row[],
+        list: () => this.directory.list("customers" as DirectoryName),
         save: (row) => this.directory.save("customers" as DirectoryName, row),
       },
     };
   }
 
-  datasets() {
-    return Object.entries(this.handlers).map(([id, handler]) => ({
-      id,
-      count: handler.list().length,
-      importable: typeof handler.save === "function" || typeof handler.bulk === "function",
-    }));
+  async datasets() {
+    return Promise.all(
+      Object.entries(this.handlers).map(async ([id, handler]) => ({
+        id,
+        count: (await handler.list()).length,
+        importable: typeof handler.save === "function" || typeof handler.bulk === "function",
+      })),
+    );
   }
 
   async importRows(dataset: string, rawRows: unknown, mode: "update" | "skip" = "update"): Promise<TransferImportResult> {
@@ -204,15 +290,23 @@ export class DataTransferService {
       return { created: result.created, updated: result.updated, skipped: 0, failed: 0, errors: [] };
     }
 
+    const existing = await handler.list();
     const ids = new Set(
-      handler
-        .list()
+      existing
         .map((row) => String((row as Row).id ?? "").trim().toLowerCase())
         .filter(Boolean),
     );
 
     const result: TransferImportResult = { created: 0, updated: 0, skipped: 0, failed: 0, errors: [] };
     for (const [index, row] of rows.entries()) {
+      const labelKey = handler.label ?? "name";
+      const label = String(row[labelKey] ?? `Row ${index + 2}`);
+      const validationError = handler.validate?.(row);
+      if (validationError) {
+        result.failed += 1;
+        result.errors.push({ row: index + 2, label, message: validationError });
+        continue;
+      }
       const id = String(row.id ?? "").trim().toLowerCase();
       if (id && ids.has(id) && mode === "skip") {
         result.skipped += 1;
@@ -226,10 +320,9 @@ export class DataTransferService {
         if (id) ids.add(id);
       } catch (error) {
         result.failed += 1;
-        const labelKey = handler.label ?? "name";
         result.errors.push({
           row: index + 2,
-          label: String(row[labelKey] ?? `Row ${index + 2}`),
+          label,
           message: error instanceof Error ? error.message : "Could not save this row",
         });
       }

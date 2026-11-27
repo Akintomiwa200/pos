@@ -1209,7 +1209,7 @@ export function DataTransferManager() {
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept=".csv,.tsv,.tab,.txt,.json,.xls,.xlsx,.htm,.html"
+                    accept=".csv,.tsv,.tab,.txt,.json,.xls,.htm,.html"
                     className="hidden"
                     onChange={(e) => {
                       const file = e.target.files?.[0];

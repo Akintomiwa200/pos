@@ -116,7 +116,7 @@ export function datasetTable(
   };
 }
 
-function bundleTables(kind: QuickExportKind, data: unknown): ExportTable[] {
+function bundleTables(kind: string, data: unknown): ExportTable[] {
   if (Array.isArray(data)) {
     return [recordsTable(data.filter((row): row is Record<string, unknown> => !!row && typeof row === "object"), kind)];
   }
@@ -320,9 +320,7 @@ function pdfFooter(doc: PdfDocument) {
 /** Built only when the user chooses PDF — jsPDF and autoTable load on demand. */
 async function downloadPdf(tables: ExportTable[], filename: string) {
   const [pdfModule, autoTableModule] = await loadPdfModules();
-  const autoTable = ("default" in autoTableModule
-    ? autoTableModule.default
-    : autoTableModule.autoTable) as (doc: PdfDocument, options: AutoTableOptions) => void;
+  const autoTable = autoTableModule.default as (doc: PdfDocument, options: AutoTableOptions) => void;
   if (typeof autoTable !== "function") throw new Error("PDF table plugin is unavailable");
 
   const doc = new pdfModule.jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
@@ -399,7 +397,7 @@ export async function downloadDataset(
 }
 
 export async function downloadBundle(
-  kind: QuickExportKind,
+  kind: string,
   data: unknown,
   format: ExportFormat,
   baseName = `pos-${kind}-${stamp()}`,

@@ -42,18 +42,7 @@ import {
   type SettingsSectionId,
 } from "@/lib/settings-access";
 import {
-  CURRENCIES,
-  LANGUAGES,
-  listTimezones,
-  localeFromCurrency,
-  localeFromLanguage,
-  localeFromTimezone,
-  withCurrent,
-  withCurrentValue,
-} from "@/lib/locale";
-import {
   Field,
-  FormSelect,
   PrimaryButton,
   SetupHeader,
   fieldClass,
@@ -66,6 +55,7 @@ import {
   SalesPanel,
 } from "./settings/AdminPanels";
 import { AppearanceStudio } from "./settings/AppearanceStudio";
+import { GeneralPanel } from "./settings/GeneralPanel";
 import { InvoiceStudio } from "./settings/InvoiceStudio";
 import { SecurityPanel } from "./settings/SecurityPanel";
 import {
@@ -325,132 +315,18 @@ export function SettingsManager() {
 
         <div className="min-w-0 space-y-5">
           {active === "general" ? (
-            <>
-              <SettingsCard
-                title="Locale & currency"
-                copy="Pick timezone, language, or currency — the other two update to match in real time."
-              >
-                <div className="grid min-w-0 gap-4 px-5 py-5 sm:grid-cols-3 sm:px-6 [&>*]:min-w-0">
-                  <Field label="Timezone" error={errors.timezone}>
-                    <FormSelect
-                      className={settingsFieldClass("", errors.timezone)}
-                      value={draft.timezone}
-                      aria-invalid={Boolean(errors.timezone)}
-                      onChange={(e) =>
-                        onLiveChange({
-                          ...draft,
-                          ...localeFromTimezone(e.target.value, draft),
-                        })
-                      }
-                    >
-                      {withCurrentValue(listTimezones(), draft.timezone).map((zone) => (
-                        <option key={zone} value={zone}>
-                          {zone}
-                        </option>
-                      ))}
-                    </FormSelect>
-                  </Field>
-                  <Field label="Language" error={errors.language}>
-                    <FormSelect
-                      className={settingsFieldClass("", errors.language)}
-                      value={draft.language}
-                      aria-invalid={Boolean(errors.language)}
-                      onChange={(e) =>
-                        onLiveChange({
-                          ...draft,
-                          ...localeFromLanguage(e.target.value, draft),
-                        })
-                      }
-                    >
-                      {withCurrent(LANGUAGES, draft.language).map((row) => (
-                        <option key={row.value} value={row.value}>
-                          {row.label}
-                        </option>
-                      ))}
-                    </FormSelect>
-                  </Field>
-                  <Field label="Currency" error={errors.currency}>
-                    <FormSelect
-                      className={settingsFieldClass("", errors.currency)}
-                      value={draft.currency}
-                      aria-invalid={Boolean(errors.currency)}
-                      onChange={(e) =>
-                        onLiveChange({
-                          ...draft,
-                          ...localeFromCurrency(e.target.value, draft),
-                        })
-                      }
-                    >
-                      {withCurrent(CURRENCIES, draft.currency).map((row) => (
-                        <option key={row.value} value={row.value}>
-                          {row.label}
-                        </option>
-                      ))}
-                    </FormSelect>
-                  </Field>
-                </div>
-              </SettingsCard>
-              <SettingsCard
-                title="Quick links"
-                copy="Jump to the controls owners use most."
-              >
-                <div className="grid gap-3 p-5 sm:grid-cols-2 lg:grid-cols-4 sm:px-6">
-                  {allowed.includes("sales") ? (
-                    <button
-                      type="button"
-                      onClick={() => go("sales")}
-                      className="rounded-[18px] bg-pos-surface-muted px-4 py-4 text-left transition hover:bg-pos-primary/10"
-                    >
-                      <p className="font-semibold text-pos-ink">Sales rules</p>
-                      <p className="mt-1 text-[13px] text-pos-ink-muted">
-                        Discounts, refunds, manager PIN
-                      </p>
-                    </button>
-                  ) : null}
-                  {allowed.includes("notifications") ? (
-                    <button
-                      type="button"
-                      onClick={() => go("notifications")}
-                      className="rounded-[18px] bg-pos-surface-muted px-4 py-4 text-left transition hover:bg-pos-primary/10"
-                    >
-                      <p className="font-semibold text-pos-ink">Notifications</p>
-                      <p className="mt-1 text-[13px] text-pos-ink-muted">
-                        Stock, sales, shifts, digests
-                      </p>
-                    </button>
-                  ) : null}
-                  {allowed.includes("people") ? (
-                    <button
-                      type="button"
-                      onClick={() => go("people")}
-                      className="rounded-[18px] bg-pos-surface-muted px-4 py-4 text-left transition hover:bg-pos-primary/10"
-                    >
-                      <p className="font-semibold text-pos-ink">People</p>
-                      <p className="mt-1 text-[13px] text-pos-ink-muted">
-                        Accounts, groups, floor staff
-                      </p>
-                    </button>
-                  ) : null}
-                  {allowed.includes("data") ? (
-                    <button
-                      type="button"
-                      onClick={() => go("data")}
-                      className="rounded-[18px] bg-pos-surface-muted px-4 py-4 text-left transition hover:bg-pos-primary/10"
-                    >
-                      <p className="font-semibold text-pos-ink">Data</p>
-                      <p className="mt-1 text-[13px] text-pos-ink-muted">
-                        Export, import, catalog reset
-                      </p>
-                    </button>
-                  ) : null}
-                </div>
-              </SettingsCard>
-              <div className="flex justify-end">
-                <PrimaryButton disabled={busy} onClick={() => void persist(draft)}>
-                  {busy ? "Saving…" : "Save general"}
-                </PrimaryButton>
-              </div>
-            </>
+            <GeneralPanel
+              draft={draft}
+              company={company}
+              errors={errors}
+              busy={busy}
+              allowed={allowed}
+              granted={granted}
+              orgLinks={ORG_LINKS}
+              onLiveChange={onLiveChange}
+              onSave={() => void persist(draft)}
+              onNavigate={go}
+            />
           ) : null}
 
           {active === "appearance" ? <AppearanceStudio /> : null}

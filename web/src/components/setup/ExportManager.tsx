@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Check, Download } from "lucide-react";
 import { toast } from "@/lib/toast";
-import type { HqCatalogItem } from "@/lib/hq-api";
 import {
   exportSetup,
   getCompany,
@@ -16,52 +16,18 @@ import {
   listTaxes,
 } from "@/lib/hq-setup";
 import { useLiveCatalog } from "@/lib/live-catalog";
-import { CSV_FIELDS, csvCell, downloadTextFile } from "@/lib/import-products";
+import { getDataset } from "@/lib/data-transfer";
+import {
+  EXPORT_FORMATS,
+  downloadBundle,
+  downloadDataset,
+  exportLabel,
+  type ExportFormat,
+} from "@/lib/data-transfer-export";
 import { LiveBadge, PrimaryButton, SetupHeader, fieldClass, secondaryButtonClass } from "./SetupChrome";
 import { ManagerSkeleton } from "../Skeleton";
 
 const today = () => new Date().toISOString().slice(0, 10);
-
-function downloadJson(filename: string, data: unknown) {
-  downloadTextFile(filename, JSON.stringify(data, null, 2), "application/json");
-}
-
-const CATALOG_CSV_VALUE: Record<string, (row: HqCatalogItem) => string> = {
-  name: (row) => row.name,
-  category: (row) => row.category,
-  subcategory: (row) => row.subcategory ?? "",
-  sku: (row) => row.sku,
-  barcode: (row) => row.barcode,
-  batchNumber: (row) => row.batchNumber ?? "",
-  brand: (row) => row.brand ?? "",
-  productCode: (row) => row.productCode ?? "",
-  cost: (row) => (row.costMinor / 100).toFixed(2),
-  price: (row) => (row.priceMinor / 100).toFixed(2),
-  onHand: (row) => String(row.onHand),
-  reorderLevel: (row) => String(row.reorderLevel),
-  unit: (row) => row.unit,
-  unitLabel: (row) => row.unitLabel ?? "",
-  packSize: (row) => String(row.packSize),
-  description: (row) => row.description ?? "",
-  active: (row) => (row.active ? "yes" : "no"),
-  expiresAt: (row) => row.expiresAt?.slice(0, 10) ?? "",
-  taxPercent: (row) =>
-    typeof row.taxPercent === "number" ? String(row.taxPercent) : "",
-  trackBatches: (row) => (row.trackBatches ? "yes" : "no"),
-  baseId: (row) => row.baseId ?? "",
-  id: (row) => row.id,
-};
-
-export function catalogToCsv(rows: HqCatalogItem[]) {
-  const header = CSV_FIELDS.map((field) => field.label).join(",");
-  const lines = [
-    header,
-    ...rows.map((row) =>
-      CSV_FIELDS.map((field) => csvCell(CATALOG_CSV_VALUE[field.key]?.(row) ?? "")).join(","),
-    ),
-  ];
-  return `\uFEFF${lines.join("\n")}`;
-}
 
 type GroupId =
   | "company"
@@ -100,6 +66,7 @@ export function ExportManager() {
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<GroupId[]>(GROUP_DEFS.map((group) => group.id));
   const [counts, setCounts] = useState<Record<string, number>>({});
+  const [format, setFormat] = useState<ExportFormat>("csv");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -168,32 +135,26 @@ export function ExportManager() {
     }
   };
 
-  const exportCsv = (rows: HqCatalogItem[], filename: string) => {
+  const exportProducts = async (rows: unknown[], filename: string) => {
     if (!rows.length) {
       toast.error("Nothing to export.");
       return;
     }
-    downloadTextFile(filename, catalogToCsv(rows));
-    toast.success(`Exported ${rows.length} product${rows.length === 1 ? "" : "s"}.`);
+    const dataset = getDataset("products");
+    if (!dataset) return;
+    await run(async () => {
+      await downloadDataset(dataset, rows as Record<string, unknown>[], format, { filename });
+      toast.success(`${exportLabel(format)} downloaded · ${rows.length} product${rows.length === 1 ? "" : "s"}.`);
+    });
   };
 
-  const exportCsvAll = () => exportCsv(items, `products-${today()}.csv`);
-  const exportCsvPicked = () =>
-    exportCsv(pickedItems, `products-selected-${today()}.csv`);
-  const exportCsvCategory = () =>
-    exportCsv(filtered, `products-${(category || "all").toLowerCase().replace(/\s+/g, "-")}-${today()}.csv`);
-
-  const exportJsonAllCatalog = () =>
-    downloadJson(`catalog-${today()}.json`, items);
-
-  const exportJsonPicked = () => {
-    if (!pickedItems.length) {
-      toast.error("Nothing to export.");
-      return;
-    }
-    downloadJson(`products-selected-${today()}.json`, pickedItems);
-    toast.success(`Exported ${pickedItems.length} product${pickedItems.length === 1 ? "" : "s"}.`);
-  };
+  const exportAllProducts = () => exportProducts(items, `products-${today()}`);
+  const exportPicked = () => exportProducts(pickedItems, `products-selected-${today()}`);
+  const exportCategory = () =>
+    exportProducts(
+      filtered,
+      `products-${(category || "all").toLowerCase().replace(/\s+/g, "-")}-${today()}`,
+    );
 
   const groupData = async (ids: GroupId[]): Promise<Record<string, unknown>> => {
     const out: Record<string, unknown> = {};
@@ -208,31 +169,31 @@ export function ExportManager() {
     return out;
   };
 
-  const exportGroupJson = async (id: GroupId) => {
+  const exportGroup = async (id: GroupId) => {
     await run(async () => {
       const data = await groupData([id]);
-      downloadJson(`${id}-${today()}.json`, { app: "PosHQ", exportedAt: new Date().toISOString(), ...data });
-      toast.success("Downloaded.");
+      await downloadBundle(id, { app: "PosHQ", exportedAt: new Date().toISOString(), ...data }, format, `${id}-${today()}`);
+      toast.success(`Downloaded as ${exportLabel(format)}.`);
     });
   };
 
-  const exportBundleJson = async () => {
+  const exportBundle = async () => {
     if (!selected.length) {
       toast.error("Pick at least one group.");
       return;
     }
     await run(async () => {
       const data = await groupData(selected);
-      downloadJson(`pos-backup-${today()}.json`, { app: "PosHQ", exportedAt: new Date().toISOString(), ...data });
-      toast.success("Backup downloaded.");
+      await downloadBundle("backup", { app: "PosHQ", exportedAt: new Date().toISOString(), ...data }, format, `pos-backup-${today()}`);
+      toast.success(`Backup downloaded as ${exportLabel(format)}.`);
     });
   };
 
-  const exportEverythingJson = async () => {
+  const exportEverything = async () => {
     await run(async () => {
       const data = await exportSetup("all");
-      downloadJson(`pos-everything-${today()}.json`, data);
-      toast.success("Everything exported.");
+      await downloadBundle("all", data, format, `pos-everything-${today()}`);
+      toast.success(`Everything exported as ${exportLabel(format)}.`);
     });
   };
 
@@ -249,11 +210,29 @@ export function ExportManager() {
     <div>
       <SetupHeader
         title="Export data"
-        copy="Download products as CSV or JSON, pick individual items or whole categories, and back up organisation data — company, branches, stores, tax, settings and sales — as one bundle."
+        copy="Download products and organisation data as CSV, Excel, PDF, JSON or TSV — pick individual items, categories or whole backup groups."
         action={
-          <PrimaryButton disabled={busy} onClick={exportEverythingJson}>
-            Everything · JSON
-          </PrimaryButton>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href="/setup/others/data-transfer" className={secondaryButtonClass}>
+              Data transfer
+            </Link>
+            <select
+              aria-label="Export format"
+              className={`${fieldClass} w-40`}
+              value={format}
+              onChange={(event) => setFormat(event.target.value as ExportFormat)}
+              disabled={busy}
+            >
+              {EXPORT_FORMATS.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+            <PrimaryButton disabled={busy} onClick={exportEverything}>
+              Everything · {exportLabel(format)}
+            </PrimaryButton>
+          </div>
         }
       />
       <div className="space-y-6">
@@ -269,15 +248,12 @@ export function ExportManager() {
           </div>
 
           <div className="mt-5 flex flex-wrap gap-2">
-            <PrimaryButton className="flex-1 min-w-36" onClick={exportCsvAll}>
-              All products · CSV
+            <PrimaryButton className="flex-1 min-w-36" onClick={exportAllProducts} disabled={busy}>
+              All products · {exportLabel(format)}
             </PrimaryButton>
-            <button type="button" className={`${secondaryButtonClass} flex-1 min-w-36`} onClick={exportJsonAllCatalog}>
-              All products · JSON
-            </button>
             {category ? (
-              <button type="button" className={`${secondaryButtonClass} flex-1 min-w-36`} onClick={exportCsvCategory}>
-                {category} · CSV
+              <button type="button" className={`${secondaryButtonClass} flex-1 min-w-36`} onClick={exportCategory} disabled={busy}>
+                {category} · {exportLabel(format)}
               </button>
             ) : null}
           </div>
@@ -354,17 +330,9 @@ export function ExportManager() {
               )}
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
-              <PrimaryButton className="flex-1 min-w-40" disabled={!pickedItems.length} onClick={exportCsvPicked}>
-                Export {pickedItems.length ? `${pickedItems.length} selected` : "selected"} · CSV
+              <PrimaryButton className="flex-1 min-w-40" disabled={!pickedItems.length || busy} onClick={exportPicked}>
+                Export {pickedItems.length ? `${pickedItems.length} selected` : "selected"} · {exportLabel(format)}
               </PrimaryButton>
-              <button
-                type="button"
-                className={`${secondaryButtonClass} flex-1 min-w-40`}
-                disabled={!pickedItems.length}
-                onClick={exportJsonPicked}
-              >
-                Export selected · JSON
-              </button>
             </div>
           </div>
         </section>
@@ -372,9 +340,9 @@ export function ExportManager() {
         <section className="rounded-[24px] bg-pos-surface p-6 shadow-pos-md">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="text-lg font-semibold text-pos-ink">Organisation backup · JSON</h2>
+              <h2 className="text-lg font-semibold text-pos-ink">Organisation backup</h2>
               <p className="mt-1 text-sm text-pos-ink-muted">
-                Pick the groups to export — one group, a few, or everything — and download a single JSON bundle.
+                Pick the groups to export — one group, a few, or everything — and download them in the selected format.
               </p>
             </div>
             <button
@@ -422,9 +390,9 @@ export function ExportManager() {
                       type="button"
                       className="inline-flex items-center gap-1.5 text-sm font-medium text-pos-primary disabled:opacity-50"
                       disabled={busy}
-                      onClick={() => exportGroupJson(group.id)}
+                      onClick={() => exportGroup(group.id)}
                     >
-                      <Download className="h-3.5 w-3.5" /> JSON
+                      <Download className="h-3.5 w-3.5" /> {exportLabel(format)}
                     </button>
                   </div>
                 </div>
@@ -436,8 +404,8 @@ export function ExportManager() {
             <p className="text-sm text-pos-ink-faint">
               {selected.length} of {GROUP_DEFS.length} groups selected
             </p>
-            <PrimaryButton disabled={!selected.length || busy} onClick={exportBundleJson}>
-              Download bundle · JSON
+            <PrimaryButton disabled={!selected.length || busy} onClick={exportBundle}>
+              Download bundle · {exportLabel(format)}
             </PrimaryButton>
           </div>
         </section>

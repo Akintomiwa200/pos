@@ -52,7 +52,6 @@ import {
   fieldClass,
   secondaryButtonClass,
 } from "./SetupChrome";
-import { ManagerSkeleton } from "../Skeleton";
 
 const today = () => new Date().toISOString().slice(0, 10);
 const pill = "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold";
@@ -257,6 +256,9 @@ export function DataTransferManager() {
     setBusy(true);
     try {
       const outcome = await importTransferRows(importId, ready.map((row) => row.payload));
+      const refreshed = await listTransferRows(importDataset, { fresh: true });
+      setExisting(refreshed);
+      if (exportId === importId) setExportRows(refreshed);
       setResult(outcome);
       toast.success(`Imported ${outcome.created} new, updated ${outcome.updated}.`);
     } catch (err) {

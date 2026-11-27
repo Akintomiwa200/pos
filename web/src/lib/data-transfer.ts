@@ -728,12 +728,36 @@ export function encodeTable(
   return `\uFEFF${lines.join("\n")}`;
 }
 
-export async function listTransferRows(dataset: TransferDataset): Promise<Record<string, unknown>[]> {
+const rowCache = new Map<string, { at: number; rows: Record<string, unknown>[] }>();
+const ROW_CACHE_MS = 60_000;
+
+/** Clear one dataset (or all) after a write so the next preview is fresh. */
+export function clearTransferRows(datasetId?: string) {
+  if (!datasetId) {
+    rowCache.clear();
+    return;
+  }
+  const endpoint = getDataset(datasetId)?.endpoint;
+  if (endpoint) rowCache.delete(endpoint);
+}
+
+export async function listTransferRows(
+  dataset: TransferDataset,
+  options: { fresh?: boolean } = {},
+): Promise<Record<string, unknown>[]> {
+  const cached = rowCache.get(dataset.endpoint);
+  if (!options.fresh && cached && Date.now() - cached.at < ROW_CACHE_MS) return cached.rows;
+
   const data = await api<unknown>(dataset.endpoint);
-  if (Array.isArray(data)) return data.filter((row): row is Record<string, unknown> => !!row && typeof row === "object");
-  const nested = data as { rows?: unknown[]; items?: unknown[] };
-  const rows = Array.isArray(nested.rows) ? nested.rows : Array.isArray(nested.items) ? nested.items : [];
-  return rows.filter((row): row is Record<string, unknown> => !!row && typeof row === "object");
+  const rows = (Array.isArray(data)
+    ? data
+    : (data as { rows?: unknown[]; items?: unknown[] }).rows ??
+      (data as { items?: unknown[] }).items ??
+      []
+  ).filter((row): row is Record<string, unknown> => !!row && typeof row === "object" && !Array.isArray(row));
+
+  rowCache.set(dataset.endpoint, { at: Date.now(), rows });
+  return rows;
 }
 
 export function downloadTransferFile(filename: string, text: string, format: TransferFormat) {
@@ -750,10 +774,12 @@ export type ImportResult = {
 
 /** Every import method ends here, so behaviour does not depend on how data arrived. */
 export async function importTransferRows(dataset: string, rows: Record<string, unknown>[]): Promise<ImportResult> {
-  return api<ImportResult>("/api/console/data-transfer/import", {
+  const result = await api<ImportResult>("/api/console/data-transfer/import", {
     method: "POST",
     body: JSON.stringify({ dataset, rows }),
   });
+  clearTransferRows(dataset);
+  return result;
 }
 
 export type QuickExportKind =

@@ -1,4 +1,12 @@
 import type { HqOrgSettings } from "@/lib/hq-setup";
+import {
+  REGISTER_ACTIONS,
+  REGISTER_BUTTON_KINDS,
+  REGISTER_FIELD_KEYS,
+  REGISTER_FIELD_MODES,
+  REGISTER_RECEIPT_TEMPLATES,
+  REGISTER_TENDER_IDS,
+} from "@/lib/register-config";
 
 export type SettingsFieldErrors = Partial<Record<keyof HqOrgSettings, string>>;
 
@@ -9,6 +17,9 @@ const INVOICE_TEMPLATES = new Set([
   "classic",
   "sapphire",
   "ivory",
+  "minimal",
+  "coral",
+  "slate",
 ]);
 const UI_THEMES = new Set(["system", "light", "dark"]);
 const UI_FONTS = new Set([
@@ -32,6 +43,102 @@ const INVOICE_PREFIX = /^[A-Za-z0-9_-]{1,12}$/;
 function intInRange(value: unknown, min: number, max: number) {
   const n = typeof value === "number" ? value : Number(value);
   return Number.isFinite(n) && Number.isInteger(n) && n >= min && n <= max;
+}
+
+const REGISTER_ID = /^[A-Za-z0-9_-]{1,40}$/;
+
+function validateRegisterConfig(draft: HqOrgSettings, errors: SettingsFieldErrors) {
+  const buttons = draft.registerQuickButtons ?? [];
+  if (!Array.isArray(buttons) || buttons.length > 24) {
+    errors.registerQuickButtons = "Keep at most 24 till buttons";
+  } else {
+    const ids = new Set<string>();
+    for (const button of buttons) {
+      const valid =
+        Boolean(button.id && REGISTER_ID.test(button.id)) &&
+        Boolean(button.label?.trim() && button.label.trim().length <= 48) &&
+        Boolean(button.value?.trim() && button.value.trim().length <= 120) &&
+        REGISTER_BUTTON_KINDS.includes(button.kind) &&
+        HEX_COLOR.test(button.color ?? "") &&
+        typeof button.active === "boolean" &&
+        !ids.has(button.id) &&
+        (button.kind !== "action" || REGISTER_ACTIONS.includes(button.value as (typeof REGISTER_ACTIONS)[number]));
+      ids.add(button.id);
+      if (!valid) {
+        errors.registerQuickButtons = "Each button needs a unique id, label, target, colour, and valid kind";
+        break;
+      }
+    }
+  }
+
+  const fields = draft.registerSaleFields ?? [];
+  if (!Array.isArray(fields) || fields.length > REGISTER_FIELD_KEYS.length) {
+    errors.registerSaleFields = "Sale fields are limited to the supported field list";
+  } else {
+    const keys = new Set<string>();
+    for (const field of fields) {
+      const valid =
+        REGISTER_FIELD_KEYS.includes(field.key) &&
+        Boolean(field.label?.trim() && field.label.trim().length <= 48) &&
+        REGISTER_FIELD_MODES.includes(field.mode) &&
+        intInRange(field.order, 0, 100) &&
+        !keys.has(field.key);
+      keys.add(field.key);
+      if (!valid) {
+        errors.registerSaleFields = "Each sale field needs a unique supported key, label, mode, and order";
+        break;
+      }
+    }
+  }
+
+  const tenders = draft.registerTenders ?? [];
+  if (!Array.isArray(tenders) || tenders.length > REGISTER_TENDER_IDS.length) {
+    errors.registerTenders = "Payment methods are limited to the supported tender list";
+  } else {
+    const ids = new Set<string>();
+    for (const tender of tenders) {
+      const valid =
+        REGISTER_TENDER_IDS.includes(tender.id) &&
+        Boolean(tender.label?.trim() && tender.label.trim().length <= 48) &&
+        Boolean(tender.hint?.trim() && tender.hint.trim().length <= 120) &&
+        HEX_COLOR.test(tender.color ?? "") &&
+        typeof tender.active === "boolean" &&
+        typeof tender.requiresReference === "boolean" &&
+        !ids.has(tender.id);
+      ids.add(tender.id);
+      if (!valid) {
+        errors.registerTenders = "Each payment method needs a unique id, label, hint, colour, and toggle";
+        break;
+      }
+    }
+  }
+
+  const overrides = draft.registerOutletOverrides ?? [];
+  if (!Array.isArray(overrides) || overrides.length > 50) {
+    errors.registerOutletOverrides = "Keep at most 50 outlet overrides";
+  } else {
+    const ids = new Set<string>();
+    for (const row of overrides) {
+      const valid =
+        Boolean(row.id && REGISTER_ID.test(row.id)) &&
+        (row.scope === "branch" || row.scope === "store") &&
+        Boolean(row.scopeId?.trim()) &&
+        Boolean(row.label?.trim() && row.label.trim().length <= 80) &&
+        !ids.has(row.id) &&
+        (row.idleLockMinutes === undefined || intInRange(row.idleLockMinutes, 0, 240)) &&
+        (row.receiptCopies === undefined || intInRange(row.receiptCopies, 1, 5)) &&
+        (row.receiptTemplate === undefined || REGISTER_RECEIPT_TEMPLATES.includes(row.receiptTemplate)) &&
+        (row.receiptFooter === undefined || row.receiptFooter.length <= 500) &&
+        (row.enabledTenders === undefined ||
+          (Array.isArray(row.enabledTenders) &&
+            row.enabledTenders.every((id) => REGISTER_TENDER_IDS.includes(id))));
+      ids.add(row.id);
+      if (!valid) {
+        errors.registerOutletOverrides = "Each override needs a unique id, scope, label, and valid values";
+        break;
+      }
+    }
+  }
 }
 
 /** Full-draft validation for Settings forms (mirrors backend rules). */
@@ -142,6 +249,8 @@ export function validateOrgSettings(draft: HqOrgSettings): SettingsFieldErrors {
   if (!UI_DENSITIES.has(draft.uiDensity)) {
     errors.uiDensity = "Density must be comfortable or compact";
   }
+
+  validateRegisterConfig(draft, errors);
 
   return errors;
 }

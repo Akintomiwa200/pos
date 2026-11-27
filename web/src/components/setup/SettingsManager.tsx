@@ -64,6 +64,7 @@ import {
   SettingsCard,
   Switch,
 } from "./settings/settings-ui";
+import { RegisterStudio } from "./settings/RegisterStudio";
 
 const SECTIONS: {
   id: SettingsSectionId;
@@ -356,47 +357,14 @@ export function SettingsManager() {
           ) : null}
 
           {active === "register" ? (
-            <>
-              <SettingsCard
-                title="Till behaviour"
-                copy="Shift rules and idle lock for every register."
-              >
-                <SettingRow
-                  title="Require open shift"
-                  description="Cashiers must open a shift before selling."
-                  control={
-                    <Switch
-                      checked={draft.requireOpenShift}
-                      disabled={busy}
-                      onChange={(requireOpenShift) => void toggle("requireOpenShift", requireOpenShift)}
-                    />
-                  }
-                />
-                <div className="border-t border-pos-border/50 px-5 py-5 sm:px-6">
-                  <Field label="Idle lock (minutes)" error={errors.idleLockMinutes}>
-                    <input
-                      className={settingsFieldClass(fieldClass, errors.idleLockMinutes)}
-                      type="number"
-                      min={0}
-                      max={240}
-                      value={draft.idleLockMinutes}
-                      aria-invalid={Boolean(errors.idleLockMinutes)}
-                      onChange={(e) =>
-                        onLiveChange({ ...draft, idleLockMinutes: Number(e.target.value) })
-                      }
-                    />
-                  </Field>
-                  <p className="mt-1 text-[12px] text-pos-ink-faint">
-                    0 disables auto-lock. Tills pick this up on heartbeat.
-                  </p>
-                </div>
-              </SettingsCard>
-              <div className="flex justify-end">
-                <PrimaryButton disabled={busy} onClick={() => void persist(draft)}>
-                  {busy ? "Saving…" : "Save register"}
-                </PrimaryButton>
-              </div>
-            </>
+            <RegisterStudio
+              draft={draft}
+              busy={busy}
+              errors={errors}
+              onChange={onLiveChange}
+              onToggle={(key, value) => void toggle(key, value)}
+              onSave={() => void persist(draft)}
+            />
           ) : null}
 
           {active === "inventory" ? (

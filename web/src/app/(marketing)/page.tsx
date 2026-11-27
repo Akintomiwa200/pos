@@ -189,7 +189,7 @@ function TillMini() {
             </div>
           ))}
         </div>
-        <div className="absolute -bottom-3 -right-1 rounded-xl bg-pos-inverse px-2 py-1.5 text-[8px] text-white shadow-pos-md">
+        <div className="absolute -bottom-3 -right-1 rounded-xl bg-pos-inverse px-2 py-1.5 text-[8px] text-pos-inverse-ink shadow-pos-md">
           Open · ₦11,750
         </div>
       </div>
@@ -205,7 +205,7 @@ function FoodMini() {
           <ChevronLeft size={12} />
         </span>
         <p className="text-[10px] font-medium">Table 7</p>
-        <span className="grid h-6 w-6 place-items-center rounded-full bg-pos-inverse text-[7px] font-medium text-white">
+        <span className="grid h-6 w-6 place-items-center rounded-full bg-pos-inverse text-[7px] font-medium text-pos-inverse-ink">
           CK
         </span>
       </div>
@@ -431,8 +431,8 @@ function HeroPreview() {
                 </div>
               ))}
             </div>
-            <div className="mt-3 flex items-center justify-between rounded-xl bg-pos-inverse px-3 py-2.5 text-white">
-              <span className="text-[10px] text-white/55">Open ticket</span>
+            <div className="mt-3 flex items-center justify-between rounded-xl bg-pos-inverse px-3 py-2.5 text-pos-inverse-ink">
+              <span className="text-[10px] text-pos-inverse-ink/55">Open ticket</span>
               <span className="text-sm font-medium tabular-nums">₦11,750</span>
             </div>
           </PhoneFrame>
@@ -444,7 +444,7 @@ function HeroPreview() {
                 <ChevronLeft size={14} />
               </span>
               <p className="text-[12px] font-medium">Table 7</p>
-              <span className="grid h-7 w-7 place-items-center rounded-full bg-pos-inverse text-[8px] font-medium text-white">
+              <span className="grid h-7 w-7 place-items-center rounded-full bg-pos-inverse text-[8px] font-medium text-pos-inverse-ink">
                 CK
               </span>
             </div>

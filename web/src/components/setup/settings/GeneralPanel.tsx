@@ -13,12 +13,16 @@ import {
   Globe2,
   Languages,
   MapPin,
+  Monitor,
+  Moon,
+  Palette,
   Percent,
   Save,
   ShieldCheck,
   ShoppingCart,
   Sparkles,
   Store,
+  Sun,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -44,6 +48,19 @@ import {
 import { SettingsCard } from "./settings-ui";
 
 const SAMPLE_DATE = new Date("2026-01-15T10:30:00Z");
+
+type ThemeValue = HqOrgSettings["uiTheme"];
+
+const THEME_OPTIONS: {
+  id: ThemeValue;
+  label: string;
+  hint: string;
+  icon: LucideIcon;
+}[] = [
+  { id: "light", label: "Light", hint: "Bright surfaces", icon: Sun },
+  { id: "dark", label: "Dark", hint: "Dim HQ chrome", icon: Moon },
+  { id: "system", label: "System", hint: "Match device", icon: Monitor },
+];
 
 export type GeneralOrgLink = {
   href: string;
@@ -218,6 +235,10 @@ export function GeneralPanel({
     };
   }, [draft.currency, draft.language, draft.timezone]);
 
+  const activeTheme =
+    THEME_OPTIONS.find(({ id }) => id === draft.uiTheme)?.id ?? "system";
+  const themeLabel = THEME_OPTIONS.find(({ id }) => id === activeTheme)?.label ?? "System";
+
   const visibleQuickLinks = QUICK_LINKS.filter(({ id }) => allowed.includes(id));
   const visibleOrgLinks = orgLinks
     .filter(({ req }) => granted.has(req))
@@ -226,7 +247,7 @@ export function GeneralPanel({
 
   return (
     <div className="space-y-5">
-      <section className="relative overflow-hidden rounded-[24px] bg-pos-inverse p-5 text-white shadow-pos-md sm:p-6">
+      <section className="relative overflow-hidden rounded-[24px] bg-pos-inverse p-5 text-pos-inverse-ink shadow-pos-md sm:p-6">
         <div
           aria-hidden
           className="pointer-events-none absolute -right-16 -top-20 size-56 rounded-full bg-pos-primary/25 blur-3xl"
@@ -237,45 +258,46 @@ export function GeneralPanel({
         />
         <div className="relative flex flex-wrap items-start justify-between gap-4">
           <div className="flex min-w-0 items-center gap-4">
-            <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-white/12 text-[16px] font-semibold tracking-wide ring-1 ring-white/15">
+            <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-pos-inverse-ink/12 text-[16px] font-semibold tracking-wide ring-1 ring-pos-inverse-ink/15">
               {initials(company?.name ?? "POS HQ")}
             </span>
             <div className="min-w-0">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/55">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-pos-inverse-ink/55">
                 Workspace
               </p>
               <h2 className="mt-1 truncate text-[20px] font-semibold tracking-tight sm:text-[22px]">
                 {company?.name ?? "Your organization"}
               </h2>
-              <p className="mt-1 truncate text-[13px] text-white/60">
+              <p className="mt-1 truncate text-[13px] text-pos-inverse-ink/60">
                 {company?.country || "Country not set"} · {company?.currency || draft.currency}
               </p>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <LiveBadge live={!busy} label={busy ? "Saving" : "Live"} />
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-white/80 ring-1 ring-white/10">
+            <LiveBadge live={!busy} label={busy ? "Saving" : "Live"} tone="inverse" />
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-pos-inverse-ink/10 px-2.5 py-1 text-[11px] font-semibold text-pos-inverse-ink/80 ring-1 ring-pos-inverse-ink/10">
               <Sparkles size={12} />
               General preferences
             </span>
           </div>
         </div>
-        <div className="relative mt-5 grid gap-2 sm:grid-cols-3">
+        <div className="relative mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
           {[
             { label: "Timezone", value: samples.city, icon: Clock3 },
             { label: "Language", value: samples.languageLabel, icon: Languages },
             { label: "Currency", value: draft.currency, icon: Banknote },
+            { label: "Theme", value: themeLabel, icon: Palette },
           ].map(({ label, value, icon: Icon }) => (
             <div
               key={label}
-              className="flex min-w-0 items-center gap-3 rounded-2xl bg-white/8 px-3.5 py-3 ring-1 ring-white/10"
+              className="flex min-w-0 items-center gap-3 rounded-2xl bg-pos-inverse-ink/8 px-3.5 py-3 ring-1 ring-pos-inverse-ink/10"
             >
-              <Icon size={15} className="shrink-0 text-white/55" />
+              <Icon size={15} className="shrink-0 text-pos-inverse-ink/55" />
               <div className="min-w-0">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/45">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-pos-inverse-ink/45">
                   {label}
                 </p>
-                <p className="mt-0.5 truncate text-[13px] font-medium text-white/90" title={value}>
+                <p className="mt-0.5 truncate text-[13px] font-medium text-pos-inverse-ink/90" title={value}>
                   {value}
                 </p>
               </div>
@@ -386,6 +408,49 @@ export function GeneralPanel({
         </div>
       </SettingsCard>
 
+      <SettingsCard
+        title="Theme"
+        copy="Choose how HQ looks. Your choice applies instantly and syncs across devices."
+      >
+        <div
+          className="grid gap-3 p-5 sm:grid-cols-3 sm:px-6"
+          role="group"
+          aria-label="Theme preference"
+        >
+          {THEME_OPTIONS.map(({ id, label, hint, icon: Icon }) => {
+            const on = id === activeTheme;
+            return (
+              <button
+                key={id}
+                type="button"
+                aria-pressed={on}
+                onClick={() => onLiveChange({ ...draft, uiTheme: id })}
+                className={`rounded-[18px] border px-4 py-4 text-left transition ${
+                  on
+                    ? "border-pos-primary bg-pos-primary/10 shadow-pos-sm"
+                    : "border-transparent bg-pos-surface-muted hover:border-pos-border"
+                }`}
+              >
+                <span
+                  className={`grid size-10 place-items-center rounded-full ${
+                    on ? "bg-pos-primary text-pos-inverse-ink" : "bg-pos-surface text-pos-ink-muted"
+                  }`}
+                >
+                  <Icon size={18} strokeWidth={1.75} />
+                </span>
+                <p className="mt-3 text-[14px] font-semibold text-pos-ink">{label}</p>
+                <p className="mt-0.5 text-[13px] text-pos-ink-muted">{hint}</p>
+              </button>
+            );
+          })}
+        </div>
+        {errors.uiTheme ? (
+          <p className="px-5 pb-5 text-[12px] text-pos-danger sm:px-6" role="alert">
+            {errors.uiTheme}
+          </p>
+        ) : null}
+      </SettingsCard>
+
       {visibleQuickLinks.length ? (
         <SettingsCard
           title="Quick links"
@@ -399,7 +464,7 @@ export function GeneralPanel({
                 onClick={() => onNavigate(id)}
                 className="group flex items-start gap-3 rounded-[18px] bg-pos-surface-muted px-4 py-4 text-left transition hover:bg-pos-primary/10"
               >
-                <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-pos-surface text-pos-ink-muted transition group-hover:bg-pos-primary group-hover:text-white">
+                <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-pos-surface text-pos-ink-muted transition group-hover:bg-pos-primary group-hover:text-pos-inverse-ink">
                   <Icon size={18} strokeWidth={1.75} />
                 </span>
                 <span className="min-w-0 flex-1">

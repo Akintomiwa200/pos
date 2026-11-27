@@ -22,6 +22,7 @@
   --pos-warning: #d97706;
   --pos-danger: #dc2626;
   --pos-inverse: #1c1c1e;
+  --pos-inverse-ink: #ffffff;
   --pos-chart-bar: #e8e8ed;
   --pos-chart-bar-accent: #d8d8df;
   --pos-chart-grid: #f0f0f3;
@@ -92,6 +93,7 @@
   --pos-warning: #fbbf24;
   --pos-danger: #f87171;
   --pos-inverse: #f3f4f6;
+  --pos-inverse-ink: #1c1c1e;
   --pos-chart-bar: #2a2d38;
   --pos-chart-bar-accent: #363945;
   --pos-chart-grid: #22252e;
@@ -159,6 +161,7 @@
   --color-pos-warning: var(--pos-warning);
   --color-pos-danger: var(--pos-danger);
   --color-pos-inverse: var(--pos-inverse);
+  --color-pos-inverse-ink: var(--pos-inverse-ink);
   --shadow-pos-sm: var(--pos-shadow-sm);
   --shadow-pos-md: var(--pos-shadow-md);
   --shadow-pos-primary: var(--pos-shadow-primary);

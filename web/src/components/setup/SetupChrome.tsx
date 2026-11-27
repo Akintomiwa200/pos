@@ -32,20 +32,38 @@ export function SetupHeader({
   );
 }
 
-export function LiveBadge({ live, label }: { live: boolean; label?: string }) {
+export function LiveBadge({
+  live,
+  label,
+  tone = "default",
+}: {
+  live: boolean;
+  label?: string;
+  tone?: "default" | "inverse";
+}) {
+  const inverse = tone === "inverse";
+  const surface = live
+    ? inverse
+      ? "bg-pos-inverse-ink/10 text-pos-inverse-ink"
+      : "bg-pos-success/10 text-pos-success"
+    : inverse
+      ? "bg-pos-inverse-ink/10 text-pos-inverse-ink/70"
+      : "bg-pos-surface-muted text-pos-ink-faint";
+  const dot = live
+    ? inverse
+      ? "bg-pos-inverse-ink"
+      : "bg-pos-success"
+    : inverse
+      ? "bg-pos-inverse-ink/60"
+      : "bg-pos-ink-faint";
+
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-        live ? "bg-pos-success/10 text-pos-success" : "bg-pos-surface-muted text-pos-ink-faint"
-      }`}
-    >
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${surface}`}>
       <span className="relative flex h-1.5 w-1.5">
         {live ? (
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-pos-success opacity-75" />
+          <span className={`absolute inline-flex h-full w-full animate-ping rounded-full ${dot} opacity-75`} />
         ) : null}
-        <span
-          className={`relative inline-flex h-1.5 w-1.5 rounded-full ${live ? "bg-pos-success" : "bg-pos-ink-faint"}`}
-        />
+        <span className={`relative inline-flex h-1.5 w-1.5 rounded-full ${dot}`} />
       </span>
       {label ?? (live ? "Live" : "Connecting")}
     </span>
@@ -65,12 +83,16 @@ export function SetupStat({
 }) {
   const shell =
     tone === "inverse"
-      ? "bg-pos-inverse text-white"
+      ? "bg-pos-inverse text-pos-inverse-ink"
       : tone === "accent"
         ? "bg-pos-primary text-white"
         : "bg-pos-surface text-pos-ink shadow-pos-sm";
   const muted =
-    tone === "default" ? "text-pos-ink-faint" : "text-white/55";
+    tone === "default"
+      ? "text-pos-ink-faint"
+      : tone === "inverse"
+        ? "text-pos-inverse-ink/55"
+        : "text-white/55";
 
   return (
     <div className={`flex min-h-[104px] flex-col rounded-[20px] p-4 ${shell}`}>

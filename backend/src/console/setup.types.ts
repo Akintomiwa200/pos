@@ -1,3 +1,14 @@
+import {
+  DEFAULT_REGISTER_OUTLET_OVERRIDES,
+  DEFAULT_REGISTER_QUICK_BUTTONS,
+  DEFAULT_REGISTER_SALE_FIELDS,
+  DEFAULT_REGISTER_TENDERS,
+  type RegisterOutletOverride,
+  type RegisterQuickButton,
+  type RegisterSaleField,
+  type RegisterTender,
+} from "./register-config.types";
+
 export type HqCompany = {
   id: string;
   name: string;
@@ -120,7 +131,15 @@ export type HqOrgSettings = {
   receiptShowDiscount: boolean;
   invoicePrefix: string;
   invoiceNextNumber: number;
-  invoiceTemplate: "modern" | "letterhead" | "classic" | "sapphire" | "ivory";
+  invoiceTemplate:
+    | "modern"
+    | "letterhead"
+    | "classic"
+    | "sapphire"
+    | "ivory"
+    | "minimal"
+    | "coral"
+    | "slate";
   invoiceBrandColor: string;
   invoicePanelColor: string;
   invoiceShowLogo: boolean;
@@ -131,6 +150,10 @@ export type HqOrgSettings = {
   applyVat: boolean;
   idleLockMinutes: number;
   requireOpenShift: boolean;
+  registerQuickButtons: RegisterQuickButton[];
+  registerSaleFields: RegisterSaleField[];
+  registerTenders: RegisterTender[];
+  registerOutletOverrides: RegisterOutletOverride[];
   lowStockQty: number;
   blockNegativeStock: boolean;
   printDuplicateReceipt: boolean;
@@ -255,6 +278,10 @@ export const SEED_SETTINGS: HqOrgSettings = {
   applyVat: true,
   idleLockMinutes: 0,
   requireOpenShift: true,
+  registerQuickButtons: DEFAULT_REGISTER_QUICK_BUTTONS,
+  registerSaleFields: DEFAULT_REGISTER_SALE_FIELDS,
+  registerTenders: DEFAULT_REGISTER_TENDERS,
+  registerOutletOverrides: DEFAULT_REGISTER_OUTLET_OVERRIDES,
   lowStockQty: 5,
   blockNegativeStock: true,
   printDuplicateReceipt: false,

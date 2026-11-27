@@ -192,7 +192,13 @@ export class ChatService implements OnModuleInit {
     if (event.type === "message" || event.type === "conversation") {
       return this.canSeeConversation(access, event.conversation) ? event : null;
     }
-    if (event.type === "typing" || event.type === "call") {
+    if (event.type === "typing") {
+      // A sender never needs to see their own typing indicator.
+      if (event.senderId && event.senderId === access.id) return null;
+      const conversation = this.conversations.find((row) => row.id === event.conversationId);
+      return conversation && this.canSeeConversation(access, conversation) ? event : null;
+    }
+    if (event.type === "call") {
       const conversation = this.conversations.find((row) => row.id === event.conversationId);
       return conversation && this.canSeeConversation(access, conversation) ? event : null;
     }
@@ -300,9 +306,9 @@ export class ChatService implements OnModuleInit {
       if (existing) return existing;
     }
 
-    const otherName = memberIds[0] ?? "";
-    const avatar =
-      kind === "direct" ? (access.accounts.get(memberIds[0])?.avatarUrl ?? undefined) : undefined;
+    const other = memberIds[0] ?? "";
+    const otherAccount = access.accounts.get(other);
+    const avatar = kind === "direct" ? (otherAccount?.avatarUrl ?? undefined) : undefined;
     const conversation: ChatConversation = {
       id: `chat-${kind}-${Date.now()}`,
       kind,
@@ -310,8 +316,9 @@ export class ChatService implements OnModuleInit {
       name:
         kind === "group"
           ? (input.name?.trim() || "Group chat")
-          : input.name?.trim() || otherName,
-      preview: kind === "group" ? `${memberIds.length + (input.createdBy ? 1 : 0)} members` : "Say hello 👋",
+          : input.name?.trim() || otherAccount?.name || "New chat",
+      preview:
+        kind === "group" ? `${participants.size} members` : `Say hello to ${otherAccount?.name ?? "your teammate"} 👋`,
       updatedAt: new Date().toISOString(),
       memberIds: from && !memberIds.includes(from) ? [from, ...memberIds] : memberIds,
       createdBy: from,
@@ -394,11 +401,12 @@ export class ChatService implements OnModuleInit {
     viewerId: string,
     token?: string,
   ) {
-    await this.visibleConversation(conversationId, viewerId, token);
+    const { access } = await this.visibleConversation(conversationId, viewerId, token);
     const event = {
       type: "typing" as const,
       conversationId,
       name: body.name?.trim() || "Someone",
+      senderId: access.id,
       state: body.state === "off" ? ("off" as const) : ("on" as const),
       at: new Date().toISOString(),
     };

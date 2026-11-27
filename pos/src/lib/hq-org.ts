@@ -1,3 +1,13 @@
+import {
+  DEFAULT_REGISTER_OUTLET_OVERRIDES,
+  DEFAULT_REGISTER_QUICK_BUTTONS,
+  DEFAULT_REGISTER_SALE_FIELDS,
+  DEFAULT_REGISTER_TENDERS,
+  type RegisterOutletOverride,
+  type RegisterQuickButton,
+  type RegisterSaleField,
+  type RegisterTender,
+} from "./register-config";
 import { saveStoreSettings, loadStoreSettings, type StoreSettings } from "./store-settings";
 
 export type HqOrgSnapshot = {
@@ -109,6 +119,10 @@ export type HqOrgSnapshot = {
     receiptAddress?: string;
     receiptEmail?: string;
     receiptBarcodeValue?: string;
+    registerQuickButtons?: RegisterQuickButton[];
+    registerSaleFields?: RegisterSaleField[];
+    registerTenders?: RegisterTender[];
+    registerOutletOverrides?: RegisterOutletOverride[];
   };
 };
 
@@ -229,6 +243,21 @@ export function resolveTillBranch(org: HqOrgSnapshot, till?: TillLocation | null
   return undefined;
 }
 
+function resolveRegisterOverride(
+  org: HqOrgSnapshot,
+  till?: TillLocation | null,
+): RegisterOutletOverride | undefined {
+  const overrides = org.settings.registerOutletOverrides ?? [];
+  if (!overrides.length || !till) return undefined;
+  const branchId = till.branchId || resolveTillBranch(org, till)?.id;
+  return (
+    overrides.find((row) => row.scope === "branch" && row.id === branchId) ||
+    overrides.find((row) => row.scope === "branch" && row.scopeId === branchId) ||
+    overrides.find((row) => row.scope === "store" && row.scopeId === till.storeId) ||
+    undefined
+  );
+}
+
 export function applyHqOrg(org: HqOrgSnapshot, till?: TillLocation | null) {
   cacheHqOrg(org);
   const vat = org.taxes.find((row) => row.isDefault && row.active) ?? org.taxes.find((row) => row.active);
@@ -241,9 +270,45 @@ export function applyHqOrg(org: HqOrgSnapshot, till?: TillLocation | null) {
   const branchAddress = branch ? formatBranchAddress(branch) : "";
   const branchPhone = branch?.phone?.trim() || "";
   const branchName = branch?.name?.trim() || "";
+  const registerOverride = resolveRegisterOverride(org, till);
   const showTax = flag(s.receiptShowTax, current.receiptShowTax);
-  const copies = Math.max(1, s.receiptCopies ?? current.receiptCopies);
-  const duplicate = flag(s.printDuplicateReceipt, current.printDuplicateReceipt);
+  const copies = Math.max(
+    1,
+    registerOverride?.receiptCopies ?? s.receiptCopies ?? current.receiptCopies,
+  );
+  const duplicate =
+    registerOverride?.printDuplicateReceipt ??
+    flag(s.printDuplicateReceipt, current.printDuplicateReceipt);
+  const quickButtons = Array.isArray(s.registerQuickButtons)
+    ? s.registerQuickButtons
+    : Array.isArray(current.registerQuickButtons)
+      ? current.registerQuickButtons
+      : DEFAULT_REGISTER_QUICK_BUTTONS;
+  const saleFields = Array.isArray(s.registerSaleFields)
+    ? s.registerSaleFields
+    : Array.isArray(current.registerSaleFields)
+      ? current.registerSaleFields
+      : DEFAULT_REGISTER_SALE_FIELDS;
+  const baseTenders = Array.isArray(s.registerTenders)
+    ? s.registerTenders
+    : Array.isArray(current.registerTenders)
+      ? current.registerTenders
+      : DEFAULT_REGISTER_TENDERS;
+  const outletOverrides = Array.isArray(s.registerOutletOverrides)
+    ? s.registerOutletOverrides
+    : Array.isArray(current.registerOutletOverrides)
+      ? current.registerOutletOverrides
+      : DEFAULT_REGISTER_OUTLET_OVERRIDES;
+  const outletTenders = registerOverride?.enabledTenders;
+  const registerTenders =
+    outletTenders === undefined
+      ? baseTenders
+      : baseTenders.map((tender) => ({
+          ...tender,
+          active: tender.active && outletTenders.includes(tender.id),
+        }));
+  const tenderActive = (id: RegisterTender["id"], fallback: boolean) =>
+    registerTenders.find((tender) => tender.id === id)?.active ?? fallback;
 
   const next: StoreSettings = {
     ...current,
@@ -266,13 +331,17 @@ export function applyHqOrg(org: HqOrgSnapshot, till?: TillLocation | null) {
     includeVatBreakdown: showTax,
     receiptShowTax: showTax,
     receiptHeader: s.receiptHeader ?? "",
-    receiptFooter: s.receiptFooter ?? "",
+    receiptFooter: registerOverride?.receiptFooter ?? s.receiptFooter ?? "",
     receiptPaper: s.receiptPaper ?? current.receiptPaper,
     receiptBrandColor: s.receiptBrandColor?.trim() || current.receiptBrandColor,
     receiptBarcodeValue: s.receiptBarcodeValue?.trim() || "",
     invoicePrefix: s.invoicePrefix || current.invoicePrefix,
-    idleLockMinutes: s.idleLockMinutes,
-    requireOpenShift: s.requireOpenShift,
+    idleLockMinutes: registerOverride?.idleLockMinutes ?? s.idleLockMinutes,
+    requireOpenShift: registerOverride?.requireOpenShift ?? s.requireOpenShift,
+    registerQuickButtons: quickButtons,
+    registerSaleFields: saleFields,
+    registerTenders,
+    registerOutletOverrides: outletOverrides,
     lowStockQty: s.lowStockQty,
     blockNegativeStock: s.blockNegativeStock,
     allowPriceOverride: s.allowPriceOverride ?? current.allowPriceOverride,
@@ -283,7 +352,8 @@ export function applyHqOrg(org: HqOrgSnapshot, till?: TillLocation | null) {
     restockOnRefund: s.restockOnRefund ?? current.restockOnRefund,
     refundWithoutTicket: s.refundWithoutTicket ?? current.refundWithoutTicket,
     tipsEnabled: s.tipsEnabled ?? current.tipsEnabled,
-    autoPrintReceipt: s.autoPrintReceipt ?? current.autoPrintReceipt,
+    autoPrintReceipt:
+      registerOverride?.autoPrintReceipt ?? s.autoPrintReceipt ?? current.autoPrintReceipt,
     openCashDrawer: s.openCashDrawer ?? current.openCashDrawer,
     receiptCopies: duplicate ? Math.max(2, copies) : copies,
     printDuplicateReceipt: duplicate,
@@ -313,19 +383,34 @@ export function applyHqOrg(org: HqOrgSnapshot, till?: TillLocation | null) {
     receiptShowPoweredBy: flag(s.receiptShowPoweredBy, current.receiptShowPoweredBy),
     receiptShowLogo: flag(s.receiptShowLogo, current.receiptShowLogo),
     companyLogoUrl: org.company.logoUrl || "",
-    showSkuOnReceipt: flag(s.showSkuOnReceipt, current.showSkuOnReceipt),
-    receiptTemplate: s.receiptTemplate ?? current.receiptTemplate,
+    showSkuOnReceipt:
+      registerOverride?.showSkuOnReceipt ?? flag(s.showSkuOnReceipt, current.showSkuOnReceipt),
+    receiptTemplate:
+      registerOverride?.receiptTemplate ?? s.receiptTemplate ?? current.receiptTemplate,
     storefrontEnabled: front?.enabled ?? current.storefrontEnabled,
     storefrontUrl: front?.url || current.storefrontUrl,
     storefrontSyncPrices: front?.syncPrices ?? current.storefrontSyncPrices,
     storefrontSyncStock: front?.syncStock ?? current.storefrontSyncStock,
     storeHours: front?.hours || current.storeHours,
-    payCash: pay.length ? pay.some((row) => row.provider === "cash" && row.enabled) : current.payCash,
-    payCard: pay.length ? pay.some((row) => row.provider === "card" && row.enabled) : current.payCard,
-    payTransfer: pay.length
-      ? pay.some((row) => (row.provider === "bank" || row.provider === "moniepoint") && row.enabled)
-      : current.payTransfer,
-    payWallet: pay.some((row) => row.provider === "paystack" && row.enabled) || current.payWallet,
+    payCash: tenderActive(
+      "cash",
+      pay.length ? pay.some((row) => row.provider === "cash" && row.enabled) : current.payCash,
+    ),
+    payCard: tenderActive(
+      "card",
+      pay.length ? pay.some((row) => row.provider === "card" && row.enabled) : current.payCard,
+    ),
+    payTransfer: tenderActive(
+      "transfer",
+      pay.length
+        ? pay.some((row) => (row.provider === "bank" || row.provider === "moniepoint") && row.enabled)
+        : current.payTransfer,
+    ),
+    payWallet: tenderActive(
+      "wallet",
+      pay.some((row) => row.provider === "paystack" && row.enabled) || current.payWallet,
+    ),
+    paySplit: tenderActive("split", current.paySplit),
     gatewayPaystack: pay.some((row) => row.provider === "paystack" && row.enabled),
     gatewayFlutterwave: pay.some((row) => row.provider === "flutterwave" && row.enabled),
     gatewayMoniepoint: pay.some((row) => row.provider === "moniepoint" && row.enabled),

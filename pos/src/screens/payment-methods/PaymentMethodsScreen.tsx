@@ -10,6 +10,7 @@ import type { TenderType } from "../../lib/types";
 import { formatMoney } from "../../lib/types";
 import { enabledTenders } from "../../lib/store-settings";
 import { useStoreSettings } from "../../lib/use-store-settings";
+import type { RegisterTender } from "../../lib/register-config";
 
 type Props = {
   selected: TenderType;
@@ -18,47 +19,57 @@ type Props = {
   onBack: () => void;
 };
 
-const METHODS: {
-  id: TenderType;
-  label: string;
-  hint: string;
-  icon: typeof Banknote;
-  tone: "cash" | "card" | "split" | "transfer" | "wallet";
-}[] = [
+const METHOD_STYLE: Record<
+  RegisterTender["id"],
+  { icon: typeof Banknote; tone: "cash" | "card" | "split" | "transfer" | "wallet" }
+> = {
+  cash: { icon: Banknote, tone: "cash" },
+  card: { icon: CreditCard, tone: "card" },
+  transfer: { icon: ArrowLeftRight, tone: "transfer" },
+  wallet: { icon: Wallet, tone: "wallet" },
+  split: { icon: PieChart, tone: "split" },
+};
+
+const FALLBACK_METHODS: RegisterTender[] = [
   {
     id: "cash",
     label: "Cash",
     hint: "Count naira notes and coins on the till, then confirm.",
-    icon: Banknote,
-    tone: "cash",
+    color: "#16A34A",
+    active: true,
+    requiresReference: false,
   },
   {
     id: "card",
     label: "Credit Card",
     hint: "Debit or credit on the POS. Wait for an approval slip.",
-    icon: CreditCard,
-    tone: "card",
+    color: "#2563EB",
+    active: true,
+    requiresReference: false,
   },
   {
     id: "split",
     label: "Split",
     hint: "Share this ticket across cash, card, transfer, or wallet.",
-    icon: PieChart,
-    tone: "split",
+    color: "#EA580C",
+    active: true,
+    requiresReference: false,
   },
   {
     id: "transfer",
     label: "Transfer",
     hint: "Customer pays to the shop account. Confirm the bank alert.",
-    icon: ArrowLeftRight,
-    tone: "transfer",
+    color: "#7C3AED",
+    active: true,
+    requiresReference: false,
   },
   {
     id: "wallet",
     label: "Wallet",
     hint: "OPay, PalmPay, Kuda, or another naira wallet. Confirm credit.",
-    icon: Wallet,
-    tone: "wallet",
+    color: "#DB2777",
+    active: true,
+    requiresReference: false,
   },
 ];
 
@@ -69,9 +80,11 @@ export function PaymentMethodsScreen({
   onBack,
 }: Props) {
   const settings = useStoreSettings();
-  const methods = METHODS.filter((method) =>
-    (enabledTenders(settings) as TenderType[]).includes(method.id),
-  );
+  const configured = settings.registerTenders?.length
+    ? settings.registerTenders
+    : FALLBACK_METHODS;
+  const activeIds = enabledTenders(settings) as TenderType[];
+  const methods = configured.filter((method) => method.active && activeIds.includes(method.id));
 
   return (
     <section className="pay">
@@ -109,22 +122,32 @@ export function PaymentMethodsScreen({
         </div>
       ) : null}
       <div className="methods">
-        {methods.map(({ id, label, hint, icon: Icon, tone }) => (
-          <button
-            key={id}
-            className={`method ${selected === id ? "selected" : ""}`}
-            onClick={() => onSelect(id)}
-          >
-            <span className={`method-icon ${tone}`}>
-              <Icon size={28} strokeWidth={1.75} />
-            </span>
-            <span className="method-copy">
-              <span className="method-label">{label}</span>
-              <span className="method-hint">{hint}</span>
-            </span>
-            <span className="radio" />
-          </button>
-        ))}
+        {methods.map((method) => {
+          const { icon: Icon, tone } = METHOD_STYLE[method.id];
+          return (
+            <button
+              key={method.id}
+              className={`method ${selected === method.id ? "selected" : ""}`}
+              style={{ borderColor: selected === method.id ? method.color : undefined }}
+              onClick={() => onSelect(method.id)}
+            >
+              <span
+                className={`method-icon ${tone}`}
+                style={{ color: method.color, backgroundColor: `${method.color}18` }}
+              >
+                <Icon size={28} strokeWidth={1.75} />
+              </span>
+              <span className="method-copy">
+                <span className="method-label">{method.label}</span>
+                <span className="method-hint">
+                  {method.hint}
+                  {method.requiresReference ? " Reference required." : ""}
+                </span>
+              </span>
+              <span className="radio" />
+            </button>
+          );
+        })}
       </div>
     </section>
   );

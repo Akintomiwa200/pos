@@ -18,6 +18,12 @@ import {
   isThemePreference,
 } from "@/lib/appearance";
 import { setOrgLocale } from "@/lib/org-locale";
+import {
+  DEFAULT_REGISTER_OUTLET_OVERRIDES,
+  DEFAULT_REGISTER_QUICK_BUTTONS,
+  DEFAULT_REGISTER_SALE_FIELDS,
+  DEFAULT_REGISTER_TENDERS,
+} from "@/lib/register-config";
 
 export type SettingsLiveEvent = {
   type: "settings";
@@ -76,6 +82,10 @@ const SETTINGS_DEFAULTS: HqOrgSettings = {
   applyVat: true,
   idleLockMinutes: 0,
   requireOpenShift: true,
+  registerQuickButtons: DEFAULT_REGISTER_QUICK_BUTTONS,
+  registerSaleFields: DEFAULT_REGISTER_SALE_FIELDS,
+  registerTenders: DEFAULT_REGISTER_TENDERS,
+  registerOutletOverrides: DEFAULT_REGISTER_OUTLET_OVERRIDES,
   lowStockQty: 5,
   blockNegativeStock: true,
   printDuplicateReceipt: false,
@@ -109,7 +119,14 @@ const SETTINGS_DEFAULTS: HqOrgSettings = {
 export function normalizeSettings(
   raw: Partial<HqOrgSettings> | null | undefined,
 ): HqOrgSettings {
-  return { ...SETTINGS_DEFAULTS, ...raw };
+  return {
+    ...SETTINGS_DEFAULTS,
+    ...raw,
+    registerQuickButtons: raw?.registerQuickButtons ?? DEFAULT_REGISTER_QUICK_BUTTONS,
+    registerSaleFields: raw?.registerSaleFields ?? DEFAULT_REGISTER_SALE_FIELDS,
+    registerTenders: raw?.registerTenders ?? DEFAULT_REGISTER_TENDERS,
+    registerOutletOverrides: raw?.registerOutletOverrides ?? DEFAULT_REGISTER_OUTLET_OVERRIDES,
+  };
 }
 
 export function appearanceFromSettings(settings: HqOrgSettings): AppearancePrefs & {

@@ -1,3 +1,14 @@
+import {
+  DEFAULT_REGISTER_OUTLET_OVERRIDES,
+  DEFAULT_REGISTER_QUICK_BUTTONS,
+  DEFAULT_REGISTER_SALE_FIELDS,
+  DEFAULT_REGISTER_TENDERS,
+  type RegisterOutletOverride,
+  type RegisterQuickButton,
+  type RegisterSaleField,
+  type RegisterTender,
+} from "./register-config";
+
 const KEY = "pos.store-settings.v1";
 export const SETTINGS_EVENT = "pos-settings";
 
@@ -137,6 +148,11 @@ export type StoreSettings = {
   gatewayDefault: GatewayId;
   idleLockMinutes: number;
   requireOpenShift: boolean;
+  /** Admin-built register layout synced from HQ. */
+  registerQuickButtons: RegisterQuickButton[];
+  registerSaleFields: RegisterSaleField[];
+  registerTenders: RegisterTender[];
+  registerOutletOverrides: RegisterOutletOverride[];
   lowStockAlert: boolean;
   lowStockQty: number;
   blockNegativeStock: boolean;
@@ -270,9 +286,31 @@ export function defaultStoreSettings(): StoreSettings {
     gatewayDefault: "paystack",
     idleLockMinutes: 0,
     requireOpenShift: true,
+    registerQuickButtons: DEFAULT_REGISTER_QUICK_BUTTONS,
+    registerSaleFields: DEFAULT_REGISTER_SALE_FIELDS,
+    registerTenders: DEFAULT_REGISTER_TENDERS,
+    registerOutletOverrides: DEFAULT_REGISTER_OUTLET_OVERRIDES,
     lowStockAlert: true,
     lowStockQty: 5,
     blockNegativeStock: true,
+  };
+}
+
+function withRegisterDefaults(settings: StoreSettings): StoreSettings {
+  return {
+    ...settings,
+    registerQuickButtons: Array.isArray(settings.registerQuickButtons)
+      ? settings.registerQuickButtons
+      : DEFAULT_REGISTER_QUICK_BUTTONS,
+    registerSaleFields: Array.isArray(settings.registerSaleFields)
+      ? settings.registerSaleFields
+      : DEFAULT_REGISTER_SALE_FIELDS,
+    registerTenders: Array.isArray(settings.registerTenders)
+      ? settings.registerTenders
+      : DEFAULT_REGISTER_TENDERS,
+    registerOutletOverrides: Array.isArray(settings.registerOutletOverrides)
+      ? settings.registerOutletOverrides
+      : DEFAULT_REGISTER_OUTLET_OVERRIDES,
   };
 }
 
@@ -280,7 +318,7 @@ export function loadStoreSettings(): StoreSettings {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return defaultStoreSettings();
-    return { ...defaultStoreSettings(), ...JSON.parse(raw) };
+    return withRegisterDefaults({ ...defaultStoreSettings(), ...JSON.parse(raw) });
   } catch {
     return defaultStoreSettings();
   }
@@ -292,12 +330,17 @@ export function saveStoreSettings(settings: StoreSettings) {
 }
 
 export function enabledTenders(settings = loadStoreSettings()) {
-  const ids: Array<"cash" | "card" | "transfer" | "wallet" | "split"> = [];
-  if (settings.payCash) ids.push("cash");
-  if (settings.payCard) ids.push("card");
-  if (settings.payTransfer) ids.push("transfer");
-  if (settings.payWallet) ids.push("wallet");
-  if (settings.paySplit) ids.push("split");
+  const ids: Array<"cash" | "card" | "transfer" | "wallet" | "split"> =
+    settings.registerTenders?.length
+      ? settings.registerTenders.filter((tender) => tender.active).map((tender) => tender.id)
+      : [];
+  if (ids.length === 0 && !settings.registerTenders?.length) {
+    if (settings.payCash) ids.push("cash");
+    if (settings.payCard) ids.push("card");
+    if (settings.payTransfer) ids.push("transfer");
+    if (settings.payWallet) ids.push("wallet");
+    if (settings.paySplit) ids.push("split");
+  }
   return ids.length ? ids : (["cash"] satisfies typeof ids);
 }
 

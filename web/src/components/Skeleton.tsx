@@ -188,12 +188,14 @@ export function ConsoleChromeSkeleton() {
         </div>
       </aside>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <header className="flex h-16 w-full shrink-0 items-center gap-3 bg-pos-bg px-4 sm:px-6 lg:h-[10vh] lg:px-8">
-          <Bone className="h-5 w-36 shrink-0 rounded-md" />
-          <Bone className="h-10 w-56 shrink-0 rounded-xl" />
-          <div className="ml-auto flex shrink-0 items-center gap-2">
+        <header className="flex h-14 w-full shrink-0 items-center gap-2 bg-pos-bg px-3 sm:h-16 sm:gap-3 sm:px-6 lg:h-[10vh] lg:gap-4 lg:px-8">
+          <Bone className="h-10 w-10 shrink-0 rounded-xl" />
+          <Bone className="h-5 w-24 shrink-0 rounded-md sm:w-36" />
+          <Bone className="ml-auto hidden h-10 w-56 shrink-0 rounded-xl sm:block" />
+          <div className="flex shrink-0 items-center gap-2">
+            <Bone className="hidden h-10 w-10 shrink-0 rounded-xl sm:block" />
             <Bone className="h-10 w-10 shrink-0 rounded-xl" />
-            <Bone className="h-[52px] w-56 shrink-0 rounded-2xl" />
+            <Bone className="h-10 w-10 shrink-0 rounded-xl sm:h-[52px] sm:w-56" />
           </div>
         </header>
         <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">

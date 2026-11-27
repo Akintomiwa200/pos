@@ -451,6 +451,54 @@ button {
   white-space: nowrap;
 }
 
+.sale-fields {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  background: #fafafa;
+}
+
+.sale-field {
+  display: grid;
+  gap: 5px;
+}
+
+.sale-field > span {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #6b7280;
+  text-transform: uppercase;
+}
+
+.sale-field em {
+  color: #e11d48;
+  font-style: normal;
+}
+
+.sale-field input,
+.sale-field textarea {
+  width: 100%;
+  border: 1px solid #d4d4d8;
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: #fff;
+  color: #1c1c1e;
+  font: inherit;
+  font-size: 13px;
+  resize: vertical;
+}
+
+.sale-field input:focus,
+.sale-field textarea:focus {
+  outline: 2px solid #0f766e;
+  outline-offset: 1px;
+  border-color: #0f766e;
+}
+
 .summary {
   margin-top: 8px;
   background: #f3f4f6;
@@ -724,6 +772,30 @@ button {
   background: #1c1c1e;
   border-color: #1c1c1e;
   color: #fff;
+}
+
+.register-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.register-shortcut {
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 7px 13px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.register-shortcut:hover {
+  background: #f4f4f5;
 }
 
 .catalog {

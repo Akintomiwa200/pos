@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { CartLine, CatalogItem, TenderType } from "./lib/types";
+import type { RegisterAction } from "./lib/register-config";
 import { computeLineTotals, formatMoney, sellPrice } from "./lib/types";
 import { formatStock, formatUnitLabel } from "./lib/units";
 import { Sidebar } from "./components/layout/Sidebar";
@@ -184,6 +185,7 @@ export default function App() {
       : local;
   });
   const [discountMinor, setDiscountMinor] = useState(0);
+  const [saleDetails, setSaleDetails] = useState<Record<string, string>>({});
   const [holdOpen, setHoldOpen] = useState(false);
   const [discountOpen, setDiscountOpen] = useState(false);
   const [refundSale, setRefundSale] = useState<SaleReceipt | null>(null);
@@ -1199,6 +1201,12 @@ export default function App() {
       tillKey: till?.name ?? null,
       discountMinor,
       tipMinor: tipAmount > 0 ? tipAmount : null,
+      customerName: saleDetails.customer?.trim() || null,
+      customerPhone: saleDetails.phone?.trim() || null,
+      customerEmail: saleDetails.email?.trim() || null,
+      note: saleDetails.notes?.trim() || null,
+      reference: saleDetails.reference?.trim() || null,
+      taxExemption: saleDetails.tax?.trim() || null,
     };
     if (settings.trackStockOnTill) {
       applySaleDeltas(
@@ -1243,6 +1251,7 @@ export default function App() {
     }
     setCart([]);
     setDiscountMinor(0);
+    setSaleDetails({});
     setTipMinor(0);
     setTipContext(null);
     setTipOpen(false);
@@ -1354,6 +1363,7 @@ export default function App() {
     }
     setCart([]);
     setDiscountMinor(0);
+    setSaleDetails({});
     setTipMinor(0);
     setTipContext(null);
     setTipOpen(false);
@@ -1368,6 +1378,33 @@ export default function App() {
     setScreen("home");
   }
 
+  function runRegisterAction(action: RegisterAction) {
+    if (shiftLocked && action !== "new") return;
+    if (action === "discount") {
+      if (settings.allowDiscounts) setDiscountOpen(true);
+      return;
+    }
+    if (action === "hold") {
+      setHoldOpen(true);
+      return;
+    }
+    if (action === "saved") {
+      setScreen("saved");
+      return;
+    }
+    if (action === "payment") {
+      if (!empty) setScreen("payment");
+      return;
+    }
+    if (action === "new") newOrder();
+  }
+
+  function missingRequiredSaleFields() {
+    return settings.registerSaleFields.filter(
+      (field) => field.mode === "required" && !(saleDetails[field.key] ?? "").trim(),
+    );
+  }
+
   function continueAction() {
     if (shiftLocked) return;
     if (screen === "paid") {
@@ -1376,10 +1413,20 @@ export default function App() {
     }
     if (screen === "home" || screen === "items" || screen === "kds" || screen === "saved") {
       if (empty) return;
+      const missing = missingRequiredSaleFields();
+      if (missing.length) {
+        setNotice(`Required before checkout: ${missing.map((field) => field.label).join(", ")}`);
+        return;
+      }
       setScreen("payment");
       return;
     }
     if (screen === "payment") {
+      const missing = missingRequiredSaleFields();
+      if (missing.length) {
+        setNotice(`Required before checkout: ${missing.map((field) => field.label).join(", ")}`);
+        return;
+      }
       startCharge(tender);
     }
   }
@@ -1611,8 +1658,11 @@ lines={cart}
             onQty={changeQty}
           onPrice={changePrice}
           discountMinor={discountMinor}
-          onDiscount={settings.allowDiscounts ? () => setDiscountOpen(true) : undefined}
-          onHold={() => setHoldOpen(true)}
+          onRegisterAction={runRegisterAction}
+          saleDetails={saleDetails}
+          onSaleDetail={(key, value) =>
+            setSaleDetails((current) => ({ ...current, [key]: value }))
+          }
           onContinue={continueAction}
           continueLabel={continueLabel}
           continueDisabled={

@@ -1,4 +1,10 @@
 import { api } from "./hq-api";
+import type {
+  RegisterOutletOverride,
+  RegisterQuickButton,
+  RegisterSaleField,
+  RegisterTender,
+} from "./register-config";
 
 export type HqCompany = {
   id: string;
@@ -112,7 +118,15 @@ export type HqOrgSettings = {
   receiptShowDiscount: boolean;
   invoicePrefix: string;
   invoiceNextNumber: number;
-  invoiceTemplate: "modern" | "letterhead" | "classic" | "sapphire" | "ivory";
+  invoiceTemplate:
+    | "modern"
+    | "letterhead"
+    | "classic"
+    | "sapphire"
+    | "ivory"
+    | "minimal"
+    | "coral"
+    | "slate";
   invoiceBrandColor: string;
   invoicePanelColor: string;
   invoiceShowLogo: boolean;
@@ -122,6 +136,11 @@ export type HqOrgSettings = {
   applyVat: boolean;
   idleLockMinutes: number;
   requireOpenShift: boolean;
+  /** Admin-built till shortcuts and sale-screen fields. */
+  registerQuickButtons: RegisterQuickButton[];
+  registerSaleFields: RegisterSaleField[];
+  registerTenders: RegisterTender[];
+  registerOutletOverrides: RegisterOutletOverride[];
   lowStockQty: number;
   blockNegativeStock: boolean;
   printDuplicateReceipt: boolean;

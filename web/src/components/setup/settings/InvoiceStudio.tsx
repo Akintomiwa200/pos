@@ -3,24 +3,14 @@
 import type { HqCompany, HqOrgSettings } from "@/lib/hq-setup";
 import { Field, PrimaryButton, fieldClass } from "@/components/setup/SetupChrome";
 import { settingsFieldClass, type SettingsFieldErrors } from "@/lib/settings-validation";
-import { InvoiceLivePreview } from "./DocumentPreviews";
+import { INVOICE_TEMPLATES } from "@/lib/invoice-templates";
+import { InvoiceLivePreview } from "./InvoiceTemplatePreview";
 import {
   ColorField,
   SettingRow,
   SettingsCard,
   Switch,
 } from "./settings-ui";
-
-const INVOICE_TEMPLATES: {
-  id: HqOrgSettings["invoiceTemplate"];
-  label: string;
-}[] = [
-  { id: "modern", label: "Modern" },
-  { id: "letterhead", label: "Letterhead" },
-  { id: "classic", label: "Classic" },
-  { id: "sapphire", label: "Sapphire" },
-  { id: "ivory", label: "Ivory" },
-];
 
 function firstErrorLine(errors: SettingsFieldErrors) {
   for (const value of Object.values(errors)) {
@@ -169,23 +159,37 @@ export function InvoiceStudio({
         </div>
 
         <div className="space-y-4 xl:sticky xl:top-4 xl:self-start">
-          <SettingsCard title="Template" copy="Style for customer-facing invoices.">
-            <div className="flex flex-wrap gap-2 px-5 py-4 sm:px-6">
+          <SettingsCard
+            title="Template"
+            copy="Each name has its own layout. The preview updates the moment you pick one."
+          >
+            <div className="grid grid-cols-2 gap-2.5 px-5 py-4 sm:grid-cols-3 sm:px-6 xl:grid-cols-2">
               {INVOICE_TEMPLATES.map((tpl) => {
                 const on = draft.invoiceTemplate === tpl.id;
                 return (
                   <button
                     key={tpl.id}
                     type="button"
+                    aria-pressed={on}
                     onClick={() => onChange({ ...draft, invoiceTemplate: tpl.id })}
-                    className={`rounded-full px-3.5 py-2 text-sm font-medium transition ${
+                    className={`rounded-2xl border p-2.5 text-left transition ${
                       on
-                        ? "bg-pos-primary text-white shadow-pos-primary"
-                        : "bg-pos-surface-muted text-pos-ink-muted hover:text-pos-ink"
+                        ? "border-pos-primary bg-pos-primary/5 ring-1 ring-pos-primary/30"
+                        : "border-pos-border bg-pos-surface hover:border-pos-primary/40 hover:bg-pos-surface-muted"
                     }`}
                   >
-                    {on ? "✓ " : ""}
-                    {tpl.label}
+                    <span
+                      aria-hidden
+                      className="mb-2 block h-8 w-full rounded-lg border border-black/5 shadow-sm"
+                      style={{ background: tpl.swatch }}
+                    />
+                    <span className="flex items-center justify-between gap-1">
+                      <span className={`text-[13px] font-semibold ${on ? "text-pos-primary" : "text-pos-ink"}`}>
+                        {tpl.label}
+                      </span>
+                      {on ? <span className="text-[12px] font-bold text-pos-primary">✓</span> : null}
+                    </span>
+                    <span className="mt-0.5 block text-[11px] text-pos-ink-faint">{tpl.hint}</span>
                   </button>
                 );
               })}

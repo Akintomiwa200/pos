@@ -71,6 +71,13 @@ export type ChatEvent =
   | { type: "snapshot"; conversations: ChatConversation[]; presence: ChatPresence[] }
   | { type: "message"; message: ChatMessage; conversation: ChatConversation }
   | { type: "conversation"; conversation: ChatConversation; action: "updated" | "created" }
-  | { type: "typing"; conversationId: string; name: string; state: "on" | "off"; at: string }
+  | {
+      type: "typing";
+      conversationId: string;
+      name: string;
+      senderId?: string;
+      state: "on" | "off";
+      at: string;
+    }
   | { type: "call"; conversationId: string; signal: CallSignal; at: string }
   | { type: "presence"; presence: ChatPresence[] };

@@ -1,5 +1,13 @@
 import { BadRequestException } from "@nestjs/common";
 import type { HqOrgSettings } from "./setup.types";
+import {
+  REGISTER_ACTIONS,
+  REGISTER_BUTTON_KINDS,
+  REGISTER_FIELD_KEYS,
+  REGISTER_FIELD_MODES,
+  REGISTER_RECEIPT_TEMPLATES,
+  REGISTER_TENDER_IDS,
+} from "./register-config.types";
 
 const RECEIPT_TEMPLATES = new Set(["classic", "compact", "bold", "minimal"]);
 const INVOICE_TEMPLATES = new Set([
@@ -8,6 +16,9 @@ const INVOICE_TEMPLATES = new Set([
   "classic",
   "sapphire",
   "ivory",
+  "minimal",
+  "coral",
+  "slate",
 ]);
 const UI_THEMES = new Set(["system", "light", "dark"]);
 const UI_FONTS = new Set([
@@ -27,6 +38,7 @@ const HEX_COLOR = /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/;
 const CURRENCY = /^[A-Z]{3}$/;
 const LANGUAGE = /^[a-z]{2}(-[A-Za-z]{2})?$/;
 const INVOICE_PREFIX = /^[A-Za-z0-9_-]{1,12}$/;
+const REGISTER_ID = /^[A-Za-z0-9_-]{1,40}$/;
 
 export type SettingsFieldError = { field: keyof HqOrgSettings; message: string };
 
@@ -78,6 +90,179 @@ function requireColor(
     return undefined;
   }
   return color.toUpperCase();
+}
+
+function asRows(value: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((row): row is Record<string, unknown> =>
+    Boolean(row && typeof row === "object" && !Array.isArray(row)),
+  );
+}
+
+function validateRegisterPatch(
+  field: keyof HqOrgSettings,
+  value: unknown,
+  errors: SettingsFieldError[],
+  data: Partial<HqOrgSettings>,
+) {
+  const rows = asRows(value);
+  if (!Array.isArray(value)) {
+    errors.push({ field, message: "Expected a list of register settings" });
+    return;
+  }
+
+  if (field === "registerQuickButtons") {
+    if (rows.length > 24) errors.push({ field, message: "Keep at most 24 till buttons" });
+    const ids = new Set<string>();
+    for (const row of rows) {
+      const id = asTrimmed(row.id);
+      const label = asTrimmed(row.label);
+      const target = asTrimmed(row.value);
+      const color = asTrimmed(row.color);
+      const kind = String(row.kind ?? "");
+      const valid =
+        REGISTER_ID.test(id) &&
+        label.length > 0 &&
+        label.length <= 48 &&
+        target.length > 0 &&
+        target.length <= 120 &&
+        HEX_COLOR.test(color) &&
+        REGISTER_BUTTON_KINDS.includes(kind as (typeof REGISTER_BUTTON_KINDS)[number]) &&
+        typeof row.active === "boolean" &&
+        !ids.has(id) &&
+        (kind !== "action" ||
+          REGISTER_ACTIONS.includes(target as (typeof REGISTER_ACTIONS)[number]));
+      ids.add(id);
+      if (!valid) {
+        errors.push({
+          field,
+          message: "Each button needs a unique id, label, target, colour, and valid kind",
+        });
+        break;
+      }
+    }
+    if (!errors.some((error) => error.field === field)) {
+      (data as Record<string, unknown>)[field] = rows;
+    }
+    return;
+  }
+
+  if (field === "registerSaleFields") {
+    if (rows.length > REGISTER_FIELD_KEYS.length) {
+      errors.push({ field, message: "Sale fields are limited to the supported field list" });
+    }
+    const keys = new Set<string>();
+    for (const row of rows) {
+      const key = String(row.key ?? "");
+      const label = asTrimmed(row.label);
+      const order = Number(row.order);
+      const valid =
+        REGISTER_FIELD_KEYS.includes(key as (typeof REGISTER_FIELD_KEYS)[number]) &&
+        label.length > 0 &&
+        label.length <= 48 &&
+        REGISTER_FIELD_MODES.includes(String(row.mode) as (typeof REGISTER_FIELD_MODES)[number]) &&
+        Number.isInteger(order) &&
+        order >= 0 &&
+        order <= 100 &&
+        !keys.has(key);
+      keys.add(key);
+      if (!valid) {
+        errors.push({
+          field,
+          message: "Each sale field needs a unique supported key, label, mode, and order",
+        });
+        break;
+      }
+    }
+    if (!errors.some((error) => error.field === field)) {
+      (data as Record<string, unknown>)[field] = rows;
+    }
+    return;
+  }
+
+  if (field === "registerTenders") {
+    if (rows.length > REGISTER_TENDER_IDS.length) {
+      errors.push({ field, message: "Payment methods are limited to the supported tender list" });
+    }
+    const ids = new Set<string>();
+    for (const row of rows) {
+      const id = String(row.id ?? "");
+      const label = asTrimmed(row.label);
+      const hint = asTrimmed(row.hint);
+      const color = asTrimmed(row.color);
+      const valid =
+        REGISTER_TENDER_IDS.includes(id as (typeof REGISTER_TENDER_IDS)[number]) &&
+        label.length > 0 &&
+        label.length <= 48 &&
+        hint.length > 0 &&
+        hint.length <= 120 &&
+        HEX_COLOR.test(color) &&
+        typeof row.active === "boolean" &&
+        typeof row.requiresReference === "boolean" &&
+        !ids.has(id);
+      ids.add(id);
+      if (!valid) {
+        errors.push({
+          field,
+          message: "Each payment method needs a unique id, label, hint, colour, and toggle",
+        });
+        break;
+      }
+    }
+    if (!errors.some((error) => error.field === field)) {
+      (data as Record<string, unknown>)[field] = rows;
+    }
+    return;
+  }
+
+  if (rows.length > 50) {
+    errors.push({ field, message: "Keep at most 50 outlet overrides" });
+  }
+  const ids = new Set<string>();
+  for (const row of rows) {
+    const id = asTrimmed(row.id);
+    const scope = String(row.scope ?? "");
+    const scopeId = asTrimmed(row.scopeId);
+    const label = asTrimmed(row.label);
+    const idle = row.idleLockMinutes === undefined ? undefined : Number(row.idleLockMinutes);
+    const copies = row.receiptCopies === undefined ? undefined : Number(row.receiptCopies);
+    const enabled =
+      row.enabledTenders === undefined
+        ? undefined
+        : Array.isArray(row.enabledTenders)
+          ? row.enabledTenders.map((tender) => String(tender))
+          : null;
+    const valid =
+      REGISTER_ID.test(id) &&
+      (scope === "branch" || scope === "store") &&
+      scopeId.length > 0 &&
+      label.length > 0 &&
+      label.length <= 80 &&
+      !ids.has(id) &&
+      (idle === undefined || (Number.isInteger(idle) && idle >= 0 && idle <= 240)) &&
+      (copies === undefined || (Number.isInteger(copies) && copies >= 1 && copies <= 5)) &&
+      (row.receiptTemplate === undefined ||
+        REGISTER_RECEIPT_TEMPLATES.includes(
+          String(row.receiptTemplate) as (typeof REGISTER_RECEIPT_TEMPLATES)[number],
+        )) &&
+      (row.receiptFooter === undefined || String(row.receiptFooter).length <= 500) &&
+      (enabled === undefined ||
+        (enabled !== null &&
+          enabled.every((tender) =>
+            REGISTER_TENDER_IDS.includes(tender as (typeof REGISTER_TENDER_IDS)[number]),
+          )));
+    ids.add(id);
+    if (!valid) {
+      errors.push({
+        field,
+        message: "Each override needs a unique id, scope, label, and valid values",
+      });
+      break;
+    }
+  }
+  if (!errors.some((error) => error.field === field)) {
+    (data as Record<string, unknown>)[field] = rows;
+  }
 }
 
 /** Validate only keys present on the patch. Returns sanitized values + field errors. */
@@ -276,6 +461,18 @@ export function validateOrgSettingsInput(
   if (input.receiptCopies !== undefined) {
     const n = requireIntInRange("receiptCopies", input.receiptCopies, 1, 5, errors, "Receipt copies");
     if (n !== undefined) data.receiptCopies = n;
+  }
+
+  const registerFields: (keyof HqOrgSettings)[] = [
+    "registerQuickButtons",
+    "registerSaleFields",
+    "registerTenders",
+    "registerOutletOverrides",
+  ];
+  for (const field of registerFields) {
+    if (input[field] !== undefined) {
+      validateRegisterPatch(field, input[field], errors, data);
+    }
   }
 
   if (input.passwordMinLength !== undefined) {

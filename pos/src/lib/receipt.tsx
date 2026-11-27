@@ -36,6 +36,10 @@ export type SaleReceipt = {
   tillKey?: string | null;
   customerName?: string | null;
   customerPhone?: string | null;
+  customerEmail?: string | null;
+  note?: string | null;
+  reference?: string | null;
+  taxExemption?: string | null;
   loyaltyNumber?: string | null;
   loyaltyBalanceBefore?: number | null;
   loyaltyBalanceAfter?: number | null;
@@ -133,6 +137,9 @@ export function formatReceiptText(
             : "",
         ]
       : []),
+    ...(sale.reference ? [`Ref: ${sale.reference}`] : []),
+    ...(sale.note ? [`Note: ${sale.note}`] : []),
+    ...(sale.taxExemption ? [`Tax exemption: ${sale.taxExemption}`] : []),
     "--------------------------------",
     ...sale.lines.flatMap((line) => {
       const lineTotal = money(line.unitPriceMinor * line.quantity);
@@ -540,6 +547,9 @@ export function buildReceiptLayout(
       out.push({ t: "r", l: "Phone", r: sale.customerPhone, gray: true });
     }
   }
+  if (sale.reference) pushRow("Reference", sale.reference, { gray: true });
+  if (sale.note) pushRow("Note", sale.note, { gray: true });
+  if (sale.taxExemption) pushRow("Tax exemption", sale.taxExemption, { gray: true });
 
   out.push({ t: "d" });
 

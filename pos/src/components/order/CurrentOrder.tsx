@@ -3,7 +3,8 @@ import { computeLineTotals, formatMoney } from "../../lib/types";
 import { formatPricePer } from "../../lib/units";
 import { useStoreSettings } from "../../lib/use-store-settings";
 import type { StaffUser } from "../../lib/staff";
-import { Bookmark, Minus, Percent, Plus, ShoppingBag, Trash2 } from "lucide-react";
+import type { RegisterAction } from "../../lib/register-config";
+import { Bookmark, Minus, Percent, Plus, ShoppingBag, Trash2, Wallet } from "lucide-react";
 
 type Props = {
   staff: StaffUser;
@@ -12,11 +13,20 @@ type Props = {
   discountMinor?: number;
   onQty: (id: string, delta: number) => void;
   onPrice?: (id: string, unitPriceMinor: number) => void;
-  onDiscount?: () => void;
-  onHold?: () => void;
+  onRegisterAction?: (action: RegisterAction) => void;
+  saleDetails: Record<string, string>;
+  onSaleDetail: (key: string, value: string) => void;
   onContinue: () => void;
   continueLabel?: string;
   continueDisabled?: boolean;
+};
+
+const ACTION_ICONS: Record<RegisterAction, typeof Percent> = {
+  discount: Percent,
+  hold: Bookmark,
+  saved: Bookmark,
+  payment: Wallet,
+  new: Plus,
 };
 
 export function CurrentOrder({
@@ -26,14 +36,21 @@ export function CurrentOrder({
   discountMinor = 0,
   onQty,
   onPrice,
-  onDiscount,
-  onHold,
+  onRegisterAction,
+  saleDetails,
+  onSaleDetail,
   onContinue,
   continueLabel = "Continue",
   continueDisabled = false,
 }: Props) {
   const rates = useStoreSettings();
   const totals = computeLineTotals(lines, rates, discountMinor);
+  const actions = rates.registerQuickButtons.filter(
+    (button) => button.active && button.kind === "action",
+  );
+  const saleFields = [...rates.registerSaleFields]
+    .filter((field) => field.mode !== "hidden")
+    .sort((a, b) => a.order - b.order);
 
   return (
     <aside className="order-wrap">
@@ -132,26 +149,55 @@ export function CurrentOrder({
           )}
         </div>
 
-        {lines.length > 0 && (onDiscount || onHold) ? (
+        {lines.length > 0 && actions.length > 0 && onRegisterAction ? (
           <div className="order-actions">
-            {onDiscount ? (
-              <button
-                type="button"
-                className={`order-action ${discountMinor > 0 ? "on" : ""}`}
-                onClick={onDiscount}
-              >
-                <Percent size={16} strokeWidth={2} />
-                {discountMinor > 0
-                  ? `Discount ${formatMoney(discountMinor)}`
-                  : "Discount"}
-              </button>
-            ) : null}
-            {onHold ? (
-              <button type="button" className="order-action" onClick={onHold}>
-                <Bookmark size={16} strokeWidth={2} />
-                Hold
-              </button>
-            ) : null}
+            {actions.map((button) => {
+              const Icon = ACTION_ICONS[button.value as RegisterAction] ?? Percent;
+              return (
+                <button
+                  key={button.id}
+                  type="button"
+                  className={`order-action ${
+                    button.value === "discount" && discountMinor > 0 ? "on" : ""
+                  }`}
+                  style={{ borderColor: button.color }}
+                  onClick={() => onRegisterAction(button.value as RegisterAction)}
+                >
+                  <Icon size={16} strokeWidth={2} />
+                  {button.value === "discount" && discountMinor > 0
+                    ? `Discount ${formatMoney(discountMinor)}`
+                    : button.label}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+
+        {saleFields.length > 0 ? (
+          <div className="sale-fields">
+            {saleFields.map((field) => (
+              <label className="sale-field" key={field.key}>
+                <span>
+                  {field.label}
+                  {field.mode === "required" ? <em aria-hidden="true"> *</em> : null}
+                </span>
+                {field.key === "notes" ? (
+                  <textarea
+                    rows={2}
+                    value={saleDetails[field.key] ?? ""}
+                    placeholder={field.mode === "required" ? "Required" : "Optional"}
+                    onChange={(event) => onSaleDetail(field.key, event.target.value)}
+                  />
+                ) : (
+                  <input
+                    type={field.key === "email" ? "email" : "text"}
+                    value={saleDetails[field.key] ?? ""}
+                    placeholder={field.mode === "required" ? "Required" : "Optional"}
+                    onChange={(event) => onSaleDetail(field.key, event.target.value)}
+                  />
+                )}
+              </label>
+            ))}
           </div>
         ) : null}
 

@@ -331,18 +331,18 @@ export function PaymentsPage() {
               onClick={() => setSummaryFocus(card.key)}
               className={`rounded-[24px] p-4 text-left shadow-pos-sm transition ${
                 active
-                  ? "bg-pos-inverse text-white shadow-pos-md"
+                  ? "bg-pos-inverse text-pos-inverse-ink shadow-pos-md"
                   : "bg-pos-surface text-pos-ink hover:bg-pos-surface-muted"
               }`}
             >
               <div
                 className={`grid h-11 w-11 place-items-center rounded-full ${
-                  active ? "bg-white/10 text-white" : card.soft
+                  active ? "bg-pos-inverse-ink/10 text-pos-inverse-ink" : card.soft
                 }`}
               >
                 <Icon size={20} strokeWidth={2} />
               </div>
-              <p className={`mt-4 text-sm ${active ? "text-white/65" : "text-pos-ink-muted"}`}>
+              <p className={`mt-4 text-sm ${active ? "text-pos-inverse-ink/65" : "text-pos-ink-muted"}`}>
                 {card.label}
               </p>
               <p className="mt-1 truncate text-[22px] font-semibold tracking-tight tabular-nums">
@@ -350,7 +350,7 @@ export function PaymentsPage() {
               </p>
               <p
                 className={`mt-2 inline-flex items-center gap-1 text-xs font-medium ${
-                  active ? "text-emerald-300" : "text-pos-success"
+                  active ? "text-emerald-300 dark:text-emerald-600" : "text-pos-success"
                 }`}
               >
                 <ArrowUpRight size={12} />

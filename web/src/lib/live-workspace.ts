@@ -105,14 +105,17 @@ export type TypingState = {
 
 export function useLiveChat(opts?: {
   viewerId?: string;
+  viewerName?: string;
   onMessage?: (conversationId: string, message: ChatMessage) => void;
   onCall?: (conversationId: string, signal: CallSignal, at: string) => void;
 }) {
   const viewerId = opts?.viewerId ?? "";
+  const viewerName = opts?.viewerName ?? "";
   const [conversations, setConversations] = useState<ChatConversation[]>([]);
   const [live, setLive] = useState(false);
   const [typing, setTyping] = useState<Record<string, TypingState>>({});
   const [presenceMap, setPresenceMap] = useState<Record<string, ChatPresence>>({});
+  const typingTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const onMessage = opts?.onMessage;
   const onCall = opts?.onCall;
@@ -121,9 +124,23 @@ export function useLiveChat(opts?: {
   onMessageRef.current = onMessage;
   onCallRef.current = onCall;
 
+  const clearTyping = useCallback((conversationId: string) => {
+    const timer = typingTimersRef.current[conversationId];
+    if (timer) clearTimeout(timer);
+    delete typingTimersRef.current[conversationId];
+    setTyping((prev) => {
+      if (!(conversationId in prev)) return prev;
+      const next = { ...prev };
+      delete next[conversationId];
+      return next;
+    });
+  }, []);
+
   useEffect(() => {
     if (!viewerId) return;
     let cancelled = false;
+    Object.values(typingTimersRef.current).forEach(clearTimeout);
+    typingTimersRef.current = {};
     setConversations([]);
     setTyping({});
     setPresenceMap({});
@@ -143,6 +160,9 @@ export function useLiveChat(opts?: {
         if (cancelled) return;
 
         if (payload.type === "snapshot") {
+          Object.values(typingTimersRef.current).forEach(clearTimeout);
+          typingTimersRef.current = {};
+          setTyping({});
           setConversations(payload.conversations);
           setPresenceMap(
             Object.fromEntries(
@@ -153,6 +173,8 @@ export function useLiveChat(opts?: {
         }
 
         if (payload.type === "message") {
+          // A message replaces any "typing" state for the same conversation.
+          clearTyping(payload.message.conversationId);
           setConversations((rows) => {
             const idx = rows.findIndex((r) => r.id === payload.conversation.id);
             if (idx === -1) return [payload.conversation, ...rows];
@@ -182,16 +204,36 @@ export function useLiveChat(opts?: {
         }
 
         if (payload.type === "typing") {
+          // Defensive: the server hides self-typing, but an older backend or a
+          // replayed frame must never show "You are typing".
+          const isSelf =
+            (Boolean(payload.senderId) && payload.senderId === viewerId) ||
+            (!payload.senderId && Boolean(viewerName) && payload.name === viewerName);
+          if (isSelf) return;
           const { conversationId, name, state, at } = payload;
-          setTyping((prev) => {
-            if (state === "off") {
-              if (!(conversationId in prev)) return prev;
-              const next = { ...prev };
-              delete next[conversationId];
-              return next;
-            }
-            return { ...prev, [conversationId]: { conversationId, name, state, at } };
-          });
+          if (state === "off") {
+            clearTyping(conversationId);
+            return;
+          }
+          const timer = typingTimersRef.current[conversationId];
+          if (timer) clearTimeout(timer);
+          delete typingTimersRef.current[conversationId];
+
+          setTyping((prev) => ({ ...prev, [conversationId]: { conversationId, name, state, at } }));
+
+          // Typing stops naturally if the peer closes the tab or loses the
+          // stream before sending an explicit "off".
+          if (state === "on") {
+            typingTimersRef.current[conversationId] = setTimeout(() => {
+              delete typingTimersRef.current[conversationId];
+              setTyping((prev) => {
+                if (prev[conversationId]?.at !== at) return prev;
+                const next = { ...prev };
+                delete next[conversationId];
+                return next;
+              });
+            }, 4_000);
+          }
           return;
         }
 
@@ -215,8 +257,10 @@ export function useLiveChat(opts?: {
     return () => {
       cancelled = true;
       source.close();
+      Object.values(typingTimersRef.current).forEach(clearTimeout);
+      typingTimersRef.current = {};
     };
-  }, [viewerId]);
+  }, [viewerId, viewerName, clearTyping]);
 
   return { conversations, setConversations, live, typing, presenceMap };
 }

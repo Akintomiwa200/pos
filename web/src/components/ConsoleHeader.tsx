@@ -150,7 +150,7 @@ export function ConsoleHeader({
   const pathname = usePathname();
 
   return (
-    <header className="flex h-16 w-full shrink-0 items-center gap-3 bg-pos-bg px-4 sm:px-6 lg:h-[10vh] lg:gap-4 lg:px-8">
+    <header className="flex h-14 w-full shrink-0 items-center gap-2 bg-pos-bg px-3 sm:h-16 sm:gap-3 sm:px-6 lg:h-[10vh] lg:gap-4 lg:px-8">
       <button
         type="button"
         className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-pos-surface text-pos-ink shadow-pos-sm lg:hidden"
@@ -159,13 +159,17 @@ export function ConsoleHeader({
       >
         <Menu size={18} strokeWidth={1.8} />
       </button>
-      <ConsolePageTitle pathname={pathname} />
-      <ConsoleSearch nav={searchNav} />
-      <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
+      <div className="min-w-0 flex-1">
+        <ConsolePageTitle pathname={pathname} />
+      </div>
+      <div className="hidden sm:block">
+        <ConsoleSearch nav={searchNav} />
+      </div>
+      <div className="flex shrink-0 items-center gap-2 sm:gap-3">
         {onOpenHelp ? (
           <button
             type="button"
-            className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-pos-surface text-pos-ink-muted shadow-pos-sm transition hover:text-pos-primary"
+            className="hidden h-10 w-10 shrink-0 place-items-center rounded-xl bg-pos-surface text-pos-ink-muted shadow-pos-sm transition hover:text-pos-primary sm:grid"
             aria-label="Open help and support"
             title="Help & support"
             onClick={onOpenHelp}
@@ -174,7 +178,10 @@ export function ConsoleHeader({
           </button>
         ) : null}
         <NotificationMenu token={session.token} />
-        <div className="w-[min(100%,13rem)] sm:w-56">
+        <div className="w-auto sm:w-56 lg:hidden">
+          <AccountSwitcher session={session} layout="header" menu="down" />
+        </div>
+        <div className="hidden w-56 lg:block">
           <AccountSwitcher session={session} layout="sidebar" menu="down" />
         </div>
       </div>

@@ -9,6 +9,7 @@ import { memberLabel } from "../../lib/variants";
 import { groupIntoFamilies } from "../../lib/variants";
 import { normalizeBarcode } from "../../lib/store-settings";
 import { useStoreSettings } from "../../lib/use-store-settings";
+import type { RegisterQuickButton } from "../../lib/register-config";
 
 type StockFilter = "all" | "in" | "low" | "out";
 type PriceFilter = "all" | "under2" | "mid" | "over5";
@@ -150,6 +151,39 @@ export function ItemsScreen({
   }, [items, settings, activeCategory, stock, price, sort, branchId, category, filterCategories]);
 
   const families = useMemo(() => groupIntoFamilies(visibleItems), [visibleItems]);
+  const quickButtons = useMemo(
+    () => settings.registerQuickButtons.filter((button) => button.active && button.kind !== "action"),
+    [settings.registerQuickButtons],
+  );
+
+  function runQuickButton(button: RegisterQuickButton) {
+    if (button.kind === "category") {
+      onCategory(button.value);
+      return;
+    }
+    if (button.kind === "product") {
+      const needle = button.value.trim().toLowerCase();
+      const item = catalog.find(
+        (row) =>
+          row.id.toLowerCase() === needle ||
+          row.sku.toLowerCase() === needle ||
+          row.barcode.toLowerCase() === needle,
+      );
+      if (item) onAdd(item);
+      return;
+    }
+    if (button.kind === "combo") {
+      if (button.value === "combos") {
+        onCategory("combos");
+        return;
+      }
+      const needle = button.value.trim().toLowerCase();
+      const combo = combos.find(
+        (row) => row.id.toLowerCase() === needle || row.name.toLowerCase() === needle,
+      );
+      if (combo) onAddCombo(combo);
+    }
+  }
 
   function chooseVariant(familyKey: string, memberId: string) {
     setPicks((current) => ({ ...current, [familyKey]: memberId }));
@@ -456,6 +490,31 @@ export function ItemsScreen({
           <button type="button" className="filter-text-btn" onClick={resetFilters}>
             Clear all
           </button>
+        </div>
+      ) : null}
+      {quickButtons.length > 0 ? (
+        <div className="register-shortcuts" aria-label="Register shortcuts">
+          {quickButtons.map((button) => {
+            const active =
+              button.kind === "category" &&
+              (button.value === "all" ? category === "all" : category === button.value);
+            return (
+              <button
+                key={button.id}
+                type="button"
+                className={`register-shortcut ${active ? "active" : ""}`}
+                style={{
+                  borderColor: button.color,
+                  color: active ? "#fff" : button.color,
+                  backgroundColor: active ? button.color : undefined,
+                }}
+                aria-pressed={active}
+                onClick={() => runQuickButton(button)}
+              >
+                {button.label}
+              </button>
+            );
+          })}
         </div>
       ) : null}
       {mode === "items" && (

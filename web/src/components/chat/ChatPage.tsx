@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ArrowLeft,
   ChevronDown,
   ChevronUp,
   Paperclip,
@@ -18,7 +19,6 @@ import {
   createChatConversation,
   getChatThread,
   listChatConversations,
-  listChatTargets,
   patchChatConversation,
   sendCallSignal,
   sendChatMessage,
@@ -27,7 +27,7 @@ import {
   type CallSignal,
   type ChatConversation,
   type ChatMessage,
-  type ChatTarget,
+  type ChatPresence,
 } from "@/lib/hq-chat";
 import { useLiveChat } from "@/lib/live-workspace";
 import { useAuth } from "@/components/AuthProvider";
@@ -35,8 +35,11 @@ import { ManagerSkeleton } from "../Skeleton";
 import { useCallManager, IncomingCallModal, ActiveCallOverlay } from "./CallView";
 import { NewChatModal } from "./NewChatModal";
 
-function relativeTime(iso: string) {
-  const diff = Date.now() - new Date(iso).getTime();
+const TYPING_IDLE_MS = 1_500;
+const TYPING_REFRESH_MS = 2_000;
+
+function relativeTime(iso: string, now = Date.now()) {
+  const diff = now - new Date(iso).getTime();
   const mins = Math.max(0, Math.round(diff / 60_000));
   if (mins < 1) return "Active";
   if (mins < 60) return `${mins} min ago`;
@@ -46,7 +49,7 @@ function relativeTime(iso: string) {
 }
 
 function clock(iso: string) {
-  return new Date(iso).toLocaleTimeString("en-NG", {
+  return new Date(iso).toLocaleTimeString(undefined, {
     hour: "numeric",
     minute: "2-digit",
   });
@@ -82,6 +85,29 @@ function visibleMessages(messages: ChatMessage[]) {
     .sort((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id));
 }
 
+function isOnline(presence: ChatPresence | undefined, now: number) {
+  return Boolean(presence && now - new Date(presence.at).getTime() < 45_000);
+}
+
+function mergeConversation(current: ChatConversation, incoming: ChatConversation) {
+  const unchanged = (Object.keys(incoming) as (keyof ChatConversation)[]).every((key) => {
+    const before = current[key];
+    const after = incoming[key];
+    if (Array.isArray(before) && Array.isArray(after)) {
+      if (before.length !== after.length) return false;
+      return before.every((value, index) => {
+        const other = after[index];
+        if (value && other && typeof value === "object" && typeof other === "object") {
+          return JSON.stringify(value) === JSON.stringify(other);
+        }
+        return value === other;
+      });
+    }
+    return before === after;
+  });
+  return unchanged ? current : { ...current, ...incoming };
+}
+
 function Avatar({
   name,
   src,
@@ -115,6 +141,58 @@ function Avatar({
   );
 }
 
+const MessageRow = memo(function MessageRow({
+  message,
+  mine,
+  showSender,
+  avatar,
+}: {
+  message: ChatMessage;
+  mine: boolean;
+  showSender: boolean;
+  avatar?: string;
+}) {
+  if (message.sender === "system" || message.kind === "system") {
+    return (
+      <div className="flex justify-center">
+        <span className="max-w-[70%] rounded-full bg-pos-surface-muted px-4 py-1.5 text-center text-[11px] font-medium text-pos-ink-faint">
+          {message.body}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+      <div className={`max-w-[78%] ${mine ? "items-end" : "items-start"} flex flex-col`}>
+        <div
+          className={`mb-1.5 flex items-center gap-2 text-[11px] text-pos-ink-faint ${
+            mine ? "flex-row-reverse" : ""
+          }`}
+        >
+          {!mine && showSender ? <Avatar name={message.senderName} size={22} /> : null}
+          {!mine && !showSender ? <Avatar name={message.senderName} src={avatar} size={22} /> : null}
+          {showSender || mine ? (
+            <span className="font-medium text-pos-ink-muted">
+              {mine ? "You" : message.senderName}
+            </span>
+          ) : null}
+          <span>{clock(message.at)}</span>
+        </div>
+        <div
+          className={`rounded-[18px] px-4 py-2.5 text-sm leading-relaxed ${
+            mine
+              ? "rounded-br-md bg-pos-primary text-white"
+              : "rounded-bl-md bg-pos-surface text-pos-ink shadow-pos-sm"
+          }`}
+        >
+          {message.body}
+        </div>
+      </div>
+    </div>
+  );
+});
+
 export function ChatPage() {
   const { session } = useAuth();
   const self = useMemo(
@@ -122,8 +200,28 @@ export function ChatPage() {
     [session?.id, session?.name],
   );
   const activeIdRef = useRef<string | null>(null);
-  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const [typingMap, setTypingMap] = useState<Record<string, { name: string; state: "on" | "off" }>>({});
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const typingSentRef = useRef<{ conversationId: string | null; at: number }>({
+    conversationId: null,
+    at: 0,
+  });
+  const selfRef = useRef(self);
+  const previousActiveRef = useRef<string | null>(null);
+  const threadRequestRef = useRef(0);
+  const [now, setNow] = useState(() => Date.now());
+
+  const stopTyping = useCallback((conversationId?: string | null) => {
+    const id = conversationId ?? activeIdRef.current;
+    const sent = typingSentRef.current;
+    if (!id || sent.conversationId !== id || !sent.at) return;
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+    }
+    typingSentRef.current = { conversationId: null, at: 0 };
+    const identity = selfRef.current;
+    void sendChatTyping(id, "off", identity?.name ?? "You", identity?.id ?? "");
+  }, []);
 
   const onLiveMessage = useCallback((conversationId: string, message: ChatMessage) => {
     if (conversationId === activeIdRef.current) {
@@ -142,6 +240,7 @@ export function ChatPage() {
 
   const { conversations, setConversations, live, typing, presenceMap } = useLiveChat({
     viewerId: self?.id ?? "",
+    viewerName: self?.name ?? "",
     onMessage: onLiveMessage,
     onCall: onLiveCall,
   });
@@ -157,17 +256,13 @@ export function ChatPage() {
   const [openOrders, setOpenOrders] = useState(false);
   const [openBuy, setOpenBuy] = useState(false);
   const [showNewChat, setShowNewChat] = useState(false);
-  const [targets, setTargets] = useState<ChatTarget[]>([]);
-  const [newChatMode, setNewChatMode] = useState<"direct" | "group">("direct");
-  const [newChatSelected, setNewChatSelected] = useState<string[]>([]);
-  const [newChatTitle, setNewChatTitle] = useState("");
-  const [creatingChat, setCreatingChat] = useState(false);
+  const [mobilePane, setMobilePane] = useState<"list" | "thread">("list");
   const bottomRef = useRef<HTMLDivElement>(null);
   const typingState = activeId ? typing[activeId] : undefined;
   const peerName = active?.name || "Unknown";
   const peerOnline =
     active?.kind === "direct" &&
-    active?.memberIds.some((id) => id !== self?.id && presenceMap[id]);
+    active?.memberIds.some((id) => id !== self?.id && isOnline(presenceMap[id], now));
   const callManager = useCallManager({
     self,
     peerName,
@@ -178,8 +273,30 @@ export function ChatPage() {
   });
 
   useEffect(() => {
+    selfRef.current = self;
+  }, [self]);
+
+  useEffect(() => {
     activeIdRef.current = activeId;
-  }, [activeId]);
+    const previous = previousActiveRef.current;
+    if (previous && previous !== activeId) stopTyping(previous);
+    previousActiveRef.current = activeId;
+  }, [activeId, stopTyping]);
+
+  useEffect(() => () => stopTyping(), [stopTyping]);
+
+  // Keep the open thread's header/profile in sync with live conversation updates.
+  useEffect(() => {
+    if (!activeId) return;
+    const row = conversations.find((item) => item.id === activeId);
+    if (!row) return;
+    setActive((current) => (current ? mergeConversation(current, row) : current));
+  }, [activeId, conversations]);
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
 
   async function loadList(preferId?: string) {
     let rows = conversations;
@@ -193,14 +310,18 @@ export function ChatPage() {
   }
 
   async function openThread(id: string, list = conversations) {
+    const request = ++threadRequestRef.current;
+    stopTyping();
+    setDraft("");
     setActiveId(id);
     const thread = await getChatThread(id, self?.id ?? "");
+    if (request !== threadRequestRef.current) return;
     setActive(thread.conversation);
     setMessages(thread.messages);
     const fromList = list.find((row) => row.id === id);
     if (fromList) {
       setConversations((current) =>
-        current.map((row) => (row.id === id ? { ...row, ...thread.conversation } : row)),
+        current.map((row) => (row.id === id ? mergeConversation(row, thread.conversation) : row)),
       );
     }
   }
@@ -217,18 +338,27 @@ export function ChatPage() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, typingState]);
 
-  // Send outgoing typing indicators
+  // Send outgoing typing indicators at most once per short window, and always
+  // send "off" when the draft is submitted, the thread changes or we unmount.
   useEffect(() => {
     if (!activeId || !draft.trim()) return;
-    void sendChatTyping(activeId, "on", self?.name ?? "You", self?.id ?? "");
+    const sent = typingSentRef.current;
+    const time = Date.now();
+    if (sent.conversationId !== activeId || time - sent.at >= TYPING_REFRESH_MS) {
+      typingSentRef.current = { conversationId: activeId, at: time };
+      const identity = selfRef.current;
+      void sendChatTyping(activeId, "on", identity?.name ?? "You", identity?.id ?? "");
+    }
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
-      void sendChatTyping(activeId, "off", self?.name ?? "You", self?.id ?? "");
-    }, 1200);
+      typingTimeoutRef.current = null;
+      stopTyping(activeId);
+    }, TYPING_IDLE_MS);
     return () => {
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
     };
-  }, [draft, activeId, self?.name]);
+  }, [draft, activeId, stopTyping]);
 
   // Presence heartbeat
   useEffect(() => {
@@ -258,12 +388,14 @@ export function ChatPage() {
   }, [messages]);
 
   async function onSend() {
-    if (!activeId || !draft.trim() || busy) return;
+    const text = draft.trim();
+    if (!activeId || !text || busy) return;
+    stopTyping(activeId);
     setBusy(true);
     try {
       const message = await sendChatMessage(
         activeId,
-        draft.trim(),
+        text,
         { senderId: self?.id, senderName: self?.name || "You" },
         self?.id ?? "",
       );
@@ -288,18 +420,17 @@ export function ChatPage() {
   if (!ready) return <ManagerSkeleton variant="table" />;
 
   return (
-    <div className="-mx-4 -mb-4 flex h-[calc(100svh-7.5rem)] min-h-[560px] overflow-hidden rounded-[28px] bg-pos-surface shadow-pos-md sm:-mx-0 lg:h-[calc(100svh-8.5rem)]">
+    <div className="-mx-4 -mb-4 flex h-[calc(100dvh-4.5rem)] min-h-0 overflow-hidden bg-pos-surface shadow-pos-md sm:-mx-0 sm:-mb-8 sm:h-[calc(100dvh-6rem)] sm:rounded-[28px] lg:h-[calc(100dvh-10vh-2rem)]">
       {/* Inbox */}
-<aside className="flex w-full max-w-[320px] shrink-0 flex-col border-r border-pos-border/70 bg-pos-surface">
-        <div className="p-4 pb-2">
+      <aside
+        className={`${
+          mobilePane === "thread" ? "hidden md:flex" : "flex"
+        } w-full max-w-none shrink-0 flex-col border-r border-pos-border/70 bg-pos-surface md:max-w-[320px]`}
+      >
+        <div className="p-3 pb-2 sm:p-4 sm:pb-2">
           <button
             type="button"
-            onClick={() => {
-              setShowNewChat(true);
-              if (!targets.length) {
-                listChatTargets(self?.id ?? "").then(setTargets).catch(() => {});
-              }
-            }}
+            onClick={() => setShowNewChat(true)}
             className="mb-3 flex w-full items-center justify-center gap-2 rounded-full bg-pos-primary px-3.5 py-2.5 text-sm font-medium text-white shadow-pos-primary transition hover:opacity-90"
           >
             <Users size={15} />
@@ -318,11 +449,18 @@ export function ChatPage() {
         <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
           {filtered.map((row) => {
             const selected = row.id === activeId;
+            const online =
+              row.kind === "direct" &&
+              row.memberIds.some((id) => id !== self?.id && isOnline(presenceMap[id], now));
+            const timeLabel = online ? "Active" : relativeTime(row.updatedAt, now);
             return (
               <button
                 key={row.id}
                 type="button"
-                onClick={() => void openThread(row.id).catch((err) => toast.error(err, "Could not open chat."))}
+                onClick={() => {
+                  setMobilePane("thread");
+                  void openThread(row.id).catch((err) => toast.error(err, "Could not open chat."));
+                }}
                 className={`mb-1 flex w-full items-start gap-3 rounded-[18px] px-3 py-3 text-left transition ${
                   selected
                     ? "bg-pos-primary-soft"
@@ -338,12 +476,10 @@ export function ChatPage() {
                     </div>
                     <span
                       className={`shrink-0 text-[11px] font-medium ${
-                        row.active && relativeTime(row.updatedAt) === "Active"
-                          ? "text-pos-success"
-                          : "text-pos-ink-faint"
+                        online ? "text-pos-success" : "text-pos-ink-faint"
                       }`}
                     >
-                      {relativeTime(row.updatedAt)}
+                      {timeLabel}
                     </span>
                   </div>
                   <div className="mt-0.5 flex items-center gap-1">
@@ -361,15 +497,31 @@ export function ChatPage() {
       </aside>
 
       {/* Thread */}
-      <section className="relative flex min-w-0 flex-1 flex-col bg-pos-bg/40">
+      <section
+        className={`${
+          mobilePane === "list" ? "hidden md:flex" : "flex"
+        } relative min-w-0 flex-1 flex-col bg-pos-bg/40`}
+      >
         {active ? (
           <>
-            <header className="flex items-center gap-3 border-b border-pos-border/70 bg-pos-surface px-5 py-4">
+            <header className="flex items-center gap-2 border-b border-pos-border/70 bg-pos-surface px-3 py-3 sm:gap-3 sm:px-5 sm:py-4">
+              <button
+                type="button"
+                onClick={() => setMobilePane("list")}
+                aria-label="Back to chats"
+                className="-ml-1 grid h-9 w-9 shrink-0 place-items-center rounded-full text-pos-ink-muted transition hover:bg-pos-surface-muted hover:text-pos-ink md:hidden"
+              >
+                <ArrowLeft size={18} />
+              </button>
               <Avatar name={active.name} src={active.avatar} size={40} />
               <div className="min-w-0 flex-1">
                 <p className="truncate font-semibold text-pos-ink">{active.name}</p>
                 <p className="text-[12px] text-pos-ink-faint">
-                  {typingState ? `${typingState.name} is typing…` : active.active ? "Active now" : relativeTime(active.updatedAt)}
+                  {typingState
+                    ? `${typingState.name} is typing…`
+                    : peerOnline
+                      ? "Active now"
+                      : relativeTime(active.updatedAt, now)}
                 </p>
               </div>
               {active.kind === "direct" && callManager.state === "idle" ? (
@@ -392,15 +544,15 @@ export function ChatPage() {
                   </button>
                 </div>
               ) : null}
-              <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-pos-ink-faint">
+              <span className="inline-flex shrink-0 items-center gap-1.5 text-[11px] font-medium text-pos-ink-faint">
                 <span
                   className={`h-2 w-2 rounded-full ${live ? "bg-pos-success animate-pulse" : "bg-pos-ink-faint/40"}`}
                 />
-                {live ? "Live" : "Offline"}
+                <span className="hidden sm:inline">{live ? "Live" : "Offline"}</span>
               </span>
             </header>
 
-            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5">
+            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-3 py-4 sm:px-5 sm:py-5">
               {messageGroups.map((group) => (
                 <div key={group.label}>
                   <div className="mb-4 flex justify-center">
@@ -409,55 +561,15 @@ export function ChatPage() {
                     </span>
                   </div>
                   <div className="space-y-4">
-                    {group.items.map((message) => {
-                      if (message.sender === "system" || message.kind === "system") {
-                        return (
-                          <div key={message.id} className="flex justify-center">
-                            <span className="max-w-[70%] rounded-full bg-pos-surface-muted px-4 py-1.5 text-center text-[11px] font-medium text-pos-ink-faint">
-                              {message.body}
-                            </span>
-                          </div>
-                        );
-                      }
-                      const mine = message.sender === "staff" && message.senderId === self?.id;
-                      const showSender = active.kind !== "customer" && message.sender === "staff";
-                      return (
-                        <div
-                          key={message.id}
-                          className={`flex ${mine ? "justify-end" : "justify-start"}`}
-                        >
-                          <div className={`max-w-[78%] ${mine ? "items-end" : "items-start"} flex flex-col`}>
-                            <div
-                              className={`mb-1.5 flex items-center gap-2 text-[11px] text-pos-ink-faint ${
-                                mine ? "flex-row-reverse" : ""
-                              }`}
-                            >
-                              {!mine && showSender ? (
-                                <Avatar name={message.senderName} size={22} />
-                              ) : null}
-                              {!mine && !showSender ? (
-                                <Avatar name={message.senderName} src={active.avatar} size={22} />
-                              ) : null}
-                              {showSender || mine ? (
-                                <span className="font-medium text-pos-ink-muted">
-                                  {mine ? "You" : message.senderName}
-                                </span>
-                              ) : null}
-                              <span>{clock(message.at)}</span>
-                            </div>
-                            <div
-                              className={`rounded-[18px] px-4 py-2.5 text-sm leading-relaxed ${
-                                mine
-                                  ? "rounded-br-md bg-pos-primary text-white"
-                                  : "rounded-bl-md bg-pos-surface text-pos-ink shadow-pos-sm"
-                              }`}
-                            >
-                              {message.body}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
+                    {group.items.map((message) => (
+                      <MessageRow
+                        key={message.id}
+                        message={message}
+                        mine={message.sender === "staff" && message.senderId === self?.id}
+                        showSender={active.kind !== "customer" && message.sender === "staff"}
+                        avatar={active.avatar}
+                      />
+                    ))}
                   </div>
                 </div>
               ))}
@@ -467,8 +579,8 @@ export function ChatPage() {
               <div ref={bottomRef} />
             </div>
 
-            <footer className="border-t border-pos-border/70 bg-pos-surface px-4 py-3">
-              <div className="flex items-center gap-2 rounded-full bg-pos-surface-muted px-3 py-2">
+            <footer className="border-t border-pos-border/70 bg-pos-surface px-3 py-3 sm:px-4">
+              <div className="flex items-center gap-1 rounded-full bg-pos-surface-muted px-2.5 py-2 sm:gap-2 sm:px-3">
                 <button type="button" className="rounded-full p-1.5 text-pos-ink-faint hover:text-pos-ink">
                   <Smile size={18} />
                 </button>
@@ -520,15 +632,17 @@ export function ChatPage() {
         open={showNewChat}
         self={self}
         onClose={() => setShowNewChat(false)}
-        onCreated={async (conversation) => {
+        onCreated={(conversation) => {
           setShowNewChat(false);
-          setActiveId(conversation.id);
+          setMobilePane("thread");
           setConversations((current) =>
             current.some((row) => row.id === conversation.id)
-              ? current
+              ? current.map((row) =>
+                  row.id === conversation.id ? mergeConversation(row, conversation) : row,
+                )
               : [{ ...conversation }, ...current],
           );
-          await openThread(conversation.id);
+          void openThread(conversation.id).catch((err) => toast.error(err, "Could not open chat."));
         }}
       />
 
@@ -542,7 +656,7 @@ export function ChatPage() {
                 <h2 className="mt-3 text-lg font-semibold text-pos-ink">{active.name}</h2>
                 <p className="mt-1 text-xs text-pos-ink-faint">
                   {active.kind === "group"
-                    ? `${active.memberIds.length + 1} members`
+                    ? `${active.memberIds.length} members`
                     : "Staff direct chat"}
                 </p>
               </div>
@@ -576,7 +690,7 @@ export function ChatPage() {
                       );
                       setActive(next);
                       setConversations((current) =>
-                        current.map((row) => (row.id === next.id ? { ...row, ...next } : row)),
+                        current.map((row) => (row.id === next.id ? mergeConversation(row, next) : row)),
                       );
                     } catch (err) {
                       toast.error(err, "Could not update location.");

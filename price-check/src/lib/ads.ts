@@ -4,7 +4,8 @@ export type Ad = {
   title: string;
   subtitle: string;
   accent: string;
-  sample?: boolean;
+  /** Every built-in slide is explicitly sample content. */
+  sample: boolean;
 };
 
 // Edit this list to change what plays on the idle screen. Each ad rotates

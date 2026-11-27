@@ -22,22 +22,23 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         with:
-          version: 11
+          version: 11.5.1
 
       - uses: actions/setup-node@v4
         with:
-          node-version-file: .nvmrc
+          node-version: "22"
           cache: pnpm
           cache-dependency-path: |
             backend/pnpm-lock.yaml
             web/pnpm-lock.yaml
             pos/pnpm-lock.yaml
             price-check/pnpm-lock.yaml
+            label-studio/pnpm-lock.yaml
 
-      - name: Build API, HQ, till UI, and price-check UI
+      - name: Build API, HQ, till UI, price-check UI, and label studio UI
         run: |
           set -e
-          for app in backend web pos price-check; do
+          for app in backend web pos price-check label-studio; do
             pnpm --dir "$app" install --frozen-lockfile
             pnpm --dir "$app" build
           done
@@ -48,7 +49,8 @@ jobs:
           mkdir -p dist-release
           (cd pos/dist && zip -r ../../dist-release/pos-ui-web.zip .)
           (cd price-check/dist && zip -r ../../dist-release/price-check-ui-web.zip .)
-          (cd backend/dist && zip -r ../../dist-release/pos-api-dist.zip .)
+          (cd label-studio/dist && zip -r ../../dist-release/label-studio-ui-web.zip .)
+          (cd backend && zip -r ../dist-release/pos-api-dist.zip dist package.json pnpm-lock.yaml .env.example)
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -57,6 +59,7 @@ jobs:
           files: |
             dist-release/pos-ui-web.zip
             dist-release/price-check-ui-web.zip
+            dist-release/label-studio-ui-web.zip
             dist-release/pos-api-dist.zip
           body: |
             Windows **EXE + MSI** installers for pos, price-check and label-studio
@@ -69,7 +72,8 @@ jobs:
 
             - `pos-ui-web.zip` — till web UI (`pos/dist`)
             - `price-check-ui-web.zip` — price-check web UI
-            - `pos-api-dist.zip` — Nest API `dist/` (run with Node 22: `node main.js`)
+            - `label-studio-ui-web.zip` — label studio web UI
+            - `pos-api-dist.zip` — Nest API `dist/` plus `package.json`, lockfile and `.env.example`; run `pnpm install --frozen-lockfile`, then `node dist/main.js` with Node 22 and a configured `DATABASE_URL`
 
             HQ (`web`) is a Next.js server; run `pnpm start` from a full `web/`
             install, not from a zip alone.

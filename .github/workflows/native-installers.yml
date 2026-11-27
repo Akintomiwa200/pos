@@ -60,7 +60,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version-file: .nvmrc
+          node-version: "22"
           cache: pnpm
           cache-dependency-path: ${{ matrix.app }}/pnpm-lock.yaml
 
@@ -73,13 +73,14 @@ jobs:
       - name: Install WiX Toolset v3 (required by Tauri 2 for MSI)
         shell: pwsh
         run: |
-          choco install wixtoolset --version=3.14.1.20250415 --no-progress -y
+          choco install wixtoolset --no-progress -y
           $bin = Get-ChildItem "${env:ProgramFiles(x86)}" -Directory -Filter "WiX Toolset*" -ErrorAction SilentlyContinue |
             ForEach-Object { Join-Path $_.FullName "bin" } |
             Where-Object { Test-Path (Join-Path $_ "candle.exe") } |
             Select-Object -First 1
           if (-not $bin) { throw "WiX v3 binaries (candle.exe / light.exe) were not found after installation." }
           $bin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "WIX=$((Split-Path $bin -Parent))" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           $env:PATH = "$bin;$env:PATH"
           Get-Command candle.exe, light.exe -ErrorAction SilentlyContinue | Select-Object Name, Source
 
@@ -134,6 +135,8 @@ jobs:
             asset: pos-terminal
           - app: price-check
             asset: price-check
+          - app: label-studio
+            asset: label-studio
     defaults:
       run:
         working-directory: ${{ matrix.app }}
@@ -159,7 +162,7 @@ jobs:
       - uses: actions/setup-node@v4
         if: steps.check.outputs.configured == 'true'
         with:
-          node-version-file: .nvmrc
+          node-version: "22"
           cache: pnpm
           cache-dependency-path: ${{ matrix.app }}/pnpm-lock.yaml
 

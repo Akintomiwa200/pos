@@ -33,6 +33,7 @@ export class CustomersController {
       identifier?: string;
       points?: number;
       ticketId?: string;
+      ticketMinor?: number;
     },
   ) {
     return this.customers.redeemLoyalty(body);

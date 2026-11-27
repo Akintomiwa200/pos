@@ -1,5 +1,14 @@
 export type ConversationKind = "customer" | "direct" | "group";
 
+/** Public attachment metadata. `url` is served by the authorised chat file route. */
+export type ChatAttachment = {
+  id: string;
+  name: string;
+  mimeType: string;
+  size: number;
+  url: string;
+};
+
 export type ChatMessage = {
   id: string;
   conversationId: string;
@@ -9,6 +18,7 @@ export type ChatMessage = {
   body: string;
   at: string;
   kind?: "text" | "system";
+  attachments?: ChatAttachment[];
 };
 
 export type ChatConversation = {
@@ -70,7 +80,11 @@ export type CallSignal =
 export type ChatEvent =
   | { type: "snapshot"; conversations: ChatConversation[]; presence: ChatPresence[] }
   | { type: "message"; message: ChatMessage; conversation: ChatConversation }
-  | { type: "conversation"; conversation: ChatConversation; action: "updated" | "created" }
+  | {
+      type: "conversation";
+      conversation: ChatConversation;
+      action: "updated" | "created" | "deleted";
+    }
   | {
       type: "typing";
       conversationId: string;

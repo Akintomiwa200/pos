@@ -6,13 +6,27 @@ import {
   OnModuleInit,
   UnauthorizedException,
 } from "@nestjs/common";
+import { randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Observable, Subject, type Subscription } from "rxjs";
 import { ConsoleService } from "../console/console.service";
 import { isSuperAdmin, isTenantAdmin, rankFor, type Rank } from "../staff/web-user";
 import {
+  CHAT_UPLOAD_DIR,
+  MAX_CHAT_ATTACHMENTS_PER_MESSAGE,
+  type ChatAttachmentRecord,
+  publicChatAttachment,
+  readChatAttachmentFile,
+  readChatAttachmentRecords,
+  removeChatAttachmentFile,
+  storeChatAttachmentFile,
+  validateChatAttachment,
+  writeChatAttachmentRecords,
+} from "../uploads/chat-attachments";
+import {
   type CallSignal,
+  type ChatAttachment,
   type ChatConversation,
   type ChatEvent,
   type ChatMessage,
@@ -65,11 +79,14 @@ export class ChatService implements OnModuleInit {
   private readonly conversationsFile = join(this.dir, "hq-chat-conversations.json");
   private readonly messagesFile = join(this.dir, "hq-chat-messages.json");
   private readonly presences = new Map<string, ChatPresence>();
+  /** Serialises read/modify/write cycles on chat-uploads.json. */
+  private attachmentWrite: Promise<void> = Promise.resolve();
 
   constructor(private readonly console: ConsoleService) {}
 
   async onModuleInit() {
     await mkdir(this.dir, { recursive: true });
+    await mkdir(CHAT_UPLOAD_DIR, { recursive: true });
     this.conversations = await this.readJson<ChatConversation[]>(
       this.conversationsFile,
       [],
@@ -91,6 +108,15 @@ export class ChatService implements OnModuleInit {
       writeFile(this.conversationsFile, JSON.stringify(this.conversations, null, 2), "utf8"),
       writeFile(this.messagesFile, JSON.stringify(this.messages, null, 2), "utf8"),
     ]);
+  }
+
+  private async withAttachmentLock<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.attachmentWrite.then(operation, operation);
+    this.attachmentWrite = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
   }
 
   private presenceSnapshot(): ChatPresence[] {

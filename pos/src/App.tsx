@@ -682,7 +682,11 @@ export default function App() {
   }) {
     if (!settings.printKitchenOnSend) return;
     const printer = loadPrinterConfig().kitchenPrinter;
-    if (!printer || printedKitchenTickets.current.has(input.id)) return;
+    if (!printer) {
+      toast.error("Kitchen printing is on but no kitchen printer is configured.");
+      return;
+    }
+    if (printedKitchenTickets.current.has(input.id)) return;
     printedKitchenTickets.current.add(input.id);
     const layout: ReceiptRichLine[] = [
       { t: "c", text: settings.storeName || "Kitchen", bold: true },
@@ -1616,6 +1620,7 @@ export default function App() {
         identifier: number ?? member.phone,
         points,
         ticketId: redemptionId,
+        ticketMinor: ctx.baseMinor,
       });
       patchCheckout({
         loyaltyNumber: number,
@@ -1626,7 +1631,9 @@ export default function App() {
         redeemedLoyalty: true,
         loyaltyRedemptionId: redemptionId,
       });
-      toast.success(`Used ${points} points — ${formatMoney(result.valueMinor, settings.currency)} off.`);
+      toast.success(
+        `Used ${result.pointsRedeemed} points — ${formatMoney(result.valueMinor, settings.currency)} off.`,
+      );
     } catch (error) {
       toast.error(
         `Loyalty points were not redeemed: ${error instanceof Error ? error.message : "unknown error"}`,
@@ -1725,6 +1732,12 @@ export default function App() {
       return;
     }
     const amount = Math.max(0, ctx.baseMinor - ctx.loyaltyRedeemMinor);
+    if (amount <= 0) {
+      // Points covered the whole ticket — there is nothing to put on the card.
+      pendingGiftCardRef.current = null;
+      completeSale("gift-card", ctx, 0);
+      return;
+    }
     if (card.balanceMinor < amount) {
       toast.error(
         `Gift card balance ${formatMoney(card.balanceMinor, settings.currency)} does not cover ${formatMoney(amount, settings.currency)}. Partial gift-card payments are not supported.`,
@@ -1771,6 +1784,10 @@ export default function App() {
   async function proceedToPayment(method: TenderType, ctx: CheckoutContext) {
     if (pendingGiftCardRef.current) {
       await finishGiftCard(ctx);
+      return;
+    }
+    if (Math.max(0, ctx.baseMinor - ctx.loyaltyRedeemMinor) <= 0) {
+      completeSale(method, ctx, 0);
       return;
     }
     if (method === "split") {

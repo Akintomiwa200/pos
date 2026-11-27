@@ -62,7 +62,16 @@ export type HqStorefront = {
   syncStock: boolean;
 };
 
-export type GatewayProvider = "paystack" | "flutterwave" | "moniepoint" | "bank" | "cash" | "card";
+export type GatewayProvider =
+  | "paystack"
+  | "flutterwave"
+  | "moniepoint"
+  | "opay"
+  | "bank"
+  | "cash"
+  | "card";
+
+export type GatewayMode = "test" | "live";
 
 export type HqGateway = {
   id: string;
@@ -71,6 +80,16 @@ export type HqGateway = {
   enabled: boolean;
   isDefault: boolean;
   publicKey: string;
+  /** Server-side only: never sent to the web/POS in clear text. */
+  secretKey?: string;
+  /** Server-side only: webhook signing secret/hash. */
+  webhookSecret?: string;
+  /** Server-side only: merchant id / contract code where the provider needs one. */
+  merchantId?: string;
+  /** Sandbox or production rail. Defaults to test for legacy records. */
+  mode: GatewayMode;
+  /** Optional provider API base override (useful for regional/proxy endpoints). */
+  apiBase?: string;
   accountName: string;
   accountNumber: string;
   bankName: string;

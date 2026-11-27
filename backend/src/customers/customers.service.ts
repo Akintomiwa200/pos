@@ -378,12 +378,23 @@ export class CustomersService implements OnModuleInit {
     identifier?: string;
     points?: number;
     ticketId?: string;
+    ticketMinor?: number;
   }): Promise<LoyaltyRedeemResult> {
     const ticketId = String(input.ticketId ?? "").trim();
     if (!ticketId) throw new BadRequestException("ticketId is required");
-    const points = Math.round(Number(input.points ?? 0));
+    const rate = Math.max(0, Math.round(this.loyaltyProgram.redeemValueMinor));
+    let points = Math.round(Number(input.points ?? 0));
     if (!Number.isFinite(points) || points <= 0) {
       throw new BadRequestException("A positive number of points is required");
+    }
+    const ticketMinor = Math.round(Number(input.ticketMinor ?? 0));
+    if (rate > 0 && Number.isFinite(ticketMinor) && ticketMinor > 0) {
+      // Never let a stale till configuration redeem more points than the
+      // ticket can actually absorb at the HQ redemption rate.
+      points = Math.min(points, Math.floor(ticketMinor / rate));
+    }
+    if (points <= 0) {
+      throw new BadRequestException("No points can be redeemed on this ticket");
     }
     const identifier = String(input.identifier ?? "").trim();
     const member = this.resolveLoyaltyMember(input.memberId?.trim(), identifier);
@@ -414,8 +425,7 @@ export class CustomersService implements OnModuleInit {
     }
     const balanceBefore = member.points;
     const balanceAfter = balanceBefore - points;
-    const valueMinor =
-      points * Math.max(0, Math.round(this.loyaltyProgram.redeemValueMinor));
+    const valueMinor = points * rate;
     const entry: LoyaltyRedemption = {
       ticketId,
       kind: "loyalty",

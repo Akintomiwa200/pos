@@ -35,6 +35,7 @@ export function redeemLoyalty(input: {
   identifier?: string;
   points: number;
   ticketId: string;
+  ticketMinor?: number;
 }) {
   return post<LoyaltyRedeemResult>("/api/customers/loyalty/redeem", input);
 }

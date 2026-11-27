@@ -5,7 +5,12 @@ import { formatPricePer } from "../../lib/units";
 import { useStoreSettings } from "../../lib/use-store-settings";
 import type { StaffUser } from "../../lib/staff";
 import type { RegisterAction } from "../../lib/register-config";
-import { loadCustomers, upsertCustomer, type CustomerRecord } from "../../lib/customers";
+import {
+  loadCustomers,
+  saveCustomers,
+  upsertCustomer,
+  type CustomerRecord,
+} from "../../lib/customers";
 import { Bookmark, Minus, Percent, Plus, ShoppingBag, Trash2, Wallet } from "lucide-react";
 
 type Props = {
@@ -48,6 +53,7 @@ export function CurrentOrder({
   const rates = useStoreSettings();
   const [customers, setCustomers] = useState<CustomerRecord[]>(loadCustomers);
   const [customerSearch, setCustomerSearch] = useState("");
+  const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [customerNote, setCustomerNote] = useState("");
   const totals = computeLineTotals(lines, rates, discountMinor);
   const actions = rates.registerQuickButtons.filter(
@@ -66,7 +72,7 @@ export function CurrentOrder({
   function applyCustomer(id: string) {
     const customer = customers.find((row) => row.id === id);
     if (!customer) return;
-    const visible = new Set(saleFields.map((field) => field.key));
+    const visible = new Set<string>(saleFields.map((field) => field.key));
     const values: Record<string, string> = {
       customer: customer.name,
       phone: customer.phone,
@@ -86,8 +92,25 @@ export function CurrentOrder({
       setCustomerNote("Enter a customer name or phone before saving.");
       return;
     }
-    setCustomers(upsertCustomer({ id: "", name, phone, email }));
+    const rows = upsertCustomer({ id: "", name, phone, email });
+    setCustomers(rows);
+    const match = rows.find((row) =>
+      phone
+        ? row.phone.trim() === phone
+        : email && row.email.trim().toLowerCase() === email.toLowerCase(),
+    );
+    setSelectedCustomerId(match?.id ?? "");
     setCustomerNote("Customer saved.");
+  }
+
+  function deleteSelectedCustomer() {
+    if (!selectedCustomerId) return;
+    if (!window.confirm("Remove this saved customer?")) return;
+    const next = customers.filter((row) => row.id !== selectedCustomerId);
+    saveCustomers(next);
+    setCustomers(next);
+    setSelectedCustomerId("");
+    setCustomerNote("Customer removed.");
   }
 
   return (
@@ -226,8 +249,11 @@ export function CurrentOrder({
           </label>
           <label className="sale-field">
             <select
-              value=""
-              onChange={(event) => applyCustomer(event.target.value)}
+              value={selectedCustomerId}
+              onChange={(event) => {
+                setSelectedCustomerId(event.target.value);
+                applyCustomer(event.target.value);
+              }}
               aria-label="Choose a saved customer"
               style={{
                 border: "1px solid #ececf0",
@@ -259,6 +285,16 @@ export function CurrentOrder({
             >
               Save customer
             </button>
+            {selectedCustomerId ? (
+              <button
+                type="button"
+                className="order-action"
+                onClick={deleteSelectedCustomer}
+                style={{ flex: "0 0 auto" }}
+              >
+                Delete
+              </button>
+            ) : null}
             {customerNote ? <span className="price">{customerNote}</span> : null}
           </div>
         </div>

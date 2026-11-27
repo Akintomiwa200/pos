@@ -13,11 +13,18 @@ function gen(kind: PolicyKind) {
   return `${kind}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
+/** The single in-process policy store, shared with in-process notice consumers. */
+let activePolicies: PoliciesService | undefined;
+
 @Injectable()
 export class PoliciesService {
   private readonly dir = join(process.cwd(), "data");
   private readonly file = join(this.dir, "policies.json");
   private store: PoliciesStore = emptyPolicies();
+
+  constructor() {
+    activePolicies = this;
+  }
 
   async onModuleInit() {
     try {
@@ -69,4 +76,19 @@ export class PoliciesService {
     this.store[kind] = [];
     await this.persist();
   }
+}
+
+/** Active producer announcements, read from the same collection the console writes. */
+export function publishedAnnouncements(): Array<{ id: string; title: string; body: string }> {
+  const service = activePolicies;
+  if (!service) return [];
+  return service
+    .list("announcements")
+    .filter((row) => row.active === true || row.active === "true" || row.active === 1)
+    .map((row) => ({
+      id: String(row.id ?? ""),
+      title: typeof row.title === "string" ? row.title.trim() : "",
+      body: typeof row.body === "string" ? row.body.trim() : "",
+    }))
+    .filter((row) => Boolean(row.id));
 }

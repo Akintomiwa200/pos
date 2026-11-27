@@ -15,6 +15,7 @@ import { OrdersService } from "../orders/orders.service";
 import type { DocLine } from "../orders/orders.types";
 import { ProductionService } from "../production/production.service";
 import type { ComboComponent } from "../combos/combo.types";
+import { decodeWorkbook, mapWorkbookRows, type WorkbookUpload } from "./workbook";
 
 type Row = Record<string, unknown>;
 
@@ -87,6 +88,9 @@ export type TransferImportResult = {
   skipped: number;
   failed: number;
   errors: Array<{ row: number; label: string; message: string }>;
+  /** Present when the rows came from a workbook upload. */
+  sheet?: string;
+  rowCount?: number;
 };
 
 @Injectable()
@@ -290,7 +294,25 @@ export class DataTransferService {
     );
   }
 
-  async importRows(dataset: string, rawRows: unknown, mode: "update" | "skip" = "update"): Promise<TransferImportResult> {
+  /** Binary .xlsx upload path: decode the sheet, map it like a flat file, then reuse importRows. */
+  async importWorkbook(
+    dataset: string,
+    workbook: WorkbookUpload,
+    mode: "update" | "skip" = "update",
+  ): Promise<TransferImportResult> {
+    if (!this.handlers[dataset]) throw new BadRequestException(`Unknown dataset: ${dataset}`);
+    const decoded = await decodeWorkbook(workbook);
+    const { rows, issues } = mapWorkbookRows(dataset, decoded.headers, decoded.matrix);
+    const result = await this.importRows(dataset, rows, mode, issues);
+    return { ...result, sheet: decoded.sheetName, rowCount: decoded.rowCount };
+  }
+
+  async importRows(
+    dataset: string,
+    rawRows: unknown,
+    mode: "update" | "skip" = "update",
+    rowIssues: Array<string | undefined> = [],
+  ): Promise<TransferImportResult> {
     const handler = this.handlers[dataset];
     if (!handler) throw new BadRequestException(`Unknown dataset: ${dataset}`);
     if (!handler.save && !handler.bulk) throw new BadRequestException(`${dataset} is read-only`);
@@ -298,19 +320,29 @@ export class DataTransferService {
     if (rawRows.length > 5000) throw new BadRequestException("A batch can contain at most 5000 rows");
 
     const allowed = new Set(handler.keys);
-    const rows = rawRows
-      .filter((row): row is Row => !!row && typeof row === "object" && !Array.isArray(row))
-      .map((row) =>
-        Object.fromEntries(
-          Object.entries(row)
+    // Keep each row's position so workbook/flat-file errors keep their original row numbers.
+    const prepared = rawRows
+      .map((row, sourceIndex) => ({ row, sourceIndex }))
+      .filter(({ row }) => !!row && typeof row === "object" && !Array.isArray(row))
+      .map(({ row, sourceIndex }) => ({
+        sourceIndex,
+        row: Object.fromEntries(
+          Object.entries(row as Row)
             .filter(([key, value]) => allowed.has(key) && value !== "" && value !== null && value !== undefined)
             .map(([key, value]) => [key, typeof value === "string" ? value.trim() : value]),
         ),
-      )
-      .map((row) => (handler.prepare ? handler.prepare(row) : row))
-      .filter((row) => Object.keys(row).length > 0);
+      }))
+      .map(({ row, sourceIndex }) => ({
+        sourceIndex,
+        row: handler.prepare ? handler.prepare(row) : row,
+      }))
+      .filter(({ row }) => Object.keys(row).length > 0);
 
-    if (!rows.length) throw new BadRequestException("No usable rows found");
+    if (!prepared.length) throw new BadRequestException("No usable rows found");
+    const rows = prepared.map(({ row }) => row);
+    const sourceRows = prepared.map(({ sourceIndex }) => sourceIndex);
+    const issueFor = (index: number) => rowIssues[sourceRows[index] ?? index] ?? handler.validate?.(rows[index]!);
+    const numberFor = (index: number) => (sourceRows[index] ?? index) + 2;
 
     if (handler.bulk) {
       const labelKey = handler.label ?? "name";
@@ -328,10 +360,10 @@ export class DataTransferService {
         }
       }
       for (const [index, row] of rows.entries()) {
-        const label = String(row[labelKey] ?? `Row ${index + 2}`);
-        const problem = handler.validate?.(row);
+        const label = String(row[labelKey] ?? `Row ${numberFor(index)}`);
+        const problem = issueFor(index);
         if (problem) {
-          errors.push({ row: index + 2, label, message: problem });
+          errors.push({ row: numberFor(index), label, message: problem });
           continue;
         }
         if (mode === "skip") {
@@ -363,11 +395,11 @@ export class DataTransferService {
     const result: TransferImportResult = { created: 0, updated: 0, skipped: 0, failed: 0, errors: [] };
     for (const [index, row] of rows.entries()) {
       const labelKey = handler.label ?? "name";
-      const label = String(row[labelKey] ?? `Row ${index + 2}`);
-      const validationError = handler.validate?.(row);
+      const label = String(row[labelKey] ?? `Row ${numberFor(index)}`);
+      const validationError = issueFor(index);
       if (validationError) {
         result.failed += 1;
-        result.errors.push({ row: index + 2, label, message: validationError });
+        result.errors.push({ row: numberFor(index), label, message: validationError });
         continue;
       }
       const id = String(row.id ?? "").trim().toLowerCase();
@@ -384,7 +416,7 @@ export class DataTransferService {
       } catch (error) {
         result.failed += 1;
         result.errors.push({
-          row: index + 2,
+          row: numberFor(index),
           label,
           message: error instanceof Error ? error.message : "Could not save this row",
         });

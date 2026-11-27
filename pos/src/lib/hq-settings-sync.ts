@@ -20,7 +20,10 @@ function applyLiveOrg(org: HqOrgSnapshot) {
 }
 
 export async function pullHqOrgSnapshot() {
-  const response = await fetch(apiUrl("/api/console/setup"));
+  const till = loadDeviceTill();
+  const response = await fetch(apiUrl("/api/console/setup"), {
+    headers: till.sessionToken ? { Authorization: `Bearer ${till.sessionToken}` } : {},
+  });
   if (!response.ok) throw new Error(`HQ setup failed (${response.status})`);
   const org = (await response.json()) as HqOrgSnapshot;
   applyLiveOrg(org);
@@ -53,7 +56,10 @@ export function startHqOrgSync() {
     if (stopped) return;
     source?.close();
     try {
-      source = new EventSource(apiUrl("/api/console/setup/settings/stream"));
+      const till = loadDeviceTill();
+      const streamUrl = new URL(apiUrl("/api/console/setup/settings/stream"), window.location.href);
+      if (till.sessionToken) streamUrl.searchParams.set("token", till.sessionToken);
+      source = new EventSource(streamUrl.toString());
       source.onmessage = (message) => {
         try {
           const parsed = JSON.parse(message.data) as {

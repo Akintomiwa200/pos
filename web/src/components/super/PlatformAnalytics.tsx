@@ -27,6 +27,10 @@ export function PlatformAnalytics() {
     groups.filter((row) => groupScope(row) === "producer").map((row) => row.id),
   );
   const staff = accounts.filter((row) => producerIds.has(row.groupId));
+  const companyIds = accounts
+    .map((row) => row.companyId)
+    .filter((id): id is string => Boolean(id && id.trim()));
+  const companyCount = accounts.length ? new Set(companyIds).size : null;
 
   return (
     <div>
@@ -36,7 +40,12 @@ export function PlatformAnalytics() {
         copy="Platform-wide operational metrics — companies, tills, staff, and where to dig deeper."
       />
       <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <SetupStat label="Companies" value={company ? "1" : "0"} hint={company?.name || "None yet"} tone="accent" />
+        <SetupStat
+          label="Companies"
+          value={companyCount === null ? "—" : String(companyCount)}
+          hint={companyCount === null ? "No accounts to count" : "Tenants with accounts"}
+          tone="accent"
+        />
         <SetupStat label="Tills" value={String(tills.length)} hint={`${tills.filter((t) => t.online).length} online`} />
         <SetupStat label="Locations" value={String(branches.length)} hint={`${stores.length} stores`} />
         <SetupStat label="Staff" value={String(staff.length)} hint={`${accounts.length} accounts`} />

@@ -18,13 +18,13 @@ node -v    # v22.x
 pnpm -v
 ```
 
-From each app folder (`pos`, `price-check`, `backend`, `web`):
+From each app folder (`pos`, `price-check`, `label-studio`, `backend`, `web`):
 
 ```powershell
 pnpm install
 ```
 
-## Windows EXE / MSI (till and price check)
+## Windows EXE / MSI (till, price check, label studio)
 
 Builds **must run on Windows**. MSI cannot be produced on macOS/Linux.
 
@@ -33,7 +33,8 @@ Builds **must run on Windows**. MSI cannot be produced on macOS/Linux.
 | [Rust](https://rustup.rs/) (stable) | Tauri native shell |
 | [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) with **Desktop development with C++** | MSVC linker |
 | WebView2 | Bundled by the installer if missing; present on Windows 10/11 |
-| Tauri CLI | `@tauri-apps/cli` in each app (`pnpm tauri`) |
+| [WiX Toolset v3](https://wixtoolset.org/releases/) (e.g. 3.14.1) | Required by Tauri 2 to build `.msi`; CI installs it via Chocolatey |
+| Tauri CLI | `@tauri-apps/cli` in each app (`pnpm exec tauri`) |
 
 ```powershell
 rustup --version
@@ -56,18 +57,18 @@ rustup target add aarch64-pc-windows-msvc
 
 ### App icons (required before the first EXE)
 
-Tauri refuses to bundle without icons. From `pos/` or `price-check/`, after
-`pnpm add -D @tauri-apps/cli@2`:
+Tauri refuses to bundle without icons. From the app folder:
 
 ```powershell
-# POS — use any square PNG/SVG at least 1024px if you have a brand mark
+# POS / Label studio — use any square PNG/SVG at least 1024px if you have a brand mark
 pnpm exec tauri icon path\to\icon.png
 
-# Price check can reuse its existing mark
-pnpm exec tauri icon public/icon.svg
+# Price check can reuse its existing mark (no icons are committed yet)
+pnpm exec tauri icon public\icon.svg
 ```
 
-This writes `src-tauri/icons/`. Commit those generated PNGs/ICO files.
+This writes `src-tauri/icons/`. Commit those generated PNGs/ICO files. CI
+generates the price-check icons from `public/icon.svg` when they are absent.
 
 ## Android APK
 
@@ -102,6 +103,17 @@ rustup target add x86_64-linux-android
 ```
 
 Minimum Android version for Tauri 2 is **7.0 (API 24)**.
+
+Initialize and commit the Gradle project before expecting CI to build an APK:
+
+```powershell
+cd C:\Users\DELL\Desktop\POS\pos   # or price-check
+pnpm exec tauri android init
+```
+
+That creates `src-tauri/gen/android/`. It is not committed today, so the tag
+workflow skips Android; use the manual dispatch described in
+[release-ci.md](release-ci.md).
 
 ## API and HQ as Windows services
 

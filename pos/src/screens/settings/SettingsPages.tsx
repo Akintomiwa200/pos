@@ -296,7 +296,10 @@ export function StockSettings({ items }: { items: CatalogItem[] }) {
             ]}
           />
         </SetRow>
-        <SetRow label="Push price changes to Price Check live?">
+        <SetRow
+          label="Record a Price Check sync preference?"
+          hint="Stored on this till only — Price Check reads the HQ catalog stream independently."
+        >
           <Toggle
             on={settings.syncPriceCheck}
             onChange={(syncPriceCheck) => patch({ syncPriceCheck })}

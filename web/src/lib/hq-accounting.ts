@@ -60,6 +60,8 @@ export type AccountingBooks = {
   outputVatMinor: number;
   inputVatMinor: number;
   cashMinor: number;
+  /** Real omissions in the derived books. Never filled with synthetic values. */
+  dataGaps: string[];
 };
 
 function bump(
@@ -78,6 +80,11 @@ function bump(
 
 function openInvoices(docs: TradeDoc[]) {
   return docs.filter((doc) => doc.status === "open" || doc.status === "received" || doc.status === "partial");
+}
+
+function expenseAccountCode(name: string, accounts: DirectoryRecord[]) {
+  const match = accounts.find((row) => row.name.toLowerCase() === name.toLowerCase());
+  return match ? `6${String(match.id.replace(/\D/g, "").slice(-3) || "000").padStart(3, "0")}` : "6999";
 }
 
 export async function loadAccountingBooks(): Promise<AccountingBooks> {
@@ -112,32 +119,34 @@ export async function loadAccountingBooks(): Promise<AccountingBooks> {
   const inventoryValueMinor = stock.reduce((sum, row) => sum + row.valueMinor, 0);
   const salesMinor = sales.reduce((sum, sale) => sum + sale.totalMinor, 0);
   const expenseMinor = expenses.reduce((sum, row) => sum + row.amountMinor, 0);
-  const purchaseTotal = purchases.reduce((sum, doc) => sum + doc.totalMinor, 0);
   const payablesMinor = openInvoices(purchases).reduce((sum, doc) => sum + doc.totalMinor, 0);
-  const receivablesMinor = Math.max(0, Math.round(salesMinor * 0.08));
   const cashMinor = payments.settlements.reduce((sum, row) => sum + row.totalMinor, 0);
-  const cogsMinor = Math.min(
-    inventoryValueMinor + purchaseTotal,
-    Math.round(salesMinor * 0.62),
-  );
 
-  // Seed control accounts
+  // Only postings backed by recorded data are created. No percentage estimates,
+  // no plug entries, and no silent balancing figures.
+  const receivablesMinor = 0;
+  const cogsMinor = 0;
+  const dataGaps = [
+    "Accounts receivable is not tracked — no unpaid sales invoices are recorded, so receivables are shown as 0.",
+    "Cost of sales is not calculated — purchase invoices and stock values are not linked to sold items, so COGS is shown as 0.",
+    "Opening balances, capital and retained earnings are not recorded — no equity plug is inserted to force the books to balance.",
+    "Cash & tenders reflects recorded payment settlements only, not every till tender movement.",
+  ];
+
+  // Seed control accounts from recorded values only
   bump(accounts, "1000", "Cash & tenders", "asset", cashMinor, 0);
-  bump(accounts, "1200", "Accounts receivable", "asset", receivablesMinor, 0);
   bump(accounts, "1300", "Inventory", "asset", inventoryValueMinor, 0);
   bump(accounts, "1400", "Input VAT", "asset", tax.inputTaxMinor, 0);
   bump(accounts, "2000", "Accounts payable", "liability", 0, payablesMinor);
   bump(accounts, "2100", "Output VAT / VAT payable", "liability", 0, tax.outputTaxMinor);
   bump(accounts, "4000", "Sales revenue", "income", 0, Math.max(0, salesMinor - tax.outputTaxMinor));
-  bump(accounts, "5000", "Cost of sales", "expense", cogsMinor, 0);
 
   for (const account of expenseAccounts) {
     const spent = expenses
       .filter((row) => row.account.toLowerCase() === account.name.toLowerCase())
       .reduce((sum, row) => sum + row.amountMinor, 0);
     if (!account.active && spent === 0) continue;
-    const code = `6${String(account.id.replace(/\D/g, "").slice(-3) || "000").padStart(3, "0")}`;
-    bump(accounts, code, account.name, "expense", spent, 0);
+    bump(accounts, expenseAccountCode(account.name, expenseAccounts), account.name, "expense", spent, 0);
   }
 
   // Catch-all for expenses not mapped to a named account
@@ -147,20 +156,6 @@ export async function loadAccountingBooks(): Promise<AccountingBooks> {
     .reduce((sum, row) => sum + row.amountMinor, 0);
   if (otherExpense > 0) {
     bump(accounts, "6999", "Other operating expenses", "expense", otherExpense, 0);
-  }
-
-  // Equity plugs the books so Trial Balance balances
-  let debit = 0;
-  let credit = 0;
-  for (const row of accounts.values()) {
-    debit += row.debitMinor;
-    credit += row.creditMinor;
-  }
-  const equityMinor = debit - credit;
-  if (equityMinor >= 0) {
-    bump(accounts, "3000", "Retained earnings / capital", "equity", 0, equityMinor);
-  } else {
-    bump(accounts, "3000", "Retained earnings / capital", "equity", -equityMinor, 0);
   }
 
   for (const sale of sales.slice(0, 120)) {
@@ -205,7 +200,7 @@ export async function loadAccountingBooks(): Promise<AccountingBooks> {
       source: "expense",
       lines: [
         {
-          accountCode: "6999",
+          accountCode: expenseAccountCode(expense.account, expenseAccounts),
           accountName: expense.account || "Other operating expenses",
           debitMinor: expense.amountMinor,
           creditMinor: 0,
@@ -257,6 +252,7 @@ export async function loadAccountingBooks(): Promise<AccountingBooks> {
     outputVatMinor: tax.outputTaxMinor,
     inputVatMinor: tax.inputTaxMinor,
     cashMinor,
+    dataGaps,
   };
 }
 

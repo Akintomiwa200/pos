@@ -55,7 +55,7 @@ export function TrialBalancePage() {
           </p>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight text-pos-ink">Trial balance</h1>
           <p className="mt-1.5 text-sm text-pos-ink-muted">
-            Debits and credits by account — totals must match before you close the period.
+            Recorded postings by account. Totals will not balance until the omitted books below are entered.
           </p>
         </div>
         <label className="relative min-w-[220px]">
@@ -74,26 +74,34 @@ export function TrialBalancePage() {
 
       <section
         className={`mb-5 flex items-center gap-4 rounded-[20px] p-5 shadow-pos-md ${
-          balanced
+          balanced && books.dataGaps.length === 0
             ? "bg-pos-success-soft"
             : "bg-rose-50 dark:bg-rose-950/30"
         }`}
       >
         <div
           className={`grid h-12 w-12 shrink-0 place-items-center rounded-full ${
-            balanced ? "bg-white text-pos-success" : "bg-white text-pos-danger"
+            balanced && books.dataGaps.length === 0 ? "bg-white text-pos-success" : "bg-white text-pos-danger"
           } shadow-pos-sm`}
         >
-          {balanced ? <CheckCircle2 size={24} /> : <XCircle size={24} />}
+          {balanced && books.dataGaps.length === 0 ? <CheckCircle2 size={24} /> : <XCircle size={24} />}
         </div>
         <div className="min-w-0 flex-1">
-          <p className={`text-base font-semibold ${balanced ? "text-pos-success" : "text-pos-danger"}`}>
-            {balanced ? "Books are in balance" : "Books are out of balance"}
+          <p className={`text-base font-semibold ${balanced && books.dataGaps.length === 0 ? "text-pos-success" : "text-pos-danger"}`}>
+            {books.dataGaps.length > 0
+              ? "Recorded postings only — books are incomplete"
+              : balanced
+                ? "Recorded postings balance"
+                : "Recorded postings are out of balance"}
           </p>
-          <p className={`mt-0.5 text-sm ${balanced ? "text-pos-success/80" : "text-pos-danger/80"}`}>
-            {balanced
-              ? "Total debits equal total credits across all accounts."
-              : `Difference of ${naira(difference)} — investigate before closing the period.`}
+          <p className={`mt-0.5 text-sm ${balanced && books.dataGaps.length === 0 ? "text-pos-success/80" : "text-pos-danger/80"}`}>
+            {books.dataGaps.length > 0
+              ? balanced
+                ? "Totals match, but omitted books are not posted. No balancing entry is inserted."
+                : `Difference of ${naira(difference)} — no balancing entry is inserted. See omissions below.`
+              : balanced
+                ? "Total debits equal total credits across recorded accounts."
+                : `Difference of ${naira(difference)} — investigate before closing the period.`}
           </p>
         </div>
         <div className="hidden shrink-0 text-right sm:block">
@@ -103,6 +111,17 @@ export function TrialBalancePage() {
           <p className="text-lg font-bold tabular-nums text-pos-ink">{naira(creditTotal)}</p>
         </div>
       </section>
+
+      {books.dataGaps.length > 0 && (
+        <section className="mb-5 rounded-[20px] border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+          <p className="font-semibold">Not posted in this build</p>
+          <ul className="mt-2 list-disc space-y-1 pl-5">
+            {books.dataGaps.map((gap) => (
+              <li key={gap}>{gap}</li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className="overflow-hidden rounded-[20px] bg-pos-surface shadow-pos-md">
         <div className="overflow-x-auto">

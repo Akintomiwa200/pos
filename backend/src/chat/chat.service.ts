@@ -373,18 +373,67 @@ export class ChatService implements OnModuleInit {
 
   async sendMessage(
     conversationId: string,
-    body: { text?: string; senderName?: string; senderId?: string; kind?: "text" | "system" },
+    body: {
+      text?: string;
+      senderName?: string;
+      senderId?: string;
+      kind?: "text" | "system";
+      attachmentIds?: string[];
+    },
     viewerId: string,
     token?: string,
   ) {
-    const text = body.text?.trim();
-    if (!text) throw new BadRequestException("Message text is required");
+    const text = body.text?.trim() || "";
+    const attachmentIds = Array.isArray(body.attachmentIds)
+      ? [
+          ...new Set(
+            body.attachmentIds.filter(
+              (id): id is string => typeof id === "string" && Boolean(id.trim()),
+            ),
+          ),
+        ]
+      : [];
     const { access, conversation } = await this.visibleConversation(conversationId, viewerId, token);
+    if (!text && !attachmentIds.length) {
+      throw new BadRequestException("Message text is required or attach a file");
+    }
+    if (attachmentIds.length > MAX_CHAT_ATTACHMENTS_PER_MESSAGE) {
+      throw new BadRequestException(
+        `You can attach up to ${MAX_CHAT_ATTACHMENTS_PER_MESSAGE} files per message.`,
+      );
+    }
+
+    const messageId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const attachments = attachmentIds.length
+      ? await this.withAttachmentLock(async () => {
+          const records = await readChatAttachmentRecords();
+          const selected: ChatAttachmentRecord[] = [];
+          for (const id of attachmentIds) {
+            const record = records.find((row) => row.id === id);
+            if (!record) throw new NotFoundException("Attachment not found");
+            // IDs are only usable by the account that uploaded them, once.
+            if (record.uploaderId !== access.id) {
+              throw new ForbiddenException("You cannot attach a file uploaded by another user");
+            }
+            if (record.status !== "pending") {
+              throw new BadRequestException("That file has already been attached to a chat");
+            }
+            selected.push(record);
+          }
+          for (const record of selected) {
+            record.status = "attached";
+            record.conversationId = conversationId;
+            record.messageId = messageId;
+          }
+          await writeChatAttachmentRecords(records);
+          return selected.map(publicChatAttachment);
+        })
+      : [];
 
     const isSystem = body.kind === "system";
     const self = access.accounts.get(access.id);
     const message: ChatMessage = {
-      id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      id: messageId,
       conversationId,
       sender: isSystem ? "system" : "staff",
       senderId: isSystem ? undefined : access.id,
@@ -394,14 +443,110 @@ export class ChatService implements OnModuleInit {
       body: text,
       at: new Date().toISOString(),
       kind: isSystem ? "system" : "text",
+      attachments: attachments.length ? attachments : undefined,
     };
     this.messages.push(message);
-    conversation.preview = text.slice(0, 80);
+    conversation.preview = text
+      ? text.slice(0, 80)
+      : `📎 ${attachments[0]?.name ?? "Attachment"}${
+          attachments.length > 1 ? ` +${attachments.length - 1}` : ""
+        }`;
     conversation.updatedAt = message.at;
     conversation.active = true;
     await this.persist();
     this.events.next({ type: "message", message, conversation });
     return message;
+  }
+
+  /** Uploads are unattached until a message claims them, so they cannot be borrowed. */
+  async uploadAttachment(
+    file: Express.Multer.File,
+    viewerId: string,
+    token?: string,
+  ): Promise<ChatAttachment> {
+    const access = await this.access(viewerId, token);
+    const validated = validateChatAttachment(file);
+    const storedName = await storeChatAttachmentFile(file, validated.extension);
+    const id = `att-${randomUUID()}`;
+    const record: ChatAttachmentRecord = {
+      id,
+      name: validated.name,
+      mimeType: validated.mimeType,
+      size: validated.size,
+      url: `/api/chat/files/${encodeURIComponent(id)}`,
+      storedName,
+      uploaderId: access.id,
+      status: "pending",
+      createdAt: new Date().toISOString(),
+    };
+    try {
+      await this.withAttachmentLock(async () => {
+        const records = await readChatAttachmentRecords();
+        records.push(record);
+        await writeChatAttachmentRecords(records);
+      });
+    } catch (error) {
+      await removeChatAttachmentFile(storedName).catch(() => undefined);
+      throw error;
+    }
+    return publicChatAttachment(record);
+  }
+
+  /** Authorised download: pending files belong to the uploader, attached files to members. */
+  async getAttachmentFile(id: string, viewerId: string, token?: string) {
+    const access = await this.access(viewerId, token);
+    const record = (await readChatAttachmentRecords()).find((row) => row.id === id);
+    if (!record || record.status === "orphan") throw new NotFoundException("File not found");
+    if (record.conversationId) {
+      const conversation = this.conversations.find((row) => row.id === record.conversationId);
+      if (!conversation || !this.canSeeConversation(access, conversation)) {
+        throw new NotFoundException("File not found");
+      }
+    } else if (record.uploaderId !== access.id) {
+      throw new NotFoundException("File not found");
+    }
+    const buffer = await readChatAttachmentFile(record.storedName);
+    if (!buffer) throw new NotFoundException("File not found");
+    return { record, buffer };
+  }
+
+  /** Discard an upload the caller selected but never sent. */
+  async removeAttachment(id: string, viewerId: string, token?: string) {
+    const access = await this.access(viewerId, token);
+    await this.withAttachmentLock(async () => {
+      const records = await readChatAttachmentRecords();
+      const record = records.find((row) => row.id === id);
+      if (!record || record.uploaderId !== access.id || record.status !== "pending") {
+        throw new NotFoundException("File not found");
+      }
+      await removeChatAttachmentFile(record.storedName);
+      await writeChatAttachmentRecords(records.filter((row) => row.id !== id));
+    });
+    return { ok: true as const, id };
+  }
+
+  /** Removing a chat keeps uploaded bytes but detaches the metadata from the chat. */
+  async deleteConversation(id: string, viewerId: string, token?: string) {
+    const { conversation } = await this.visibleConversation(id, viewerId, token);
+    const orphanedAt = new Date().toISOString();
+    this.conversations = this.conversations.filter((row) => row.id !== id);
+    this.messages = this.messages.filter((row) => row.conversationId !== id);
+    await this.withAttachmentLock(async () => {
+      const records = await readChatAttachmentRecords();
+      let changed = false;
+      for (const record of records) {
+        if (record.conversationId === id && record.status !== "orphan") {
+          record.status = "orphan";
+          record.conversationId = undefined;
+          record.orphanedAt = orphanedAt;
+          changed = true;
+        }
+      }
+      if (changed) await writeChatAttachmentRecords(records);
+    });
+    await this.persist();
+    this.events.next({ type: "conversation", conversation, action: "deleted" });
+    return { ok: true as const, id };
   }
 
   async patchConversation(

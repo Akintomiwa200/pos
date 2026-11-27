@@ -176,7 +176,7 @@ Copy examples per app:
 | Variable | Purpose |
 | --- | --- |
 | `PORT` | API port (default `3001`) |
-| `CORS_ORIGINS` | Documented allowed origins |
+| `CORS_ORIGINS` | Exact comma-separated browser origins; production requires HTTPS origins |
 | `GOOGLE_CLIENT_ID` | Verify Google ID tokens for HQ login/signup |
 | `CLOUDINARY_CLOUD_NAME` | Product image uploads |
 | `CLOUDINARY_API_KEY` | Cloudinary API key |

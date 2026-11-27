@@ -39,6 +39,7 @@ export type StoreSettings = {
   barcodePrefix: string;
   barcodeMinLength: number;
   barcodeAllowManual: boolean;
+  /** Recorded preference only — Price Check consumes the HQ catalog stream independently. */
   syncPriceCheck: boolean;
   hideEmptyCategories: boolean;
   sortCategoriesAz: boolean;
@@ -140,6 +141,7 @@ export type StoreSettings = {
   activeTillId: string;
   storefrontEnabled: boolean;
   storefrontUrl: string;
+  /** Recorded preferences only — no push is performed from this terminal. */
   storefrontSyncPrices: boolean;
   storefrontSyncStock: boolean;
   gatewayPaystack: boolean;

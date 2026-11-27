@@ -1,26 +1,36 @@
 # Windows EXE and MSI
 
-Ship the **Point of sale** and **Price check** apps as installers that cashiers
-double-click. Both use **Tauri 2** (`src-tauri/`) around the Vite React UI.
+Ship **Point of sale**, **Price check**, and **Label studio** as installers that
+staff double-click. All three use **Tauri 2** (`src-tauri/`) around a Vite React
+UI.
 
-Build **on Windows**. Output is a setup `.exe` (NSIS, recommended) and optionally
-an `.msi`.
+Build **on Windows**. Output is a setup `.exe` (NSIS, recommended) and an `.msi`.
+Pushed `v*` tags do this automatically in CI; see [release-ci.md](release-ci.md).
+CI output is **unsigned** unless you sign it separately.
 
 ## 0. One-time: enable the native shell
 
-The `src-tauri` folders are the packaging home. Before the **first** build in
-each app (`pos` and `price-check`):
+The `src-tauri` folders are the packaging home. From `pos`, `price-check`, or
+`label-studio`, install once:
 
 ```powershell
-cd C:\Users\DELL\Desktop\POS\pos   # or price-check
+cd C:\Users\DELL\Desktop\POS\pos   # or price-check / label-studio
 pnpm install
-pnpm add -D @tauri-apps/cli@2
-pnpm exec tauri icon <square-icon.png-or-svg>
 ```
 
-`Cargo.toml` and `src-tauri/src` already declare a Tauri 2 app. The first
-`pnpm tauri build` will download Rust crates and create `src-tauri/Cargo.lock`
+`Cargo.toml` and `src-tauri/src` already declare a Tauri 2 app. The first build
+downloads Rust crates and may create `src-tauri/Cargo.lock`
 — **commit that lockfile**.
+
+Generate icons before the first bundle if `src-tauri/icons/icon.ico` is missing:
+
+```powershell
+# from the app folder; use a square PNG/SVG with transparency
+pnpm exec tauri icon public/icon.svg
+```
+
+`price-check` ships `public/icon.svg` but no committed `src-tauri/icons/`, so
+this step is required there (CI generates them automatically).
 
 If Android is in scope later, also run (once per app):
 
@@ -59,11 +69,11 @@ The API must already be installed and reachable. See [services.md](services.md).
 ```powershell
 cd C:\Users\DELL\Desktop\POS\pos
 pnpm install
-pnpm tauri build -- --bundles nsis
+pnpm exec tauri build --bundles nsis,msi
 ```
 
 That runs `pnpm build` (TypeScript + Vite), then compiles the Rust shell, then
-writes the NSIS installer.
+writes the NSIS installer and the MSI.
 
 **Find the installer**
 
@@ -78,24 +88,23 @@ Raw unsigned binary (no Start Menu shortcut):
 pos\src-tauri\target\release\pos-desktop.exe
 ```
 
-**MSI as well** (needs the Windows VBScript optional feature if WiX fails):
-
-```powershell
-pnpm tauri build -- --bundles nsis,msi
-```
-
 MSI path:
 
 ```
 pos\src-tauri\target\release\bundle\msi\
 ```
 
+WiX Toolset **v3** must be on `PATH` to build MSI (CI installs
+`wixtoolset` 3.14.1 via Chocolatey). If `light.exe` fails locally, enable the
+Windows **VBScript** optional feature.
+
 ## 3. Build Price check
 
 ```powershell
 cd C:\Users\DELL\Desktop\POS\price-check
 pnpm install
-pnpm tauri build -- --bundles nsis
+if (-not (Test-Path src-tauri\icons\icon.ico)) { pnpm exec tauri icon public\icon.svg }
+pnpm exec tauri build --bundles nsis,msi
 ```
 
 **Find the installer**
@@ -107,16 +116,26 @@ price-check\src-tauri\target\release\bundle\nsis\
 
 Raw binary: `price-check\src-tauri\target\release\price-check-desktop.exe`.
 
+## 3b. Build Label studio
+
+```powershell
+cd C:\Users\DELL\Desktop\POS\label-studio
+pnpm install
+pnpm exec tauri build --bundles nsis,msi
+```
+
+Installer: `label-studio\src-tauri\target\release\bundle\nsis\Label Studio_0.1.0_x64-setup.exe`.
+
 ## 4. Other Windows CPU types
 
 Default is 64-bit Intel/AMD. For 32-bit or ARM:
 
 ```powershell
 rustup target add i686-pc-windows-msvc
-pnpm tauri build -- --target i686-pc-windows-msvc --bundles nsis
+pnpm exec tauri build --target i686-pc-windows-msvc --bundles nsis,msi
 
 rustup target add aarch64-pc-windows-msvc
-pnpm tauri build -- --target aarch64-pc-windows-msvc --bundles nsis
+pnpm exec tauri build --target aarch64-pc-windows-msvc --bundles nsis,msi
 ```
 
 Cross-target output lands under `src-tauri/target/<triple>/release/bundle/`.
@@ -145,6 +164,12 @@ Price check: `cd price-check` then `pnpm tauri dev` (UI on port 1430).
 | `.msi` | Domain / Intune / Group Policy |
 | API URL + till **code** from HQ Setup → Others → Till | First launch of the till |
 
+Release CI renames the files to `pos-terminal-setup.exe`, `pos-terminal.msi`,
+`price-check-setup.exe`, `price-check.msi`, `label-studio-setup.exe`, and
+`label-studio.msi` before attaching them to the tag Release. Those are the names
+the `/download` page links to. They are **unsigned**; sign locally with
+[signtool](signing.md) for broad deployment.
+
 The till still requires **Activate this till** on first use (16-character code)
 and again when the one-year subscription ends.
 
@@ -164,5 +189,5 @@ Clean rebuild:
 ```powershell
 # from pos/ or price-check/
 Remove-Item -Recurse -Force src-tauri\target, dist -ErrorAction SilentlyContinue
-pnpm tauri build -- --bundles nsis
+pnpm exec tauri build --bundles nsis,msi
 ```

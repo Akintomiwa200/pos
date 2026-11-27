@@ -1,6 +1,15 @@
-import { api } from "./hq-api";
+import { api, NetworkError, readSession } from "./hq-api";
 
 export type ConversationKind = "customer" | "direct" | "group";
+
+/** Public attachment metadata returned by the chat upload endpoint. */
+export type ChatAttachment = {
+  id: string;
+  name: string;
+  mimeType: string;
+  size: number;
+  url: string;
+};
 
 export type ChatMessage = {
   id: string;
@@ -11,6 +20,7 @@ export type ChatMessage = {
   body: string;
   at: string;
   kind?: "text" | "system";
+  attachments?: ChatAttachment[];
 };
 
 export type ChatConversation = {
@@ -63,7 +73,11 @@ export type CallSignal =
 export type ChatEvent =
   | { type: "snapshot"; conversations: ChatConversation[]; presence: ChatPresence[] }
   | { type: "message"; message: ChatMessage; conversation: ChatConversation }
-  | { type: "conversation"; conversation: ChatConversation; action: "updated" | "created" }
+  | {
+      type: "conversation";
+      conversation: ChatConversation;
+      action: "updated" | "created" | "deleted";
+    }
   | {
       type: "typing";
       conversationId: string;
@@ -85,6 +99,86 @@ type CreateChatInput = {
 
 function viewerQuery(viewerId: string) {
   return `viewerId=${encodeURIComponent(viewerId)}`;
+}
+
+export const MAX_CHAT_ATTACHMENT_BYTES = 20 * 1024 * 1024;
+export const CHAT_ATTACHMENT_ACCEPT =
+  ".png,.jpg,.jpeg,.gif,.webp,.pdf,.csv,.tsv,.json,.txt,.doc,.docx,.xls,.xlsx,.zip";
+export const CHAT_ATTACHMENT_TYPES_LABEL =
+  "PNG, JPEG, GIF, WebP, PDF, CSV, TSV, JSON, TXT, DOC, DOCX, XLS, XLSX and ZIP files only (max 20 MB).";
+
+const CHAT_ATTACHMENT_EXTENSIONS = new Set(
+  CHAT_ATTACHMENT_ACCEPT.split(",").map((item) => item.slice(1)),
+);
+
+/** Same rules as the server; fail fast in the browser with a readable message. */
+export function chatAttachmentError(file: File): string | null {
+  if (!file.size) return "That file is empty.";
+  if (file.size > MAX_CHAT_ATTACHMENT_BYTES) {
+    return `Files must be 20 MB or smaller. ${CHAT_ATTACHMENT_TYPES_LABEL}`;
+  }
+  const extension = file.name.includes(".") ? file.name.split(".").pop()!.toLowerCase() : "";
+  if (!CHAT_ATTACHMENT_EXTENSIONS.has(extension)) {
+    return `Unsupported file type "${extension || "unknown"}". ${CHAT_ATTACHMENT_TYPES_LABEL}`;
+  }
+  return null;
+}
+
+export function formatChatAttachmentSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/**
+ * Downloads need viewerId + token in the query because <img>/new-tab navigation
+ * cannot send an Authorization header. The token is never persisted with messages.
+ */
+export function chatAttachmentUrl(id: string) {
+  const session = readSession();
+  const params = new URLSearchParams();
+  if (session?.id) params.set("viewerId", session.id);
+  if (session?.token) params.set("token", session.token);
+  return `/api/chat/files/${encodeURIComponent(id)}?${params.toString()}`;
+}
+
+/** Multipart is not supported by the shared api() helper, so use fetch like the avatar uploader. */
+export async function uploadChatAttachment(file: File, viewerId?: string): Promise<ChatAttachment> {
+  const problem = chatAttachmentError(file);
+  if (problem) throw new Error(problem);
+  const session = readSession();
+  const token = session?.token ?? "";
+  const form = new FormData();
+  form.append("file", file);
+  form.append("viewerId", viewerId ?? session?.id ?? "");
+  let response: Response;
+  try {
+    response = await fetch("/api/chat/files", {
+      method: "POST",
+      body: form,
+      cache: "no-store",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+  } catch {
+    throw new NetworkError("POST /api/chat/files");
+  }
+  const data = (await response.json().catch(() => ({}))) as ChatAttachment & {
+    message?: string | string[];
+  };
+  if (!response.ok) {
+    if (response.status >= 500) {
+      throw new NetworkError(`POST /api/chat/files (${response.status})`);
+    }
+    const message = Array.isArray(data.message) ? data.message[0] : data.message;
+    throw new Error(message || "Upload failed");
+  }
+  return {
+    id: data.id,
+    name: data.name,
+    mimeType: data.mimeType,
+    size: data.size,
+    url: data.url,
+  };
 }
 
 export async function listChatConversations(viewerId: string) {
@@ -109,12 +203,27 @@ export async function createChatConversation(input: CreateChatInput) {
 export async function sendChatMessage(
   id: string,
   text: string,
-  extra: { senderName?: string; senderId?: string; kind?: "text" | "system" } | undefined,
+  extra:
+    | {
+        senderName?: string;
+        senderId?: string;
+        kind?: "text" | "system";
+        attachmentIds?: string[];
+      }
+    | undefined,
   viewerId: string,
 ) {
   return api<ChatMessage>(`/api/chat/conversations/${id}/messages`, {
     method: "POST",
     body: JSON.stringify({ text, ...extra, viewerId }),
+  });
+}
+
+/** Clean up a selected file the user removed before sending. */
+export async function deleteChatAttachment(id: string, viewerId: string) {
+  return api<{ ok: true; id: string }>(`/api/chat/files/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    body: JSON.stringify({ viewerId }),
   });
 }
 

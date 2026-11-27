@@ -27,9 +27,18 @@ export class DataTransferController {
       dataset?: string;
       rows?: Record<string, unknown>[];
       mode?: "update" | "skip";
+      /** Base64-encoded .xlsx workbook; an alternative to sending already-parsed rows. */
+      workbook?: {
+        filename?: string;
+        sheet?: string;
+        data?: string;
+      };
     },
   ) {
     await this.console.requireProducer(bearer(authorization));
+    if (body.workbook) {
+      return this.service.importWorkbook(body.dataset ?? "", body.workbook, body.mode ?? "update");
+    }
     return this.service.importRows(body.dataset ?? "", body.rows ?? [], body.mode ?? "update");
   }
 }

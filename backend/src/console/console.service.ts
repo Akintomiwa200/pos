@@ -22,6 +22,7 @@ import {
   type HqNotice,
 } from "./console.types";
 import { hashPassword, isHashedPassword, verifyPassword } from "../catalog/password.util";
+import { publishedAnnouncements } from "../policies/policies.service";
 import { isSuperAdmin, isTenantAdmin, rankFor } from "../staff/web-user";
 import { SetupService } from "./setup.service";
 import { EmailService } from "../email/email.service";
@@ -780,6 +781,18 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
       throw new ForbiddenException("Only Super Admin can use this desk");
     }
     return session;
+  }
+
+  async requireTillSession(token: string) {
+    const result = await this.db.query<{ id: string }>(
+      `select id from hq_tills
+       where session_token = $1 and active = true
+         and (subscription_expires_at is null or subscription_expires_at > now())
+       limit 1`,
+      [token.trim()],
+    );
+    if (!result.rowCount) throw new UnauthorizedException("Pair this till again to continue");
+    return { tillId: result.rows[0].id };
   }
 
   private async createCompanyWithOwner(
@@ -2594,6 +2607,48 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
     return true;
   }
 
+  /** Copy a published producer announcement into a tenant feed, preserving read state. */
+  private async upsertAnnouncementNotice(
+    key: string,
+    input: Pick<HqNotice, "type" | "title" | "body" | "href" | "companyId">,
+  ) {
+    const existing = await this.db.query<{
+      id: string;
+      title: string;
+      body: string;
+      href: string;
+      company_id: string | null;
+    }>(`select id, title, body, href, company_id from hq_notices where key = $1 limit 1`, [key]);
+    const row = existing.rows[0];
+    if (row) {
+      if (
+        row.title !== input.title ||
+        row.body !== input.body ||
+        row.href !== input.href ||
+        row.company_id !== (input.companyId ?? null)
+      ) {
+        await this.db.query(
+          `update hq_notices set title = $2, body = $3, href = $4, company_id = $5 where id = $1`,
+          [row.id, input.title, input.body, input.href, input.companyId ?? null],
+        );
+      }
+      return;
+    }
+    await this.db.query(
+      `insert into hq_notices (id, key, type, title, body, href, derived, company_id)
+       values ($1, $2, $3, $4, $5, $6, true, $7)`,
+      [
+        `n-${generateSessionToken().slice(0, 16)}`,
+        key,
+        input.type,
+        input.title,
+        input.body,
+        input.href,
+        input.companyId ?? null,
+      ],
+    );
+  }
+
   private async syncDerivedNotices() {
     const tills = await this.listRawTills();
     const live = new Set<string>();
@@ -2640,6 +2695,27 @@ export class ConsoleService implements OnModuleInit, OnModuleDestroy {
             companyId: this.setup.getCompany()?.id ?? null,
           });
         }
+      }
+    }
+
+    // Published producer announcements are delivered to every tenant HQ feed.
+    const companyRows = await this.db.query<{ company_id: string }>(
+      `select distinct company_id from hq_accounts where company_id is not null`,
+    );
+    const targets = companyRows.rows.length
+      ? companyRows.rows.map((row) => row.company_id)
+      : [this.setup.getCompany()?.id ?? null].filter((id): id is string => Boolean(id));
+    for (const announcement of publishedAnnouncements()) {
+      for (const companyId of targets) {
+        const key = `announcement:${announcement.id}:${companyId}`;
+        live.add(key);
+        await this.upsertAnnouncementNotice(key, {
+          type: "announcement",
+          title: announcement.title || "Platform announcement",
+          body: announcement.body || "A platform notice is available.",
+          href: "/",
+          companyId,
+        });
       }
     }
 

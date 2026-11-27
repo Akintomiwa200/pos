@@ -140,7 +140,9 @@ export async function writeChatAttachmentRecords(records: ChatAttachmentRecord[]
 }
 
 export function contentDisposition(name: string, inline: boolean): string {
-  const ascii = name.replace(/[\r\n"\\]/g, "_");
+  // Node rejects non-latin1 header values; keep the fallback ASCII-only and
+  // carry the real (localised) name in the RFC 5987 parameter.
+  const ascii = name.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "_");
   const kind = inline ? "inline" : "attachment";
   return `${kind}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(name)}`;
 }

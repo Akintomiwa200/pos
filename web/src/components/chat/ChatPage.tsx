@@ -1,10 +1,12 @@
 "use client";
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import {
   ArrowLeft,
   ChevronDown,
   ChevronUp,
+  FileText,
+  LoaderCircle,
   Paperclip,
   Phone,
   PhoneCall,
@@ -12,11 +14,17 @@ import {
   SendHorizontal,
   Smile,
   Users,
+  X,
 } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { naira } from "@/lib/hq-ops";
 import {
+  CHAT_ATTACHMENT_ACCEPT,
+  chatAttachmentError,
+  chatAttachmentUrl,
   createChatConversation,
+  deleteChatAttachment,
+  formatChatAttachmentSize,
   getChatThread,
   listChatConversations,
   patchChatConversation,
@@ -24,6 +32,7 @@ import {
   sendChatMessage,
   sendChatPresence,
   sendChatTyping,
+  uploadChatAttachment,
   type CallSignal,
   type ChatConversation,
   type ChatMessage,
@@ -37,6 +46,14 @@ import { NewChatModal } from "./NewChatModal";
 
 const TYPING_IDLE_MS = 1_500;
 const TYPING_REFRESH_MS = 2_000;
+
+type PendingAttachment = {
+  key: string;
+  name: string;
+  size: number;
+  uploading: boolean;
+  attachmentId?: string;
+};
 
 const EMOJI = [
   "😀", "😄", "😊", "😍", "😎", "🥳", "😅", "😂",
@@ -192,7 +209,43 @@ const MessageRow = memo(function MessageRow({
               : "rounded-bl-md bg-pos-surface text-pos-ink shadow-pos-sm"
           }`}
         >
-          {message.body}
+          {message.body || null}
+          {message.attachments?.length ? (
+            <div className={`flex flex-wrap gap-2 ${message.body ? "mt-2" : ""}`}>
+              {message.attachments.map((attachment) => {
+                const image = attachment.mimeType.startsWith("image/");
+                const url = chatAttachmentUrl(attachment.id);
+                return (
+                  <a
+                    key={attachment.id}
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={`Open ${attachment.name}`}
+                    className={`inline-flex max-w-full items-center overflow-hidden rounded-xl transition hover:opacity-85 ${
+                      mine ? "bg-white/15 text-white" : "bg-pos-surface-muted text-pos-ink"
+                    }`}
+                  >
+                    {image ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={url}
+                        alt={attachment.name}
+                        loading="lazy"
+                        referrerPolicy="no-referrer"
+                        className="h-20 w-20 shrink-0 object-cover sm:h-24 sm:w-24"
+                      />
+                    ) : (
+                      <span className="flex max-w-[180px] items-center gap-2 px-2.5 py-2 text-[12px]">
+                        <FileText size={14} className="shrink-0" />
+                        <span className="truncate">{attachment.name}</span>
+                      </span>
+                    )}
+                  </a>
+                );
+              })}
+            </div>
+          ) : null}
         </div>
       </div>
     </div>
@@ -257,7 +310,10 @@ export function ChatPage() {
   const [search, setSearch] = useState("");
   const [draft, setDraft] = useState("");
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
   const composerRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const removedAttachmentsRef = useRef<Set<string>>(new Set());
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [openPurchased, setOpenPurchased] = useState(true);
@@ -271,6 +327,10 @@ export function ChatPage() {
   const peerOnline =
     active?.kind === "direct" &&
     active?.memberIds.some((id) => id !== self?.id && isOnline(presenceMap[id], now));
+  const uploadingCount = pendingAttachments.filter((item) => item.uploading).length;
+  const readyAttachmentIds = pendingAttachments.flatMap((item) =>
+    item.attachmentId ? [item.attachmentId] : [],
+  );
   const callManager = useCallManager({
     self,
     peerName,
@@ -322,6 +382,13 @@ export function ChatPage() {
     stopTyping();
     setDraft("");
     setEmojiOpen(false);
+    pendingAttachments.forEach((item) => {
+      if (item.attachmentId) {
+        void deleteChatAttachment(item.attachmentId, self?.id ?? "").catch(() => undefined);
+      }
+    });
+    removedAttachmentsRef.current.clear();
+    setPendingAttachments([]);
     setActiveId(id);
     const thread = await getChatThread(id, self?.id ?? "");
     if (request !== threadRequestRef.current) return;
@@ -409,26 +476,86 @@ export function ChatPage() {
     });
   }
 
+  function onFilesSelected(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    event.target.value = "";
+    for (const file of files) {
+      const problem = chatAttachmentError(file);
+      if (problem) {
+        toast.error(problem, `Could not attach ${file.name}.`);
+        continue;
+      }
+      const key = `file-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const request = threadRequestRef.current;
+      setPendingAttachments((current) => [
+        ...current,
+        { key, name: file.name, size: file.size, uploading: true },
+      ]);
+      void uploadChatAttachment(file, self?.id ?? "")
+        .then((attachment) => {
+          if (
+            removedAttachmentsRef.current.has(key) ||
+            request !== threadRequestRef.current
+          ) {
+            void deleteChatAttachment(attachment.id, self?.id ?? "").catch(() => undefined);
+            return;
+          }
+          setPendingAttachments((current) =>
+            current.map((item) =>
+              item.key === key ? { ...item, attachmentId: attachment.id, uploading: false } : item,
+            ),
+          );
+        })
+        .catch((err) => {
+          if (removedAttachmentsRef.current.has(key) || request !== threadRequestRef.current) return;
+          setPendingAttachments((current) => current.filter((item) => item.key !== key));
+          toast.error(err, `Could not upload ${file.name}.`);
+        });
+    }
+  }
+
+  function removeAttachment(item: PendingAttachment) {
+    removedAttachmentsRef.current.add(item.key);
+    setPendingAttachments((current) => current.filter((row) => row.key !== item.key));
+    if (item.attachmentId) {
+      void deleteChatAttachment(item.attachmentId, self?.id ?? "").catch((err) =>
+        toast.error(err, "Could not remove the uploaded file."),
+      );
+    }
+  }
+
   async function onSend() {
     const text = draft.trim();
-    if (!activeId || !text || busy) return;
+    const attachmentIds = readyAttachmentIds;
+    if (!activeId || (!text && !attachmentIds.length) || busy || uploadingCount) return;
     stopTyping(activeId);
     setBusy(true);
     try {
       const message = await sendChatMessage(
         activeId,
         text,
-        { senderId: self?.id, senderName: self?.name || "You" },
+        { senderId: self?.id, senderName: self?.name || "You", attachmentIds },
         self?.id ?? "",
       );
       setMessages((current) => upsertMessage(current, message));
       setDraft("");
       setEmojiOpen(false);
+      removedAttachmentsRef.current.clear();
+      setPendingAttachments([]);
       setConversations((current) =>
         current
           .map((row) =>
             row.id === activeId
-              ? { ...row, preview: message.body, updatedAt: message.at, active: true }
+              ? {
+                  ...row,
+                  preview:
+                    message.body ||
+                    (message.attachments?.length
+                      ? `📎 ${message.attachments[0].name}`
+                      : row.preview),
+                  updatedAt: message.at,
+                  active: true,
+                }
               : row,
           )
           .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
@@ -603,6 +730,58 @@ export function ChatPage() {
             </div>
 
             <footer className="border-t border-pos-border/70 bg-pos-surface px-3 py-3 sm:px-4">
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept={CHAT_ATTACHMENT_ACCEPT}
+                aria-label="Choose attachments"
+                className="hidden"
+                onChange={onFilesSelected}
+              />
+              {pendingAttachments.length ? (
+                <div className="mb-2 flex flex-wrap gap-1.5">
+                  {pendingAttachments.map((item) => (
+                    <span
+                      key={item.key}
+                      className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-pos-surface-muted px-2.5 py-1 text-[11px] text-pos-ink-muted"
+                    >
+                      {item.uploading ? (
+                        <LoaderCircle size={12} className="shrink-0 animate-spin text-pos-primary" />
+                      ) : (
+                        <Paperclip size={12} className="shrink-0" />
+                      )}
+                      <span className="truncate">{item.name}</span>
+                      <span className="shrink-0 text-pos-ink-faint">
+                        {formatChatAttachmentSize(item.size)}
+                      </span>
+                      <button
+                        type="button"
+                        aria-label={`Remove ${item.name}`}
+                        onClick={() => removeAttachment(item)}
+                        className="shrink-0 rounded-full p-0.5 text-pos-ink-faint transition hover:bg-pos-border/60 hover:text-pos-ink"
+                      >
+                        <X size={12} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+              {uploadingCount ? (
+                <div role="status" className="mb-2 flex items-center gap-2">
+                  <div className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-pos-surface-muted">
+                    <div
+                      className="h-full rounded-full bg-pos-primary transition-all"
+                      style={{
+                        width: `${Math.round((readyAttachmentIds.length / pendingAttachments.length) * 100)}%`,
+                      }}
+                    />
+                  </div>
+                  <span className="shrink-0 text-[11px] text-pos-ink-faint">
+                    Uploading {uploadingCount} file{uploadingCount > 1 ? "s" : ""}…
+                  </span>
+                </div>
+              ) : null}
               <div className="relative flex items-center gap-1 rounded-full bg-pos-surface-muted px-2.5 py-2 sm:gap-2 sm:px-3">
                 <button
                   type="button"
@@ -647,19 +826,20 @@ export function ChatPage() {
                     }
                   }}
                 />
-                <span className="inline-flex" title="Attachments not available in this build">
-                  <button
-                    type="button"
-                    disabled
-                    aria-label="Attachments not available in this build"
-                    className="cursor-not-allowed rounded-full p-1.5 text-pos-ink-faint opacity-50"
-                  >
-                    <Paperclip size={18} />
-                  </button>
-                </span>
                 <button
                   type="button"
-                  disabled={busy || !draft.trim()}
+                  title="Attach files"
+                  aria-label="Attach files"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="rounded-full p-1.5 text-pos-ink-faint transition hover:text-pos-ink"
+                >
+                  <Paperclip size={18} />
+                </button>
+                <button
+                  type="button"
+                  disabled={
+                    busy || uploadingCount > 0 || (!draft.trim() && !readyAttachmentIds.length)
+                  }
                   onClick={() => void onSend()}
                   className="grid h-9 w-9 place-items-center rounded-full bg-pos-primary text-white shadow-pos-primary transition hover:opacity-90 disabled:opacity-50"
                 >

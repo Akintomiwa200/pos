@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import {
   ArrowLeft,
   ArrowLeftRight,
@@ -11,12 +12,16 @@ import { formatMoney } from "../../lib/types";
 import { enabledTenders } from "../../lib/store-settings";
 import { useStoreSettings } from "../../lib/use-store-settings";
 import type { RegisterTender } from "../../lib/register-config";
+import { HQ_ORG_EVENT, loadCachedHqOrg } from "../../lib/hq-org";
+import type { PaymentProvider } from "../../lib/payments";
 
 type Props = {
   selected: TenderType;
   amountMinor: number;
   reference: string;
   blockedReason?: string;
+  provider: PaymentProvider | null;
+  onProvider: (provider: PaymentProvider) => void;
   onSelect: (tender: TenderType) => void;
   onReference: (value: string) => void;
   onBack: () => void;
@@ -76,11 +81,34 @@ const FALLBACK_METHODS: RegisterTender[] = [
   },
 ];
 
+const PROVIDER_IDS: PaymentProvider[] = ["paystack", "flutterwave", "moniepoint", "opay"];
+const PROVIDER_LABEL: Record<PaymentProvider, string> = {
+  paystack: "Paystack",
+  flutterwave: "Flutterwave",
+  moniepoint: "Moniepoint",
+  opay: "OPay Cashier",
+};
+
+type GatewayOption = { provider: PaymentProvider; isDefault: boolean };
+
+/** HQ snapshot is the only source of truth; tills never toggle gateways. */
+function hqGateways(): GatewayOption[] {
+  const org = loadCachedHqOrg();
+  return (org?.gateways ?? [])
+    .filter((row) => row.enabled && PROVIDER_IDS.includes(row.provider as PaymentProvider))
+    .map((row) => ({
+      provider: row.provider as PaymentProvider,
+      isDefault: Boolean(row.isDefault),
+    }));
+}
+
 export function PaymentMethodsScreen({
   selected,
   amountMinor,
   reference,
   blockedReason,
+  provider,
+  onProvider,
   onSelect,
   onReference,
   onBack,
@@ -100,6 +128,26 @@ export function PaymentMethodsScreen({
     : FALLBACK_METHODS.filter((method) => activeIds.includes(method.id));
   const selectedMethod = methods.find((method) => method.id === selected);
   const needsReference = Boolean(selectedMethod?.requiresReference);
+
+  const [gateways, setGateways] = useState<GatewayOption[]>(() => hqGateways());
+  useEffect(() => {
+    const refresh = () => setGateways(hqGateways());
+    window.addEventListener(HQ_ORG_EVENT, refresh);
+    refresh();
+    return () => window.removeEventListener(HQ_ORG_EVENT, refresh);
+  }, []);
+
+  const electronic = selected === "card" || selected === "transfer" || selected === "wallet";
+  const available = electronic ? gateways : [];
+  const availableKey = available.map((row) => row.provider).join(",");
+
+  useEffect(() => {
+    if (!available.length) return;
+    if (!provider || !available.some((row) => row.provider === provider)) {
+      const preferred = available.find((row) => row.isDefault) ?? available[0];
+      if (preferred) onProvider(preferred.provider);
+    }
+  }, [availableKey, provider, onProvider]);
 
   return (
     <section className="pay">
@@ -134,6 +182,33 @@ export function PaymentMethodsScreen({
         <div className="pay-account">
           <strong>Cards</strong>
           Charged through {settings.gatewayDefault} (HQ-derived, read-only).
+        </div>
+      ) : null}
+      {electronic ? (
+        <div className="pay-account">
+          <strong>Online payment provider</strong>
+          {available.length ? (
+            <div className="methods">
+              {available.map((gateway) => (
+                <button
+                  key={gateway.provider}
+                  type="button"
+                  className={`method ${provider === gateway.provider ? "selected" : ""}`}
+                  onClick={() => onProvider(gateway.provider)}
+                >
+                  <span className="method-copy">
+                    <span className="method-label">{PROVIDER_LABEL[gateway.provider]}</span>
+                    <span className="method-hint">
+                      {gateway.isDefault ? "HQ default" : "Enabled at HQ"} · hosted checkout
+                    </span>
+                  </span>
+                  <span className="radio" />
+                </button>
+              ))}
+            </div>
+          ) : (
+            <span>No Paystack, Flutterwave, Moniepoint, or OPay gateway is enabled at HQ.</span>
+          )}
         </div>
       ) : null}
       {blockedReason ? <div className="pay-blocked">{blockedReason}</div> : null}

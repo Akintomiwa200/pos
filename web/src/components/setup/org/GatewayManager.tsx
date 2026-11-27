@@ -30,11 +30,23 @@ const blank: Partial<HqGateway> = {
   provider: "paystack",
   enabled: true,
   isDefault: false,
+  mode: "test",
   publicKey: "",
+  secretKey: "",
+  webhookSecret: "",
+  merchantId: "",
+  apiBase: "",
   accountName: "",
   accountNumber: "",
   bankName: "",
 };
+
+const electronicProviders = new Set<HqGateway["provider"]>([
+  "paystack",
+  "flutterwave",
+  "moniepoint",
+  "opay",
+]);
 
 export function GatewayManager() {
   const links = useOrgLinks();
@@ -66,13 +78,14 @@ export function GatewayManager() {
 
   const onCount = rows.filter((row) => row.enabled).length;
   const defaultRow = rows.find((row) => row.isDefault);
+  const electronic = electronicProviders.has(draft.provider ?? "paystack");
 
   return (
     <div>
       <SetupHeader
         kicker={links.area === "producer" ? "Producer · Payments" : "Setup · Organization"}
         title="Payment gateways"
-        copy="Which rails tills can take. Cash and card stay on the register; online rails sync to HQ."
+        copy="Rails tills can offer. Cash and card stay on the register; online rails require provider confirmation before a sale completes."
         action={
           <PrimaryButton
             onClick={() => {
@@ -112,7 +125,7 @@ export function GatewayManager() {
         {rows.length === 0 ? (
           <tr>
             <td className="px-4 py-8 text-center text-pos-ink-faint" colSpan={4}>
-              No gateways yet. Add Paystack, bank transfer, or till cash/card rails.
+              No gateways yet. Add Opay, Paystack, Flutterwave, Moniepoint, bank transfer, or till cash/card rails.
             </td>
           </tr>
         ) : (
@@ -131,7 +144,10 @@ export function GatewayManager() {
                   {row.name}
                 </span>
               </td>
-              <td className="px-4 py-3 capitalize text-pos-ink-muted">{row.provider}</td>
+              <td className="px-4 py-3 capitalize text-pos-ink-muted">
+                {row.provider}
+                {electronicProviders.has(row.provider) ? ` · ${row.mode ?? "test"}` : ""}
+              </td>
               <td className="px-4 py-3">{row.isDefault ? "Yes" : "—"}</td>
               <td className="px-4 py-3">{row.enabled ? "On" : "Off"}</td>
             </tr>
@@ -174,19 +190,73 @@ export function GatewayManager() {
                 >
                   <option value="paystack">Paystack</option>
                   <option value="flutterwave">Flutterwave</option>
-                  <option value="moniepoint">Moniepoint</option>
+                  <option value="moniepoint">Moniepoint (Monnify)</option>
+                  <option value="opay">Opay</option>
                   <option value="bank">Bank transfer</option>
                   <option value="cash">Cash</option>
                   <option value="card">Card / POS</option>
                 </select>
               </Field>
-              <Field label="Public key">
-                <input
-                  className={fieldClass}
-                  value={draft.publicKey ?? ""}
-                  onChange={(e) => setDraft({ ...draft, publicKey: e.target.value })}
-                />
-              </Field>
+              {electronic ? (
+                <>
+                  <Field
+                    label="Mode"
+                    hint="Test and live credentials are separate. Live is used only when explicitly selected."
+                  >
+                    <select
+                      className={fieldClass}
+                      value={draft.mode ?? "test"}
+                      onChange={(e) => setDraft({ ...draft, mode: e.target.value as "test" | "live" })}
+                    >
+                      <option value="test">Test / sandbox</option>
+                      <option value="live">Live</option>
+                    </select>
+                  </Field>
+                  <Field
+                    label="Public key"
+                    hint="Paystack and Opay send this in requests. Masked on save; leave unchanged to keep it."
+                  >
+                    <input
+                      className={fieldClass}
+                      value={draft.publicKey ?? ""}
+                      onChange={(e) => setDraft({ ...draft, publicKey: e.target.value })}
+                    />
+                  </Field>
+                  <Field label="Secret key" hint="Server-only. Never shown to tills or customers.">
+                    <input
+                      type="password"
+                      autoComplete="off"
+                      className={fieldClass}
+                      value={draft.secretKey ?? ""}
+                      onChange={(e) => setDraft({ ...draft, secretKey: e.target.value })}
+                    />
+                  </Field>
+                  <Field label="Webhook secret" hint="Used to verify provider callback signatures.">
+                    <input
+                      type="password"
+                      autoComplete="off"
+                      className={fieldClass}
+                      value={draft.webhookSecret ?? ""}
+                      onChange={(e) => setDraft({ ...draft, webhookSecret: e.target.value })}
+                    />
+                  </Field>
+                  <Field label="Merchant ID" hint="Required by Moniepoint/Monnify and Opay.">
+                    <input
+                      className={fieldClass}
+                      value={draft.merchantId ?? ""}
+                      onChange={(e) => setDraft({ ...draft, merchantId: e.target.value })}
+                    />
+                  </Field>
+                  <Field label="API base URL" hint="Optional override for sandbox or a dedicated provider host.">
+                    <input
+                      className={fieldClass}
+                      placeholder="https://api.paystack.co"
+                      value={draft.apiBase ?? ""}
+                      onChange={(e) => setDraft({ ...draft, apiBase: e.target.value })}
+                    />
+                  </Field>
+                </>
+              ) : null}
               <Field label="Account name">
                 <input
                   className={fieldClass}

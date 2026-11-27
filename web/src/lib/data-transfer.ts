@@ -1,8 +1,9 @@
+import type { Row } from "exceljs";
 import { api } from "./hq-api";
 import { CSV_FIELDS, csvCell, downloadTextFile, normalizeHeader } from "./import-products";
 
 /** Formats shared by every import method (upload, paste, template or sample). */
-export type TransferFormat = "csv" | "tsv" | "json" | "html";
+export type TransferFormat = "csv" | "tsv" | "json" | "html" | "xlsx";
 export type TransferFieldKind = "text" | "number" | "money" | "boolean" | "date" | "id";
 
 export type TransferField = {
@@ -456,6 +457,7 @@ export const FORMAT_MIME: Record<TransferFormat, string> = {
   tsv: "text/tab-separated-values",
   json: "application/json",
   html: "application/vnd.ms-excel",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 };
 
 export const FORMAT_EXTENSION: Record<TransferFormat, string> = {
@@ -463,16 +465,19 @@ export const FORMAT_EXTENSION: Record<TransferFormat, string> = {
   tsv: "tsv",
   json: "json",
   html: "xls",
+  xlsx: "xlsx",
 };
 
 export function detectFormat(text: string, filename = ""): TransferFormat {
   const name = filename.toLowerCase();
   if (name.endsWith(".json")) return "json";
   if (name.endsWith(".tsv") || name.endsWith(".tab")) return "tsv";
-  if (name.endsWith(".xls") || name.endsWith(".xlsx") || name.endsWith(".htm") || name.endsWith(".html")) return "html";
+  if (name.endsWith(".xlsx")) return "xlsx";
+  if (name.endsWith(".xls") || name.endsWith(".htm") || name.endsWith(".html")) return "html";
   const head = text.trimStart().slice(0, 400);
   if (head.startsWith("{") || head.startsWith("[")) return "json";
   if (/<table[\s>]/i.test(head)) return "html";
+  if (head.startsWith("PK")) return "xlsx";
   const firstLine = head.split(/\r?\n/, 1)[0] ?? "";
   if (firstLine.includes("\t")) return "tsv";
   return "csv";
@@ -526,12 +531,19 @@ export type DecodedTable = {
   headers: string[];
   matrix: string[][];
   note?: string;
+  /** Filled by the workbook reader so the preview can name the parsed sheet. */
+  sheetName?: string;
+  rowCount?: number;
 };
 
-/** Turns any supported format into the same header + string matrix. */
+/** Turns any supported text format into the same header + string matrix. */
 export function decodeTable(text: string, format: TransferFormat, delimiter = ","): DecodedTable {
   const trimmed = text.trim();
   if (!trimmed) return { headers: [], matrix: [], note: "No data yet." };
+
+  if (format === "xlsx") {
+    return { headers: [], matrix: [], note: "Binary .xlsx files are parsed locally when you upload the workbook." };
+  }
 
   if (format === "json") {
     try {
@@ -555,7 +567,7 @@ export function decodeTable(text: string, format: TransferFormat, delimiter = ",
 
   if (format === "html") {
     if (trimmed.startsWith("PK")) {
-      return { headers: [], matrix: [], note: "An .xlsx workbook is a compressed file. Save it as CSV or Excel 2003 (.xls) table first." };
+      return { headers: [], matrix: [], note: "That looks like a binary workbook — choose Excel Workbook (.xlsx) instead of Excel Table (.xls)." };
     }
     if (typeof DOMParser === "undefined") {
       return { headers: [], matrix: [], note: "HTML tables can only be read in the browser." };
@@ -573,6 +585,92 @@ export function decodeTable(text: string, format: TransferFormat, delimiter = ",
   const matrix = parseDelimited(trimmed, format === "tsv" ? "\t" : delimiter || ",");
   if (matrix.length < 2) return { headers: matrix[0] ?? [], matrix: [], note: "Add a header row and at least one data row." };
   return { headers: matrix[0]!, matrix: matrix.slice(1) };
+}
+
+const WORKBOOK_MAX_BYTES = 20 * 1024 * 1024;
+const WORKBOOK_MAX_ROWS = 5000;
+const WORKBOOK_MAX_COLUMNS = 200;
+
+let exceljsLoader: Promise<typeof import("exceljs")> | null = null;
+/** Same lazy workbook library used by the exporter; only loaded when an .xlsx is opened. */
+function loadExcelJS() {
+  exceljsLoader ??= import("exceljs");
+  return exceljsLoader;
+}
+
+function workbookCellText(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return String(value).trim();
+  }
+  if (Array.isArray(value)) return value.map(workbookCellText).join("").trim();
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    // A formula cell carries its cached value in `result` — never import the formula text.
+    if ("result" in record) return workbookCellText(record.result);
+    if ("richText" in record) return workbookCellText(record.richText);
+    if ("text" in record) return String(record.text ?? "").trim();
+    if ("error" in record) return String(record.error ?? "").trim();
+    if ("formula" in record || "sharedFormula" in record) return "";
+    return JSON.stringify(value).trim();
+  }
+  return String(value).trim();
+}
+
+/**
+ * Reads a real .xlsx workbook in the browser and returns a table identical in shape to the
+ * CSV/TSV/JSON/HTML-table table, so `prepareRows` validates it exactly the same way.
+ */
+export async function decodeWorkbookFile(file: File, sheetName?: string): Promise<DecodedTable> {
+  if (file.size > WORKBOOK_MAX_BYTES) {
+    throw new Error("Workbook is too large — the maximum size is 20 MB");
+  }
+  const buffer = await file.arrayBuffer();
+  const module = await loadExcelJS();
+  const ExcelJS = ("default" in module ? module.default : module) as typeof import("exceljs");
+  const workbook = new ExcelJS.Workbook();
+  try {
+    await workbook.xlsx.load(buffer);
+  } catch {
+    throw new Error("Could not read that workbook — check that it is a valid .xlsx file");
+  }
+
+  const requested = sheetName?.trim();
+  const sheet = requested
+    ? workbook.getWorksheet(requested)
+    : workbook.worksheets.find((worksheet) => worksheet.state === "visible");
+  if (!sheet) throw new Error(requested ? `Worksheet "${requested}" was not found` : "The workbook has no visible worksheet");
+  if (sheet.rowCount > WORKBOOK_MAX_ROWS + 1) {
+    throw new Error(`Worksheet has too many rows — the import limit is ${WORKBOOK_MAX_ROWS} data rows`);
+  }
+  if (sheet.columnCount > WORKBOOK_MAX_COLUMNS) {
+    throw new Error(`Worksheet has too many columns — the import limit is ${WORKBOOK_MAX_COLUMNS}`);
+  }
+
+  const table: string[][] = [];
+  sheet.eachRow({ includeEmpty: false }, (row: Row) => {
+    const values: string[] = [];
+    row.eachCell({ includeEmpty: true }, (cell, columnNumber) => {
+      if (columnNumber <= WORKBOOK_MAX_COLUMNS) values[columnNumber - 1] = workbookCellText(cell.value);
+    });
+    while (values.length && !values[values.length - 1]) values.pop();
+    if (values.some(Boolean)) table.push(values.map((value) => value.trim()));
+  });
+
+  if (!table.length || !table[0]?.some(Boolean)) {
+    throw new Error("The worksheet needs a header row and at least one data row");
+  }
+  if (table.length - 1 > WORKBOOK_MAX_ROWS) {
+    throw new Error(`Worksheet has too many rows — the import limit is ${WORKBOOK_MAX_ROWS} data rows`);
+  }
+
+  return {
+    headers: table[0]!,
+    matrix: table.slice(1),
+    sheetName: sheet.name,
+    rowCount: table.length - 1,
+  };
 }
 
 function stringifyValue(value: unknown): string {
@@ -709,25 +807,27 @@ export function prepareRows(
 }
 
 export function buildTemplate(dataset: TransferDataset, format: TransferFormat, includeSample = true): string {
+  // A workbook is binary; templates/samples are always written as readable text.
+  const textFormat: TransferFormat = format === "xlsx" ? "csv" : format;
   const headers = dataset.fields.map((item) => item.label);
   const values = dataset.fields.map((item) => {
     const sample = dataset.sample[item.key] ?? dataset.sample[item.apiKey ?? item.key] ?? "";
     if (item.kind === "boolean") return parseBoolean(String(sample)) ? "yes" : "no";
     return String(sample);
   });
-  if (format === "json") {
+  if (textFormat === "json") {
     const record: Record<string, string> = {};
     headers.forEach((header, index) => {
       record[header] = values[index] ?? "";
     });
     return JSON.stringify([includeSample ? record : Object.fromEntries(headers.map((header) => [header, ""]))], null, 2);
   }
-  if (format === "html") {
+  if (textFormat === "html") {
     const cell = (value: string) => `<td>${value.replace(/[&<>]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[ch] ?? ch)}</td>`;
     return `<table><tr>${headers.map((header) => `<th>${header}</th>`).join("")}</tr>${includeSample ? `<tr>${values.map(cell).join("")}</tr>` : ""}</table>`;
   }
-  const delimiter = format === "tsv" ? "\t" : ",";
-  const escape = (value: string) => (format === "tsv" ? value.replace(/[\t\n]/g, " ") : csvCell(value));
+  const delimiter = textFormat === "tsv" ? "\t" : ",";
+  const escape = (value: string) => (textFormat === "tsv" ? value.replace(/[\t\n]/g, " ") : csvCell(value));
   const lines = [headers.map(escape).join(delimiter)];
   if (includeSample) lines.push(values.map(escape).join(delimiter));
   return `\uFEFF${lines.join("\n")}`;
@@ -739,19 +839,20 @@ export function encodeTable(
   format: TransferFormat,
   options: { delimiter?: string; headers?: boolean } = {},
 ): string {
+  const textFormat: TransferFormat = format === "xlsx" ? "csv" : format;
   const headers = dataset.fields.map((item) => item.label);
   const matrix = records.map((record) => dataset.fields.map((item) => formatCell(record, item)));
 
-  if (format === "json") {
+  if (textFormat === "json") {
     return JSON.stringify(records, null, 2);
   }
-  if (format === "html") {
+  if (textFormat === "html") {
     const cell = (value: string) => `<td>${value.replace(/[&<>]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[ch] ?? ch)}</td>`;
     const head = options.headers === false ? "" : `<tr>${headers.map((header) => `<th>${header}</th>`).join("")}</tr>`;
     return `<table>${head}${matrix.map((row) => `<tr>${row.map(cell).join("")}</tr>`).join("")}</table>`;
   }
-  const delimiter = format === "tsv" ? "\t" : options.delimiter || ",";
-  const escape = (value: string) => (format === "tsv" ? value.replace(/[\t\n]/g, " ") : csvCell(value));
+  const delimiter = textFormat === "tsv" ? "\t" : options.delimiter || ",";
+  const escape = (value: string) => (textFormat === "tsv" ? value.replace(/[\t\n]/g, " ") : csvCell(value));
   const lines = options.headers === false ? matrix : [headers.map(escape).join(delimiter), ...matrix.map((row) => row.map(escape).join(delimiter))];
   return `\uFEFF${lines.join("\n")}`;
 }
@@ -806,6 +907,8 @@ export type ImportResult = {
   skipped: number;
   failed: number;
   errors: Array<{ row: number; label: string; message: string }>;
+  sheet?: string;
+  rowCount?: number;
 };
 
 /** Every import method ends here, so behaviour does not depend on how data arrived. */

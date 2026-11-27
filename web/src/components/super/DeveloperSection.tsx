@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Activity,
   Braces,
@@ -11,7 +11,6 @@ import {
   Plug,
   RefreshCw,
   ShieldCheck,
-  Key,
   Lock,
   Plus,
   Radio,
@@ -22,7 +21,7 @@ import {
 } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { useLivePos } from "@/lib/live-pos";
-import { api } from "@/lib/hq-api";
+import { readSession } from "@/lib/hq-api";
 import { asBool, asNum, asStr } from "@/lib/hq-policies";
 import { usePolicyCollection } from "@/lib/use-policy-collection";
 import { ManagerSkeleton } from "@/components/Skeleton";
@@ -59,6 +58,15 @@ function apiBaseUrl() {
   return typeof window === "undefined" ? "/api" : `${window.location.origin}/api`;
 }
 
+function responseMessage(data: unknown, fallback: string) {
+  if (typeof data === "object" && data !== null && "message" in data) {
+    const value = (data as { message?: unknown }).message;
+    if (typeof value === "string") return value;
+    if (Array.isArray(value)) return value.map(String).join("; ");
+  }
+  return fallback;
+}
+
 function ApiDashboardPage() {
   const { live, ready } = useLivePos();
   const keys = usePolicyCollection("apiKeys");
@@ -79,33 +87,47 @@ function ApiDashboardPage() {
   async function send() {
     const path = endpoint.trim().startsWith("/") ? endpoint.trim() : `/${endpoint.trim()}`;
     const started = performance.now();
+    let status = 0;
+    let error = "";
     setBusy(true);
     try {
-      const data = await api<unknown>(path);
-      const latency = Math.max(1, Math.round(performance.now() - started));
-      setOutput(JSON.stringify(data, null, 2).slice(0, 20_000));
-      await logs.save({
-        id: `LOG-${Date.now()}`,
-        method: "GET",
-        path,
-        status: 200,
-        latency: `${latency} ms`,
-        ip: "console",
-        at: new Date().toISOString(),
+      const token = readSession()?.token ?? "";
+      const response = await fetch(path, {
+        cache: "no-store",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
       });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Request failed";
-      setOutput(message);
-      await logs.save({
-        id: `LOG-${Date.now()}`,
-        method: "GET",
-        path,
-        status: 0,
-        latency: `${Math.max(1, Math.round(performance.now() - started))} ms`,
-        ip: "console",
-        at: new Date().toISOString(),
-      });
+      status = response.status;
+      const text = await response.text();
+      let body: unknown = text;
+      try {
+        body = JSON.parse(text);
+      } catch {
+        // Keep the raw response body when it is not JSON.
+      }
+      error = response.ok ? "" : responseMessage(body, response.statusText || `HTTP ${status}`);
+      const rendered = typeof body === "string" ? body : JSON.stringify(body, null, 2);
+      setOutput(`${status} ${response.statusText || (response.ok ? "OK" : "Error")}\n${rendered.slice(0, 20_000)}`);
+    } catch (cause) {
+      error = cause instanceof Error ? cause.message : "Request failed";
+      setOutput(`Request failed: ${error}`);
     } finally {
+      try {
+        await logs.save({
+          id: `LOG-${Date.now()}`,
+          method: "GET",
+          path,
+          status,
+          latency: `${Math.max(1, Math.round(performance.now() - started))} ms`,
+          ip: "console",
+          at: new Date().toISOString(),
+          error,
+        });
+      } catch {
+        // Keep the response visible even if the local log cannot be saved.
+      }
       setBusy(false);
     }
   }
@@ -123,7 +145,7 @@ function ApiDashboardPage() {
       <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <SetupStat label="Calls today" value={String(logs.rows.filter((row) => asStr(row.at).slice(0, 10) === new Date().toISOString().slice(0, 10)).length)} hint="Console requests" tone="accent" />
         <SetupStat label="Endpoints" value={String(modules.length)} hint="Read modules" />
-        <SetupStat label="Keys" value={String(keys.rows.filter((row) => !asBool(row.revoked)).length)} hint="Active keys" />
+        <SetupStat label="Tokens" value={String(keys.rows.filter((row) => !asBool(row.revoked)).length)} hint="Local references" />
         <SetupStat label="Base URL" value="/api" hint="Local backend" />
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
@@ -166,7 +188,6 @@ function ApiDashboardPage() {
                   <code className="block text-[13px] font-medium text-pos-ink">{mod.method}</code>
                   <p className="truncate text-[11px] text-pos-ink-muted">{mod.desc}</p>
                 </div>
-                <Key size={13} className="shrink-0 text-pos-ink-faint" />
               </li>
             ))}
           </ul>
@@ -177,9 +198,11 @@ function ApiDashboardPage() {
           <KeyRound size={18} />
         </span>
         <div>
-          <p className="text-sm font-medium text-pos-ink">Authentication</p>
+          <p className="text-sm font-medium text-pos-ink">Reference tokens (not enforced)</p>
           <p className="text-[12px] text-pos-ink-muted">
-            Set <code className="rounded bg-pos-surface-muted px-1.5 py-0.5 text-[11px] text-pos-primary">Authorization: Bearer &lt;key&gt;</code> on every request. Generate keys on the API keys page.
+            Tokens stored on the Integration keys page are local references only. The backend does not
+            check bearer tokens, and this tester uses your signed-in session — do not treat saved
+            secrets as working credentials.
           </p>
         </div>
       </div>
@@ -210,12 +233,12 @@ function ApiKeysPage() {
       createdAt: new Date().toISOString(),
     });
     setLabel("");
-    toast.success("Integration key saved to the console. Copy the secret before sharing it.");
+    toast.success("Reference token saved locally. It is not used for authentication.");
   }
 
   async function revoke(id: string) {
     await save({ id, revoked: true, revokedAt: new Date().toISOString() });
-    toast.success("Key marked as revoked.");
+    toast.success("Local status set to revoked; no access change is enforced.");
   }
 
   const active = rows.filter((row) => !asBool(row.revoked));
@@ -224,15 +247,15 @@ function ApiKeysPage() {
     <div>
       <SetupHeader
         kicker="Producer · Developer"
-        title="Integration keys"
-        copy="Store credentials and labels for external integrations. These records are saved to the console; the local backend does not yet enforce them as bearer tokens."
+        title="Reference tokens"
+        copy="Store labels and secrets for external integrations as local console records. The backend does not enforce them as bearer tokens, so they cannot authenticate requests."
         action={<LiveBadge live={live} />}
       />
       <div className="mb-6 grid gap-3 sm:grid-cols-4">
-        <SetupStat label="Active" value={String(active.length)} hint="Available keys" tone="accent" />
-        <SetupStat label="Revoked" value={String(rows.length - active.length)} hint="Disabled keys" />
+        <SetupStat label="Active" value={String(active.length)} hint="Locally recorded" tone="accent" />
+        <SetupStat label="Revoked" value={String(rows.length - active.length)} hint="Local status only" />
         <SetupStat label="Scope" value="read" hint="Default label" />
-        <SetupStat label="Stored" value={String(rows.length)} hint="Console records" />
+        <SetupStat label="Stored" value={String(rows.length)} hint="Local records" />
       </div>
       <div className="mb-4 flex gap-2 rounded-[18px] border border-pos-border bg-pos-surface p-4">
         <input
@@ -264,6 +287,7 @@ function ApiKeysPage() {
                 <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${asBool(row.revoked) ? "bg-pos-surface-muted text-pos-ink-faint" : "bg-pos-success/10 text-pos-success"}`}>
                   {asBool(row.revoked) ? "revoked" : "read"}
                 </span>
+                <span className="mt-1 block text-[10px] text-pos-ink-faint">recorded locally, not enforced</span>
               </div>
               <span className="text-[12px] text-pos-ink-faint">Last used: {asStr(row.lastUsed) || "Never"}</span>
               <button
@@ -414,26 +438,14 @@ function WebhooksPage() {
   );
 }
 
-const STARTER_APPS = [
-  { id: "APP-analytics", name: "Analytics Sync", owner: "Partner API", scopes: ["tills:read", "sales:read"], status: "Connected" },
-  { id: "APP-accounting", name: "Accounting Bridge", owner: "Partner API", scopes: ["accounts:read"], status: "Pending" },
-];
-
 function ApplicationsPage() {
   const { live } = useLivePos();
-  const { rows: apps, save, loading } = usePolicyCollection("apps");
-  const [seeded, setSeeded] = useState(false);
+  const { rows: apps, save } = usePolicyCollection("apps");
 
-  useEffect(() => {
-    if (!loading && apps.length === 0 && !seeded) {
-      setSeeded(true);
-      void Promise.all(STARTER_APPS.map((app) => save(app)));
-    }
-  }, [apps.length, loading, seeded, save]);
-
-  async function toggle(id: string, status: string) {
+  async function recordStatus(id: string, status: string) {
     const next = status === "Revoked" ? "Pending" : "Revoked";
     await save({ id, status: next, updatedAt: new Date().toISOString() });
+    toast.success("Local status recorded — no access change is enforced.");
   }
 
   const toneOf = (status: string) =>
@@ -448,19 +460,19 @@ function ApplicationsPage() {
       <SetupHeader
         kicker="Producer · Developer"
         title="Applications"
-        copy="Third-party applications and OAuth clients requesting access to platform data. Approval state is saved to the console."
+        copy="Local records for third-party OAuth clients. This build has no incoming request intake or enforced connections; any status you set is recorded locally, not enforced."
         action={<LiveBadge live={live} />}
       />
       <div className="mb-6 grid gap-3 sm:grid-cols-4">
-        <SetupStat label="Connected" value={String(apps.filter((app) => asStr(app.status) === "Connected").length)} hint="Active apps" tone="accent" />
-        <SetupStat label="Pending" value={String(apps.filter((app) => asStr(app.status) === "Pending").length)} hint="Awaiting approval" />
-        <SetupStat label="Revoked" value={String(apps.filter((app) => asStr(app.status) === "Revoked").length)} hint="Disconnected" />
+        <SetupStat label="Connected (local)" value={String(apps.filter((app) => asStr(app.status) === "Connected").length)} hint="Recorded, not enforced" tone="accent" />
+        <SetupStat label="Pending (local)" value={String(apps.filter((app) => asStr(app.status) === "Pending").length)} hint="Recorded, not enforced" />
+        <SetupStat label="Revoked (local)" value={String(apps.filter((app) => asStr(app.status) === "Revoked").length)} hint="Recorded, not enforced" />
         <SetupStat label="Permissions" value={String(new Set(apps.flatMap((app) => Array.isArray(app.scopes) ? app.scopes.map(String) : [])).size)} hint="Distinct scopes" />
       </div>
       {apps.length === 0 ? (
         <div className="rounded-[18px] border border-pos-border bg-pos-surface p-8 text-center text-sm text-pos-ink-muted">
           <Plug size={20} className="mx-auto mb-2 text-pos-ink-faint" />
-          No applications yet. Approve incoming OAuth requests here.
+          No applications recorded. This build has no OAuth request intake or enforced connections.
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
@@ -478,7 +490,7 @@ function ApplicationsPage() {
                     <p className="text-[12px] text-pos-ink-muted">{asStr(app.owner)}</p>
                   </div>
                   <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${toneOf(status)}`}>
-                    {status}
+                    {status || "Unspecified"} · recorded locally, not enforced
                   </span>
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2">
@@ -490,7 +502,7 @@ function ApplicationsPage() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => void toggle(app.id, status)}
+                  onClick={() => void recordStatus(app.id, status)}
                   className={`mt-4 inline-flex items-center gap-2 rounded-full px-4 py-2 text-[12px] font-semibold transition ${
                     status === "Revoked"
                       ? "bg-pos-primary text-white shadow-pos-primary hover:opacity-90"
@@ -498,7 +510,7 @@ function ApplicationsPage() {
                   }`}
                 >
                   {status === "Revoked" ? <ShieldCheck size={14} /> : <Trash2 size={14} />}
-                  {status === "Revoked" ? "Re-approve" : "Revoke access"}
+                  {status === "Revoked" ? "Mark pending locally" : "Mark revoked locally"}
                 </button>
               </div>
             );
@@ -512,11 +524,20 @@ function ApplicationsPage() {
 function ApiLogsPage() {
   const { live } = useLivePos();
   const { rows: logs, remove } = usePolicyCollection("apiLogs");
-  const [filter, setFilter] = useState(0);
+  const [filter, setFilter] = useState<number | "all">("all");
 
   const statusTone = (status: number) =>
-    status >= 400 ? "text-pos-danger" : status >= 300 ? "text-pos-warning" : "text-pos-success";
-  const rows = logs.filter((row) => (filter ? asNum(row.status) === filter : true));
+    status === 0 || status >= 400
+      ? "text-pos-danger"
+      : status >= 300
+        ? "text-pos-warning"
+        : "text-pos-success";
+  const statusCodes = useMemo(() => {
+    const codes = new Set(logs.map((row) => asNum(row.status)));
+    if (typeof filter === "number") codes.add(filter);
+    return [...codes].sort((a, b) => a - b);
+  }, [logs, filter]);
+  const rows = logs.filter((row) => filter === "all" || asNum(row.status) === filter);
   const avg = rows.length ? rows.reduce((sum, row) => sum + asNum(String(row.latency).replace(/[^\d.]/g, "")), 0) / rows.length : 0;
 
   return (
@@ -524,19 +545,19 @@ function ApiLogsPage() {
       <SetupHeader
         kicker="Producer · Developer"
         title="API logs"
-        copy="Requests made from this console's API tester. Successful and failed calls are both recorded here."
+        copy="Requests made from this console's API tester. The real HTTP status and any error text returned by the backend are recorded here."
         action={<LiveBadge live={live} />}
       />
       <div className="mb-6 grid gap-3 sm:grid-cols-4">
         <SetupStat label="Requests" value={String(logs.length)} hint="Console calls" tone="accent" />
-        <SetupStat label="Errors" value={String(logs.filter((row) => asNum(row.status) >= 400).length)} hint="Failed calls" tone="inverse" />
+        <SetupStat label="Errors" value={String(logs.filter((row) => asNum(row.status) === 0 || asNum(row.status) >= 400).length)} hint="Failed calls" tone="inverse" />
         <SetupStat label="Avg. latency" value={`${Math.round(avg)} ms`} hint="Measured locally" />
         <SetupStat label="Paths" value={String(new Set(logs.map((row) => asStr(row.path))).size)} hint="Distinct endpoints" />
       </div>
       <div className="mb-4 flex flex-wrap gap-2">
-        {[0, 200, 201, 401].map((code) => (
+        {(["all", ...statusCodes] as Array<number | "all">).map((code) => (
           <button
-            key={code}
+            key={String(code)}
             type="button"
             onClick={() => setFilter(code)}
             className={`rounded-full px-4 py-2 text-[12px] font-semibold transition ${
@@ -545,7 +566,7 @@ function ApiLogsPage() {
                 : "bg-pos-surface text-pos-ink-muted hover:text-pos-ink"
             }`}
           >
-            {code === 0 ? "All" : code}
+            {code === "all" ? "All" : code === 0 ? "No response (0)" : String(code)}
           </button>
         ))}
         {logs.length > 0 && (
@@ -581,8 +602,15 @@ function ApiLogsPage() {
                         {asStr(row.method)}
                       </span>
                     </td>
-                    <td className="px-5 py-3.5 font-mono text-pos-ink">{asStr(row.path)}</td>
-                    <td className={`px-5 py-3.5 font-mono font-bold ${statusTone(asNum(row.status))}`}>{asNum(row.status) || "—"}</td>
+                    <td className="px-5 py-3.5 font-mono text-pos-ink">
+                      {asStr(row.path)}
+                      {asStr(row.error) ? (
+                        <span className="mt-1 block font-sans text-[11px] text-pos-danger">{asStr(row.error)}</span>
+                      ) : null}
+                    </td>
+                    <td className={`px-5 py-3.5 font-mono font-bold ${statusTone(asNum(row.status))}`}>
+                      {row.status === undefined ? "—" : asNum(row.status) === 0 ? "0 (no response)" : asNum(row.status)}
+                    </td>
                     <td className="px-5 py-3.5 tabular-nums text-pos-ink-muted">{asStr(row.latency)}</td>
                     <td className="px-5 py-3.5 font-mono text-pos-ink-muted">{asStr(row.ip)}</td>
                     <td className="px-5 py-3.5 tabular-nums text-pos-ink-faint">{asStr(row.at).slice(11, 19) || asStr(row.at)}</td>

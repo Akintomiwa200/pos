@@ -91,7 +91,7 @@ export function ChartOfAccountsPage() {
           </p>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight text-pos-ink">Chart of accounts</h1>
           <p className="mt-1.5 text-sm text-pos-ink-muted">
-            Control accounts for cash, stock, receivables, payables, VAT, sales, and expenses.
+            Control accounts posted from recorded cash, stock, payables, VAT, sales, and expenses. Receivables and opening balances are not tracked.
           </p>
         </div>
         <label className="relative min-w-[220px]">

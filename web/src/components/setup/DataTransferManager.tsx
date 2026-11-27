@@ -36,14 +36,17 @@ import {
   TRANSFER_DATASETS,
   buildTemplate,
   decodeTable,
+  decodeWorkbookFile,
   detectDelimiter,
   detectFormat,
   encodeTable,
+  FORMAT_EXTENSION,
   getDataset,
   importTransferRows,
   listDatasetCounts,
   listTransferRows,
   prepareRows,
+  type DecodedTable,
   type ImportResult,
   type TransferDataset,
   type TransferFormat,
@@ -92,7 +95,8 @@ const IMPORT_FORMATS: Array<{ id: FormatChoice; label: string }> = [
   { id: "csv", label: "CSV · Comma Separated" },
   { id: "tsv", label: "TSV · Tab Separated" },
   { id: "json", label: "JSON · Key-Value Objects" },
-  { id: "html", label: "Excel Table (.xls)" },
+  { id: "html", label: "Excel Table (.xls · HTML)" },
+  { id: "xlsx", label: "Excel Workbook (.xlsx)" },
 ];
 
 function importFormatLabel(format: FormatChoice) {
@@ -168,6 +172,9 @@ export function DataTransferManager() {
   const [method, setMethod] = useState<Method>("upload");
   const [format, setFormat] = useState<FormatChoice>("auto");
   const [text, setText] = useState("");
+  /** Parsed workbook table, kept separate because binary .xlsx cannot live in `text`. */
+  const [workbookTable, setWorkbookTable] = useState<DecodedTable | null>(null);
+  const [loadingWorkbook, setLoadingWorkbook] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
   const [fileSize, setFileSize] = useState<number | null>(null);
   const [duplicateMode, setDuplicateMode] = useState<"update" | "skip">("update");
@@ -297,12 +304,13 @@ export function DataTransferManager() {
     );
   }, [exportPreviewTable.rows, previewSearch]);
 
-  // Import parsing
+  // Import parsing — workbooks are decoded locally into the same table shape as text files.
   const effectiveFormat: TransferFormat = format === "auto" ? detectFormat(text, fileName ?? "") : format;
   const table = useMemo(
-    () => decodeTable(text, effectiveFormat, delimiter),
-    [text, effectiveFormat, delimiter],
+    () => workbookTable ?? decodeTable(text, effectiveFormat, delimiter),
+    [workbookTable, text, effectiveFormat, delimiter],
   );
+  const hasSource = Boolean(workbookTable) || Boolean(text.trim());
   const prepared = useMemo(
     () => prepareRows(importDataset, table, existing, { mode: duplicateMode }),
     [importDataset, table, existing, duplicateMode],
@@ -334,6 +342,7 @@ export function DataTransferManager() {
   const chooseImport = (id: string) => {
     setImportId(id);
     setText("");
+    setWorkbookTable(null);
     setFileName(null);
     setFileSize(null);
     setResult(null);
@@ -375,18 +384,20 @@ export function DataTransferManager() {
   };
 
   const loadTemplate = (nextFormat: FormatChoice = format) => {
-    const chosen = nextFormat === "auto" ? "csv" : nextFormat;
+    const chosen: TransferFormat = nextFormat === "auto" || nextFormat === "xlsx" ? "csv" : nextFormat;
     setText(buildTemplate(importDataset, chosen, false));
-    setFileName(`${importDataset.id}-template.${chosen === "html" ? "xls" : chosen}`);
+    setWorkbookTable(null);
+    setFileName(`${importDataset.id}-template.${FORMAT_EXTENSION[chosen]}`);
     setFileSize(null);
     setMethod("template");
     setResult(null);
   };
 
   const loadSample = () => {
-    const chosen = format === "auto" ? "csv" : format;
+    const chosen: TransferFormat = format === "auto" || format === "xlsx" ? "csv" : format;
     setText(buildTemplate(importDataset, chosen, true));
-    setFileName(`${importDataset.id}-sample.${chosen === "html" ? "xls" : chosen}`);
+    setWorkbookTable(null);
+    setFileName(`${importDataset.id}-sample.${FORMAT_EXTENSION[chosen]}`);
     setFileSize(null);
     setMethod("sample");
     setResult(null);
@@ -404,11 +415,35 @@ export function DataTransferManager() {
     }
   };
 
-  const readFile = (file: File) => {
+  const readFile = async (file: File) => {
+    if (/\.xlsx$/i.test(file.name)) {
+      setLoadingWorkbook(true);
+      setText("");
+      setWorkbookTable(null);
+      try {
+        const decoded = await decodeWorkbookFile(file);
+        setWorkbookTable(decoded);
+        setFileName(file.name || null);
+        setFileSize(file.size);
+        setFormat("xlsx");
+        setMethod("upload");
+        setResult(null);
+        toast.success(`Loaded "${file.name}" — sheet "${decoded.sheetName}", ${decoded.rowCount} rows`);
+      } catch (err) {
+        setFileName(null);
+        setFileSize(null);
+        toast.error(err, "Could not read workbook");
+      } finally {
+        setLoadingWorkbook(false);
+      }
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = () => {
       const content = String(reader.result ?? "");
       setText(content);
+      setWorkbookTable(null);
       setDelimiter(detectDelimiter(content));
       setFileName(file.name || null);
       setFileSize(file.size);
@@ -454,9 +489,11 @@ export function DataTransferManager() {
 
   const clearSource = () => {
     setText("");
+    setWorkbookTable(null);
     setFileName(null);
     setFileSize(null);
     setResult(null);
+    setFormat("auto");
     setMethod("upload");
   };
 
@@ -1211,8 +1248,17 @@ export function DataTransferManager() {
                       </button>
                     </p>
                     <p className="mt-1 text-[11px] text-pos-ink-faint">
-                      Supported formats: .csv, .tsv, .json, or Excel compatible .xls
+                      Supported: .csv, .tsv, .json, .xlsx, or Excel 2003 .xls
                     </p>
+                    <p className="mt-1 text-[10px] text-pos-ink-faint/80">
+                      .xls means an HTML-table Excel 2003 file; .xlsx is parsed as a real workbook (first visible sheet).
+                    </p>
+                    {loadingWorkbook && (
+                      <p className="mt-2 inline-flex items-center gap-1.5 text-[11px] text-pos-primary">
+                        <Loader2 size={13} className="animate-spin" />
+                        Reading workbook locally...
+                      </p>
+                    )}
                   </div>
 
                   {fileName && (
@@ -1235,7 +1281,7 @@ export function DataTransferManager() {
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept=".csv,.tsv,.tab,.txt,.json,.xls,.htm,.html"
+                    accept=".csv,.tsv,.tab,.txt,.json,.xls,.xlsx,.htm,.html,text/csv,text/tab-separated-values,application/json,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/html"
                     className="hidden"
                     onChange={(e) => {
                       const file = e.target.files?.[0];
@@ -1279,8 +1325,11 @@ export function DataTransferManager() {
                   value={text}
                   onChange={(e) => {
                     setText(e.target.value);
+                    setWorkbookTable(null);
+                    if (format === "xlsx") setFormat("auto");
                     setDelimiter(detectDelimiter(e.target.value));
                     setFileName(null);
+                    setFileSize(null);
                     setResult(null);
                   }}
                 />
@@ -1294,7 +1343,11 @@ export function DataTransferManager() {
                 <select
                   className="w-full rounded-xl border border-pos-border bg-pos-surface-muted px-3 py-2 text-xs text-pos-ink focus:border-pos-primary focus:bg-pos-surface focus:outline-none"
                   value={format}
-                  onChange={(e) => setFormat(e.target.value as FormatChoice)}
+                  onChange={(e) => {
+                    const next = e.target.value as FormatChoice;
+                    setFormat(next);
+                    if (next !== "xlsx") setWorkbookTable(null);
+                  }}
                 >
                   {IMPORT_FORMATS.map((item) => (
                     <option key={item.id} value={item.id}>
@@ -1322,7 +1375,12 @@ export function DataTransferManager() {
               <div>
                 <label className="mb-1 block text-xs font-medium text-pos-ink">Detected Encoding</label>
                 <div className="flex h-[34px] items-center rounded-xl bg-pos-surface-muted px-3 text-xs text-pos-ink-muted">
-                  {text ? (
+                  {workbookTable ? (
+                    <span className="inline-flex items-center gap-1.5 truncate font-semibold text-pos-ink">
+                      <CheckCircle2 size={13} className="text-pos-success" />
+                      Excel Workbook · {workbookTable.sheetName ?? "Sheet"}
+                    </span>
+                  ) : text ? (
                     <span className="inline-flex items-center gap-1.5 font-semibold text-pos-ink">
                       <CheckCircle2 size={13} className="text-pos-success" />
                       {importFormatLabel(effectiveFormat)}
@@ -1336,7 +1394,7 @@ export function DataTransferManager() {
           </section>
 
           {/* Step 3: Validation, Duplicate Mode & Pre-Import Review */}
-          {text.trim() && (
+          {hasSource && (
             <section className="rounded-[24px] border border-pos-border/70 bg-pos-surface p-6 shadow-pos-md">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
@@ -1429,6 +1487,14 @@ export function DataTransferManager() {
 
               {/* Column mapping feedback pills */}
               <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
+                {workbookTable && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-pos-primary/10 px-2.5 py-1 font-medium text-pos-primary">
+                    <FileSpreadsheet size={13} />
+                    <span>
+                      Sheet “{workbookTable.sheetName ?? "Sheet"}” · {workbookTable.rowCount ?? workbookTable.matrix.length} rows
+                    </span>
+                  </span>
+                )}
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-pos-surface-muted px-2.5 py-1 text-pos-ink-muted">
                   <Layers size={13} className="text-pos-primary" />
                   <span>{prepared.matches.filter((m) => m.field).length} of {importDataset.fields.length} columns recognized</span>

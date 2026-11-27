@@ -35,6 +35,13 @@ export const COMPANY_SECTIONS: CompanySection[] = [
   { id: "documents", label: "Documents" },
 ];
 
+/** Real pages to offer when a workspace section has no dedicated view. */
+export const COMPANY_SECTION_FALLBACK_LINKS = [
+  { href: "/dashboard", label: "Dashboard" },
+  { href: "/setup/others/settings", label: "Settings" },
+  { href: "/help", label: "Help center" },
+] as const;
+
 export const COMPANY_LIST_STATUSES = [
   { id: "all", label: "All" },
   { id: "pending", label: "Pending" },

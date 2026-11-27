@@ -10,6 +10,7 @@ import {
   Sse,
   UploadedFile,
   UnauthorizedException,
+  UseGuards,
   UseInterceptors,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
@@ -29,12 +30,14 @@ import type {
   HqStorefront,
   HqTax,
 } from "./setup.types";
+import { ConsoleSessionGuard } from "./console-session.guard";
 
 function bearer(header?: string) {
   return header?.replace(/^Bearer\s+/i, "").trim() ?? "";
 }
 
 @Controller("console")
+@UseGuards(ConsoleSessionGuard)
 export class ConsoleController {
   constructor(
     private readonly consoleService: ConsoleService,

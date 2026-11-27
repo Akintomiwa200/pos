@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { CartLine } from "../../lib/types";
+import type { AppliedPromotion } from "../../lib/promotions";
 import { computeLineTotals, formatMoney } from "../../lib/types";
 import { formatPricePer } from "../../lib/units";
 import { useStoreSettings } from "../../lib/use-store-settings";
@@ -18,6 +19,7 @@ type Props = {
   tableLabel?: string;
   lines: CartLine[];
   discountMinor?: number;
+  promotion?: AppliedPromotion | null;
   onQty: (id: string, delta: number) => void;
   onPrice?: (id: string, unitPriceMinor: number) => void;
   onRegisterAction?: (action: RegisterAction) => void;
@@ -41,6 +43,7 @@ export function CurrentOrder({
   tableLabel,
   lines,
   discountMinor = 0,
+  promotion = null,
   onQty,
   onPrice,
   onRegisterAction,
@@ -55,7 +58,15 @@ export function CurrentOrder({
   const [customerSearch, setCustomerSearch] = useState("");
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [customerNote, setCustomerNote] = useState("");
-  const totals = computeLineTotals(lines, rates, discountMinor);
+  const subtotalMinor = lines.reduce(
+    (sum, line) => sum + line.unitPriceMinor * line.quantity,
+    0,
+  );
+  const effectiveDiscountMinor = Math.min(
+    subtotalMinor,
+    discountMinor + (promotion?.discountMinor ?? 0),
+  );
+  const totals = computeLineTotals(lines, rates, effectiveDiscountMinor);
   const actions = rates.registerQuickButtons.filter(
     (button) => button.active && button.kind === "action",
   );
@@ -333,7 +344,9 @@ export function CurrentOrder({
             <span>{formatMoney(totals.subtotalMinor)}</span>
           </div>
           <div className={`row ${totals.discountMinor > 0 ? "discount" : ""}`}>
-            <span>Discount</span>
+            <span>
+              {promotion ? (discountMinor > 0 ? `Discount · ${promotion.name}` : promotion.name) : "Discount"}
+            </span>
             <span>
               {totals.discountMinor > 0
                 ? `-${formatMoney(totals.discountMinor)}`

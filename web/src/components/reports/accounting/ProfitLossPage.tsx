@@ -67,9 +67,20 @@ export function ProfitLossPage() {
         </p>
         <h1 className="mt-1 text-2xl font-semibold tracking-tight text-pos-ink">Profit &amp; loss</h1>
         <p className="mt-1.5 text-sm text-pos-ink-muted">
-          Income statement from till sales, cost of sales, and operating expenses.
+          Recorded till sales and operating expenses. Cost of sales is not calculated in this build.
         </p>
       </header>
+
+      {books.dataGaps.length > 0 && (
+        <section className="mb-5 rounded-[20px] border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+          <p className="font-semibold">Figures below are recorded values only</p>
+          <ul className="mt-2 list-disc space-y-1 pl-5">
+            {books.dataGaps.map((gap) => (
+              <li key={gap}>{gap}</li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-[18px] bg-pos-surface p-5 shadow-pos-md">
@@ -84,7 +95,10 @@ export function ProfitLossPage() {
             <Layers size={15} className="text-pos-warning" />
             <p className="text-[11px] uppercase tracking-wide text-pos-ink-faint">Cost of sales</p>
           </div>
-          <p className="mt-2 truncate text-2xl font-bold tabular-nums text-pos-ink">{naira(cogs)}</p>
+          <p className="mt-2 truncate text-2xl font-bold tabular-nums text-pos-ink">
+            {cogs === 0 ? "Not calculated" : naira(cogs)}
+          </p>
+          <p className="mt-1 text-[11px] text-pos-ink-faint">Purchases are not linked to sales in this build.</p>
         </div>
         <div className="rounded-[18px] bg-pos-surface p-5 shadow-pos-md">
           <div className="flex items-center gap-2">

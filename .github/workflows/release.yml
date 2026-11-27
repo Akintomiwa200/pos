@@ -8,6 +8,12 @@ on:
 permissions:
   contents: write
 
+# native-installers.yml attaches EXE/MSI (and optionally APK/AAB) to the same
+# Release. Share a concurrency group so the two tag workflows cannot race.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   github-release:
     runs-on: ubuntu-latest
@@ -53,10 +59,13 @@ jobs:
             dist-release/price-check-ui-web.zip
             dist-release/pos-api-dist.zip
           body: |
-            Installable **Windows setup.exe** and **Android APK** are built on a
-            Windows/Android machine — see [docs/build](https://github.com/Akintomiwa200/pos/blob/main/docs/build/README.md).
+            Windows **EXE + MSI** installers for pos, price-check and label-studio
+            are built by the Native installers workflow on this tag and attached
+            here when it succeeds. They are unsigned. Android APK/AAB are skipped
+            until an Android project is committed — see
+            [docs/build](https://github.com/Akintomiwa200/pos/blob/main/docs/build/README.md).
 
-            This tag attaches compiled JS output:
+            This job attaches compiled JS output:
 
             - `pos-ui-web.zip` — till web UI (`pos/dist`)
             - `price-check-ui-web.zip` — price-check web UI

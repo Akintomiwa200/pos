@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   Clock,
   Database,
+  Download,
   FileArchive,
   Flag,
   RefreshCw,
@@ -21,6 +22,7 @@ import {
 } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { useLivePos } from "@/lib/live-pos";
+import { SESSION_KEY } from "@/lib/access";
 import { asBool, asNum, asStr } from "@/lib/hq-policies";
 import { usePolicyCollection } from "@/lib/use-policy-collection";
 import { ManagerSkeleton } from "@/components/Skeleton";
@@ -57,13 +59,38 @@ function statusTone(live: boolean | null) {
       : "bg-pos-danger/10 text-pos-danger";
 }
 
+function sessionToken() {
+  try {
+    const raw = window.localStorage.getItem(SESSION_KEY);
+    return raw ? (JSON.parse(raw) as { token?: string }).token ?? "" : "";
+  } catch {
+    return "";
+  }
+}
+
+function formatBytes(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "—";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function errorMessage(error: unknown, fallback: string) {
+  if (!(error instanceof Error)) return fallback;
+  return error.message || fallback;
+}
+
+function apiMessage(data: { message?: string | string[] }, fallback: string) {
+  return Array.isArray(data.message) ? data.message[0] || fallback : data.message || fallback;
+}
+
 function SystemHealthPage() {
   const { live, ready } = useLivePos();
   if (!ready) return <ManagerSkeleton variant="table" />;
 
   const services = [
     { name: "API gateway", detail: "REST endpoints · /api", icon: Server, live },
-    { name: "Persistent data", detail: "JSON collections · local data directory", icon: Database, live },
+    { name: "Persistent data", detail: "Supabase Postgres · public schema", icon: Database, live },
     { name: "Authentication", detail: "Staff logins · console sessions", icon: Shield, live },
     { name: "Email delivery", detail: "Configured SMTP provider", icon: Activity, live: null },
     { name: "File storage", detail: "Product images and attachments", icon: FileArchive, live: null },
@@ -84,7 +111,7 @@ function SystemHealthPage() {
           hint={live ? "All endpoints responding" : "Cannot reach server"}
           tone={live ? "accent" : "inverse"}
         />
-        <SetupStat label="Data" value={live ? "Available" : "Unknown"} hint="JSON collections" />
+        <SetupStat label="Data" value={live ? "Available" : "Unknown"} hint="Postgres tables" />
         <SetupStat label="Backups" value="—" hint="See Backups page" />
         <SetupStat label="Latency" value="—" hint="Not measured" />
       </div>
@@ -260,7 +287,7 @@ const STARTER_ALERTS = [
   { id: "alert-failed-logins", title: "High failed login volume", detail: "12 failed attempts in 10 minutes", severity: "critical", resolved: false },
   { id: "alert-api-latency", title: "API latency above threshold", detail: "P95 over 2s for 5 minutes", severity: "warning", resolved: false },
   { id: "alert-storage", title: "Storage 80% full", detail: "Product images nearing quota", severity: "warning", resolved: false },
-  { id: "alert-backup", title: "Backup completed", detail: "Nightly snapshot verified", severity: "info", resolved: true },
+  { id: "alert-backup", title: "Backup completed", detail: "SQL dump recorded", severity: "info", resolved: true },
 ];
 
 function SystemNotificationsPage() {
@@ -418,6 +445,20 @@ type BackupRecord = {
   bytes: number;
   files: number;
   status?: string;
+  kind?: "json" | "json+sql";
+  sqlBytes?: number;
+  tables?: number;
+  rows?: number;
+  sequences?: number;
+};
+
+type SqlRestoreResult = {
+  source: string;
+  at: string;
+  tables: string[];
+  rows: number;
+  sequences: number;
+  durationMs: number;
 };
 
 function BackupsPage() {
@@ -425,6 +466,7 @@ function BackupsPage() {
   const { rows: snapshots, save, refresh } = usePolicyCollection("backups");
   const [busy, setBusy] = useState(false);
   const [restoring, setRestoring] = useState("");
+  const [sqlRestoring, setSqlRestoring] = useState("");
 
   useEffect(() => {
     void fetchBackupList();
@@ -435,8 +477,22 @@ function BackupsPage() {
       const { api } = await import("@/lib/hq-api");
       const stored = await api<BackupRecord[]>("/api/console/backup");
       for (const row of stored) {
-        if (!snapshots.some((item) => item.id === row.id)) {
-          await save({ ...row, status: "Verified" });
+        const existing = snapshots.find((item) => item.id === row.id);
+        const changed =
+          !existing ||
+          existing.bytes !== row.bytes ||
+          existing.files !== row.files ||
+          existing.at !== row.at ||
+          existing.sqlBytes !== row.sqlBytes ||
+          existing.tables !== row.tables ||
+          existing.rows !== row.rows ||
+          existing.sequences !== row.sequences;
+        if (changed) {
+          await save({
+            ...(existing ?? {}),
+            ...row,
+            status: existing?.status ?? "Verified",
+          });
         }
       }
     } catch {
@@ -450,17 +506,19 @@ function BackupsPage() {
       const { api } = await import("@/lib/hq-api");
       const record = await api<BackupRecord>("/api/console/backup", { method: "POST" });
       await save({ ...record, status: "Verified" });
-      toast.success(`Backup ${record.id} created.`);
+      toast.success(
+        `Backup ${record.id} created: JSON snapshot + ${formatBytes(asNum(record.sqlBytes))} SQL dump.`,
+      );
       await refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Backup failed.");
+      toast.error(errorMessage(error, "Backup failed."));
     } finally {
       setBusy(false);
     }
   }
 
-  async function restoreBackup(id?: string, payload?: unknown) {
-    if (id && !window.confirm(`Restore ${id}? Current JSON collections will be overwritten.`)) return;
+  async function restoreJson(id?: string, payload?: unknown) {
+    if (id && !window.confirm(`Restore ${id}? Current JSON collections will be overwritten. Postgres rows are not affected.`)) return;
     setRestoring(id || "upload");
     try {
       const { api } = await import("@/lib/hq-api");
@@ -468,45 +526,130 @@ function BackupsPage() {
         id ? `/api/console/backup/${encodeURIComponent(id)}/restore` : "/api/console/backup/restore",
         id ? { method: "POST" } : { method: "POST", body: JSON.stringify(payload) },
       );
-      toast.success(`Restored ${result.restored.length} collection(s). Restart the backend if cached screens look stale.`);
+      toast.success(`Restored ${result.restored.length} JSON collection(s). Postgres data was unchanged.`);
       await refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Restore failed.");
+      toast.error(errorMessage(error, "JSON restore failed."));
     } finally {
       setRestoring("");
     }
   }
 
-  async function restoreFile(file: File | undefined) {
+  async function restoreJsonFile(file: File | undefined) {
     if (!file) return;
+    let payload: unknown;
     try {
-      const payload = JSON.parse(await file.text()) as unknown;
-      await restoreBackup(undefined, payload);
+      payload = JSON.parse(await file.text()) as unknown;
     } catch {
       toast.error("That file is not valid backup JSON.");
+      return;
+    }
+    await restoreJson(undefined, payload);
+  }
+
+  async function downloadSql(id: string) {
+    try {
+      const token = sessionToken();
+      const response = await fetch(`/api/console/backup/${encodeURIComponent(id)}/sql`, {
+        cache: "no-store",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!response.ok) {
+        const data = (await response.json().catch(() => ({}))) as { message?: string | string[] };
+        throw new Error(apiMessage(data, `Could not download SQL backup (${response.status}).`));
+      }
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${id}.sql`;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) {
+      toast.error(errorMessage(error, "Could not download SQL backup."));
+    }
+  }
+
+  async function restoreSavedSql(id: string) {
+    if (!window.confirm(
+      `Restore Postgres data from ${id}? Current database rows in every table in this dump will be overwritten. This cannot be undone.`,
+    )) return;
+    setSqlRestoring(id);
+    try {
+      const { api } = await import("@/lib/hq-api");
+      const result = await api<SqlRestoreResult>(
+        `/api/console/backup/sql/${encodeURIComponent(id)}/restore`,
+        { method: "POST" },
+      );
+      toast.success(
+        `Restored ${result.rows} row(s) across ${result.tables.length} Postgres table(s).`,
+      );
+      await refresh();
+    } catch (error) {
+      toast.error(errorMessage(error, "Postgres restore failed."));
+    } finally {
+      setSqlRestoring("");
+    }
+  }
+
+  async function restoreSqlFile(file: File | undefined) {
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith(".sql")) {
+      toast.error("Choose a .sql backup file.");
+      return;
+    }
+    if (!window.confirm(
+      `Restore Postgres data from ${file.name}? Current database rows in the dump's tables will be overwritten. This cannot be undone.`,
+    )) return;
+    setSqlRestoring("upload");
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const token = sessionToken();
+      const response = await fetch("/api/console/backup/restore-sql", {
+        method: "POST",
+        cache: "no-store",
+        body: form,
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const data = (await response.json().catch(() => ({}))) as SqlRestoreResult & {
+        message?: string | string[];
+      };
+      if (!response.ok) {
+        throw new Error(apiMessage(data, "Postgres restore failed."));
+      }
+      toast.success(`Restored ${data.rows} row(s) across ${data.tables.length} Postgres table(s).`);
+      await refresh();
+    } catch (error) {
+      toast.error(errorMessage(error, "Postgres restore failed."));
+    } finally {
+      setSqlRestoring("");
     }
   }
 
   const sorted = [...snapshots].sort((a, b) => asStr(b.at).localeCompare(asStr(a.at)));
+  const latest = sorted[0];
+  const latestSql = asNum(latest?.sqlBytes);
 
   return (
     <div>
       <SetupHeader
         kicker="Producer · System"
         title="Backups"
-        copy="Create restorable JSON snapshots of every persisted collection, then recover them from this page or upload a saved backup file."
+        copy="Create a JSON snapshot of local data files and a genuine data-only Postgres SQL dump. JSON restore replaces files; Postgres restore replaces database rows."
         action={<LiveBadge live={live} />}
       />
       <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <SetupStat label="Snapshots" value={String(sorted.length)} hint="Recorded backups" tone="accent" />
-        <SetupStat label="Last backup" value={sorted[0] ? new Date(asStr(sorted[0].at)).toLocaleDateString() : "—"} hint="Most recent" />
-        <SetupStat label="Collections" value={String(sorted[0] ? asNum(sorted[0].files) : 0)} hint="JSON data files" />
-        <SetupStat label="Size" value={sorted[0] ? `${(asNum(sorted[0].bytes) / 1024).toFixed(1)} KB` : "—"} hint="Latest snapshot" />
+        <SetupStat label="Snapshots" value={String(sorted.length)} hint="JSON + SQL pair" tone="accent" />
+        <SetupStat label="Last backup" value={latest ? new Date(asStr(latest.at)).toLocaleDateString() : "—"} hint="Most recent" />
+        <SetupStat label="JSON data files" value={String(latest ? asNum(latest.files) : 0)} hint={formatBytes(asNum(latest?.bytes))} />
+        <SetupStat label="SQL dump" value={formatBytes(latestSql)} hint={latest ? `${asNum(latest.tables)} tables · ${asNum(latest.rows).toLocaleString()} rows` : "Not generated"} />
       </div>
-      <div className="mb-6 grid gap-4 md:grid-cols-2">
+      <div className="mb-6 grid gap-4 lg:grid-cols-3">
         <div className="rounded-[20px] border border-pos-border bg-pos-surface p-5">
           <div className="mb-2 flex items-center gap-2 text-[15px] font-semibold text-pos-ink">
-            <Clock size={16} className="text-pos-primary" /> Recovery
+            <Clock size={16} className="text-pos-primary" /> JSON snapshot restore
           </div>
           <ul className="space-y-2 text-[13px]">
             <li className="flex justify-between rounded-2xl bg-pos-surface-muted px-4 py-3">
@@ -517,10 +660,6 @@ function BackupsPage() {
               <span className="text-pos-ink-muted">Scope</span>
               <span className="font-medium text-pos-ink">Every data/*.json file</span>
             </li>
-            <li className="flex justify-between rounded-2xl bg-pos-surface-muted px-4 py-3">
-              <span className="text-pos-ink-muted">Restore</span>
-              <span className="font-medium text-pos-ink">Snapshot or uploaded file</span>
-            </li>
           </ul>
           <label className="mt-4 inline-flex cursor-pointer items-center gap-2 rounded-full border border-pos-border px-4 py-2 text-[12px] font-semibold text-pos-ink transition hover:bg-pos-surface-muted">
             <Upload size={14} />
@@ -529,13 +668,45 @@ function BackupsPage() {
               type="file"
               accept="application/json,.json"
               className="hidden"
-              disabled={Boolean(restoring)}
-              onChange={(event) => void restoreFile(event.target.files?.[0])}
+              disabled={Boolean(restoring || sqlRestoring)}
+              onChange={(event) => {
+                void restoreJsonFile(event.target.files?.[0]);
+                event.target.value = "";
+              }}
+            />
+          </label>
+        </div>
+        <div className="rounded-[20px] border border-pos-border bg-pos-surface p-5">
+          <div className="mb-2 flex items-center gap-2 text-[15px] font-semibold text-pos-ink">
+            <Database size={16} className="text-pos-primary" /> Restore Postgres data
+          </div>
+          <ul className="space-y-2 text-[13px]">
+            <li className="flex justify-between rounded-2xl bg-pos-surface-muted px-4 py-3">
+              <span className="text-pos-ink-muted">Format</span>
+              <span className="font-medium text-pos-ink">Data-only SQL · public schema</span>
+            </li>
+            <li className="flex justify-between rounded-2xl bg-pos-surface-muted px-4 py-3">
+              <span className="text-pos-ink-muted">Warning</span>
+              <span className="font-medium text-pos-danger">Overwrites current rows</span>
+            </li>
+          </ul>
+          <label className="mt-4 inline-flex cursor-pointer items-center gap-2 rounded-full border border-pos-danger/40 px-4 py-2 text-[12px] font-semibold text-pos-danger transition hover:bg-pos-danger/10">
+            <Upload size={14} />
+            {sqlRestoring === "upload" ? "Restoring…" : "Restore .sql file"}
+            <input
+              type="file"
+              accept=".sql,text/plain"
+              className="hidden"
+              disabled={Boolean(restoring || sqlRestoring)}
+              onChange={(event) => {
+                void restoreSqlFile(event.target.files?.[0]);
+                event.target.value = "";
+              }}
             />
           </label>
         </div>
         <div className="flex flex-col items-start justify-center rounded-[20px] border border-pos-border bg-pos-surface p-5">
-          <p className="text-sm text-pos-ink-muted">Create a restorable JSON snapshot of every persisted data collection before a risky migration or bulk import.</p>
+          <p className="text-sm text-pos-ink-muted">Run a backup before risky migrations or bulk imports. Each run writes a JSON snapshot and a downloadable Postgres SQL dump.</p>
           <PrimaryButton
             className="mt-4"
             disabled={busy}
@@ -547,29 +718,61 @@ function BackupsPage() {
       </div>
       <div className="overflow-hidden rounded-[20px] border border-pos-border bg-pos-surface">
         <div className="flex items-center gap-2 border-b border-pos-border/60 px-5 py-4 text-[15px] font-semibold text-pos-ink">
-          <FileArchive size={16} className="text-pos-primary" /> Snapshots
+          <FileArchive size={16} className="text-pos-primary" /> Saved backups
         </div>
         <ul className="divide-y divide-pos-border/45">
           {sorted.length === 0 ? (
-            <li className="px-5 py-8 text-center text-[13px] text-pos-ink-faint">No snapshots yet. Run a backup to create one.</li>
-          ) : sorted.map((row) => (
-            <li key={row.id} className="flex items-center justify-between gap-3 px-5 py-3.5 text-[13px]">
-              <code className="font-medium text-pos-ink">{row.id}</code>
-              <span className="hidden text-pos-ink-muted sm:block">{new Date(asStr(row.at)).toLocaleString()}</span>
-              <span className="tabular-nums text-pos-ink-muted">{(asNum(row.bytes) / 1024).toFixed(1)} KB</span>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-pos-success/10 px-2.5 py-1 text-[11px] font-semibold text-pos-success">
-                <CheckCircle2 size={12} /> {asStr(row.status) || "Verified"}
-              </span>
-              <button
-                type="button"
-                disabled={Boolean(restoring)}
-                onClick={() => void restoreBackup(row.id)}
-                className="shrink-0 rounded-full border border-pos-border px-3 py-1 text-[11px] font-semibold text-pos-ink transition hover:bg-pos-surface-muted disabled:opacity-60"
-              >
-                {restoring === row.id ? "Restoring…" : "Restore"}
-              </button>
-            </li>
-          ))}
+            <li className="px-5 py-8 text-center text-[13px] text-pos-ink-faint">No backups yet. Run a backup to create a JSON snapshot and SQL dump.</li>
+          ) : sorted.map((row) => {
+            const hasSql = row.kind === "json+sql" || asNum(row.sqlBytes) > 0;
+            const busyRestore = Boolean(restoring || sqlRestoring);
+            return (
+              <li key={row.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3.5 text-[13px]">
+                <code className="font-medium text-pos-ink">{row.id}</code>
+                <span className="inline-flex items-center gap-1">
+                  <span className="rounded-full bg-pos-primary/10 px-2 py-0.5 text-[10px] font-semibold text-pos-primary">JSON</span>
+                  {hasSql && <span className="rounded-full bg-pos-success/10 px-2 py-0.5 text-[10px] font-semibold text-pos-success">SQL</span>}
+                </span>
+                <span className="hidden text-pos-ink-muted xl:block">{new Date(asStr(row.at)).toLocaleString()}</span>
+                <span className="tabular-nums text-pos-ink-muted">JSON {formatBytes(asNum(row.bytes))}</span>
+                <span className="tabular-nums text-pos-ink-muted">SQL {hasSql ? formatBytes(asNum(row.sqlBytes)) : "—"}</span>
+                <span className="hidden tabular-nums text-pos-ink-faint xl:block">
+                  {asNum(row.tables) > 0 ? `${asNum(row.tables)} tables · ${asNum(row.rows).toLocaleString()} rows` : "Counts unavailable"}
+                </span>
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-pos-success/10 px-2.5 py-1 text-[11px] font-semibold text-pos-success">
+                  <CheckCircle2 size={12} /> {asStr(row.status) || "Verified"}
+                </span>
+                <div className="ml-auto flex items-center gap-2">
+                  {hasSql && (
+                    <button
+                      type="button"
+                      disabled={busyRestore}
+                      onClick={() => void downloadSql(row.id)}
+                      className="inline-flex shrink-0 items-center gap-1 rounded-full border border-pos-border px-3 py-1 text-[11px] font-semibold text-pos-ink transition hover:bg-pos-surface-muted disabled:opacity-60"
+                    >
+                      <Download size={12} /> SQL
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    disabled={busyRestore}
+                    onClick={() => void restoreJson(row.id)}
+                    className="shrink-0 rounded-full border border-pos-border px-3 py-1 text-[11px] font-semibold text-pos-ink transition hover:bg-pos-surface-muted disabled:opacity-60"
+                  >
+                    {restoring === row.id ? "Restoring…" : "Restore JSON"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busyRestore || !hasSql}
+                    onClick={() => void restoreSavedSql(row.id)}
+                    className="shrink-0 rounded-full border border-pos-danger/40 px-3 py-1 text-[11px] font-semibold text-pos-danger transition hover:bg-pos-danger/10 disabled:opacity-60"
+                  >
+                    {sqlRestoring === row.id ? "Restoring…" : "Restore Postgres"}
+                  </button>
+                </div>
+              </li>
+            );
+          })}
         </ul>
       </div>
     </div>

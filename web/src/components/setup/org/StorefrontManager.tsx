@@ -72,7 +72,7 @@ export function StorefrontManager() {
 
   if (!ready) return <ManagerSkeleton variant="table" />;
 
-  const liveCount = rows.filter((row) => row.enabled).length;
+  const enabledCount = rows.filter((row) => row.enabled).length;
   const storeLabel = (id: string) => {
     const store = stores.find((s) => s.id === id);
     if (!store) return id || "—";
@@ -86,7 +86,7 @@ export function StorefrontManager() {
       <SetupHeader
         kicker={links.area === "producer" ? "Producer · Companies" : "Setup · Organization"}
         title="Storefronts"
-        copy="Online shop per store. Prices and stock can follow the live till catalog."
+        copy="Online shop per store. Price Check reads the live catalog stream directly; the switches below only record preferences."
         action={
           <PrimaryButton
             disabled={stores.length === 0}
@@ -102,8 +102,8 @@ export function StorefrontManager() {
       />
 
       <div className="mb-6 grid gap-3 sm:grid-cols-3">
-        <SetupStat label="Storefronts" value={String(rows.length)} hint={`${liveCount} live`} />
-        <SetupStat label="Live" value={String(liveCount)} tone="accent" />
+        <SetupStat label="Storefronts" value={String(rows.length)} hint={`${enabledCount} enabled`} />
+        <SetupStat label="Enabled" value={String(enabledCount)} tone="accent" />
         <SetupStat label="Stores linked" value={String(stores.length)} hint={companyName || "Company"} />
       </div>
 
@@ -129,7 +129,7 @@ export function StorefrontManager() {
         </p>
       )}
 
-      <DataTable columns={["Name", "Store", "URL", "Hours", "Live"]}>
+      <DataTable columns={["Name", "Store", "URL", "Hours", "Enabled"]}>
         {rows.length === 0 ? (
           <tr>
             <td className="px-4 py-8 text-center text-pos-ink-faint" colSpan={5}>
@@ -220,15 +220,19 @@ export function StorefrontManager() {
                 onChange={(enabled) => setDraft({ ...draft, enabled })}
               />
               <ToggleField
-                label="Sync prices"
+                label="Record price sync preference"
                 checked={draft.syncPrices ?? true}
                 onChange={(syncPrices) => setDraft({ ...draft, syncPrices })}
               />
               <ToggleField
-                label="Sync stock"
+                label="Record stock sync preference"
                 checked={draft.syncStock ?? true}
                 onChange={(syncStock) => setDraft({ ...draft, syncStock })}
               />
+              <p className="mb-3 text-[12px] leading-relaxed text-pos-ink-faint">
+                These switches only save a preference. Price Check reads the live catalog stream
+                from HQ directly; nothing is pushed from this screen.
+              </p>
             </div>
             <footer className="flex gap-2 border-t border-pos-border bg-pos-surface px-5 py-4">
               {draft.id ? (

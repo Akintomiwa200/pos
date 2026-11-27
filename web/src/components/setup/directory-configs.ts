@@ -101,7 +101,7 @@ const validStatus = (row: DirectoryRecord) => {
   const to = String((row.extra ?? {}).validTo ?? "");
   const now = new Date().toISOString().slice(0, 10);
   if (to && to < now) return { label: "Ended", tone: "slate" as const };
-  return { label: "Live", tone: "emerald" as const };
+  return { label: "In window", tone: "emerald" as const };
 };
 
 export const DIRECTORY_CONFIGS: Record<string, DirectoryConfig> = {
@@ -281,7 +281,7 @@ export const DIRECTORY_CONFIGS: Record<string, DirectoryConfig> = {
     directory: "promotions",
     kicker: "Setup · Sales Promotion",
     title: "Sales Promotion",
-    copy: "Discount campaigns your cashiers can apply at the till — percentage or fixed, with validity windows.",
+    copy: "Discount campaigns synced to tills — percentage or fixed, with validity windows and minimum orders. Eligible “All items” campaigns apply automatically at checkout; item-specific rules remain reference notes.",
     singular: "promotion",
     detail: "/setup/sales-promotion",
     columns: [
@@ -316,7 +316,7 @@ export const DIRECTORY_CONFIGS: Record<string, DirectoryConfig> = {
       { key: "extra.appliesTo", label: "Applies to", kind: "select", options: ["all", "select-items"] },
       { key: "extra.validFrom", label: "Starts", kind: "date" },
       { key: "extra.validTo", label: "Ends", kind: "date" },
-      { key: "note", label: "Rules shown at the till", kind: "textarea" },
+      { key: "note", label: "Rules / notes (reference only)", kind: "textarea" },
     ],
     status: validStatus,
     insight: (rows) => {
@@ -326,7 +326,7 @@ export const DIRECTORY_CONFIGS: Record<string, DirectoryConfig> = {
         const to = String((row.extra ?? {}).validTo ?? "");
         return !to || to >= now;
       }).length;
-      return { label: "Live now", value: String(liveRows), hint: "running promotions" };
+      return { label: "In date window", value: String(liveRows), hint: "eligible campaigns apply at checkout" };
     },
   },
   "expense-account": {

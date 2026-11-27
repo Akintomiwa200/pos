@@ -289,7 +289,10 @@ export function DataSyncSettings() {
         </SetRow>
       </SetCard>
       <SetCard title="Local data">
-        <SetRow label="Push price changes to Price Check?" hint="Stored preference for the price-check service">
+        <SetRow
+          label="Price Check sync preference"
+          hint="Stored on this till only — Price Check reads /api/catalog/stream directly."
+        >
           <Toggle
             on={settings.syncPriceCheck}
             onChange={(syncPriceCheck) => patch({ syncPriceCheck })}

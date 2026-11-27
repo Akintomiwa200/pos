@@ -23,6 +23,22 @@ export default function AdsScreen() {
         <p className="pc-ads-eyebrow">{ad.eyebrow}</p>
         <h2>{ad.title}</h2>
         <p className="pc-ads-sub">{ad.subtitle}</p>
+        {ad.sample ? (
+          <span
+            className="pc-ads-eyebrow"
+            style={{
+              display: "inline-block",
+              margin: "18px 0 0",
+              padding: "5px 14px",
+              border: "1px solid rgba(255, 255, 255, 0.45)",
+              borderRadius: 999,
+              fontSize: 12,
+              letterSpacing: "0.1em",
+            }}
+          >
+            Sample promotion · illustrative only
+          </span>
+        ) : null}
       </div>
 
       {ads.length > 1 && (

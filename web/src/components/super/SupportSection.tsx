@@ -86,7 +86,7 @@ function SupportDashboard() {
         <SetupStat label="Open tickets" value={String(rows.filter((row) => asStr(row.status) === "Open").length)} hint="Awaiting response" />
         <SetupStat label="In progress" value={String(rows.filter((row) => asStr(row.status) === "In progress").length)} hint="Being handled" tone="accent" />
         <SetupStat label="Resolved today" value={String(resolvedToday)} hint="Closed" />
-        <SetupStat label="Live notices" value={String(announcements.rows.filter((row) => asBoolish(row.active)).length)} hint="Visible to tenants" />
+        <SetupStat label="Published notices" value={String(announcements.rows.filter((row) => asBoolish(row.active)).length)} hint="Copied to tenant notification feeds" />
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
         <Link href="/admin/support/tickets" className="flex items-center gap-3 rounded-[18px] border border-pos-border bg-pos-surface p-5 text-sm text-pos-ink hover:bg-pos-surface-muted">
@@ -166,7 +166,7 @@ function TicketsPage() {
       <SetupHeader
         kicker="Producer · Support"
         title="Tickets"
-        copy="Support tickets submitted by tenant companies. Click a ticket to move it from Open to In progress to Resolved."
+        copy="Producer-side support ticket records. Entries are logged here in HQ; tenants do not submit tickets to this board. Click a ticket to move it from Open to In progress to Resolved."
         action={<LiveBadge live={live} />}
       />
       <div className="mb-4 flex flex-col gap-2 rounded-[18px] border border-pos-border bg-pos-surface p-4 sm:flex-row">
@@ -178,13 +178,13 @@ function TicketsPage() {
           <option>Low</option>
         </select>
         <button type="button" onClick={() => void addTicket()} className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full bg-pos-primary px-5 py-2.5 text-sm font-semibold text-white shadow-pos-primary transition hover:opacity-90">
-          <Plus size={15} /> Add ticket
+          <Plus size={15} /> Record ticket
         </button>
       </div>
       {rows.length === 0 ? (
         <div className="rounded-[18px] border border-pos-border bg-pos-surface p-8 text-center text-sm text-pos-ink-muted">
           <Ticket size={20} className="mx-auto mb-2 text-pos-ink-faint" />
-          No tickets yet. Add one above to start the triage pipeline.
+          No tickets recorded yet. Add one above to start the triage pipeline.
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-3">
@@ -252,19 +252,19 @@ function RequestsPage() {
 
   return (
     <div>
-      <SetupHeader kicker="Producer · Support" title="Customer requests" copy="Inbound support enquiries from company administrators and staff. Answer them from this inbox." action={<LiveBadge live={live} />} />
+      <SetupHeader kicker="Producer · Support" title="Customer requests" copy="Producer-side record of support requests. Entries added here are stored in HQ; tenant submissions do not reach this list." action={<LiveBadge live={live} />} />
       <div className="mb-4 flex flex-col gap-2 rounded-[18px] border border-pos-border bg-pos-surface p-4 sm:flex-row">
         <input className={inputClass} placeholder="Request subject…" value={subject} onChange={(e) => setSubject(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void send()} />
         <input className={`${inputClass} sm:max-w-[160px]`} placeholder="From" value={from} onChange={(e) => setFrom(e.target.value)} />
         <input className={`${inputClass} sm:max-w-[200px]`} placeholder="Reply email" value={email} onChange={(e) => setEmail(e.target.value)} />
         <button type="button" onClick={() => void send()} className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full bg-pos-primary px-5 py-2.5 text-sm font-semibold text-white shadow-pos-primary transition hover:opacity-90">
-          <Send size={14} /> Add request
+          <Send size={14} /> Log request
         </button>
       </div>
       {rows.length === 0 ? (
         <div className="rounded-[18px] border border-pos-border bg-pos-surface p-8 text-center text-sm text-pos-ink-muted">
           <Mail size={20} className="mx-auto mb-2 text-pos-ink-faint" />
-          The inbox is quiet. New requests land here and stay after refresh.
+          No requests logged yet. Requests added above are stored in this producer record.
         </div>
       ) : (
         <ul className="overflow-hidden rounded-[18px] border border-pos-border bg-pos-surface">
@@ -414,7 +414,7 @@ function AnnouncementsPage() {
 
   return (
     <div>
-      <SetupHeader kicker="Producer · Support" title="Announcements" copy="Platform-wide messages for tenant dashboards. Published notices are persisted and can be paused." action={<LiveBadge live={live} />} />
+      <SetupHeader kicker="Producer · Support" title="Announcements" copy="Platform-wide messages for tenant dashboards. Publishing copies an active notice into each tenant's HQ feed; pausing stops delivery of unread copies." action={<LiveBadge live={live} />} />
       <div className="mb-6 grid gap-4 lg:grid-cols-2">
         <div className="rounded-[20px] border border-pos-border bg-pos-surface p-5">
           <div className="mb-4 flex items-center gap-2 text-[15px] font-semibold text-pos-ink">

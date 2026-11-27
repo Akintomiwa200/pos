@@ -33,7 +33,7 @@ Smoke test (foreground):
 
 ```powershell
 $env:PORT = "3001"
-$env:CORS_ORIGINS = "http://localhost:3000,https://tauri.localhost"
+$env:CORS_ORIGINS = "https://hq.yourdomain.com,https://tauri.localhost"
 node dist\main.js
 ```
 
@@ -46,12 +46,12 @@ Production env file `backend\.env` (never commit):
 
 ```env
 PORT=3001
-CORS_ORIGINS=http://192.168.1.10:3000,http://localhost:3000
+CORS_ORIGINS=https://hq.yourdomain.com,https://tauri.localhost
 ```
 
-Add every origin the till/HQ/price-check actually use (LAN IPs, HTTPS hostnames).
-Packaged Tauri windows may send an origin such as `https://tauri.localhost` —
-include it if CORS rejects the EXE.
+Set `NODE_ENV=production` and list the exact HTTPS HQ and packaged app origins.
+Production rejects insecure HTTP origins. Put a TLS reverse proxy in front of
+the API for browser clients; native clients can use the Tauri origin.
 
 ## 2. Build HQ
 

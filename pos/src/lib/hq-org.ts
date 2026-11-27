@@ -389,6 +389,7 @@ export function applyHqOrg(org: HqOrgSnapshot, till?: TillLocation | null) {
       registerOverride?.receiptTemplate ?? s.receiptTemplate ?? current.receiptTemplate,
     storefrontEnabled: front?.enabled ?? current.storefrontEnabled,
     storefrontUrl: front?.url || current.storefrontUrl,
+    // These flags are recorded HQ preferences, not a push or a measured sync state.
     storefrontSyncPrices: front?.syncPrices ?? current.storefrontSyncPrices,
     storefrontSyncStock: front?.syncStock ?? current.storefrontSyncStock,
     storeHours: front?.hours || current.storeHours,

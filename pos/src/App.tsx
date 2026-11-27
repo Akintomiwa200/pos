@@ -9,7 +9,11 @@ import { ProfileMenu, type MenuAction } from "./components/layout/ProfileMenu";
 import { CurrentOrder } from "./components/order/CurrentOrder";
 import { HoldModal } from "./components/order/HoldModal";
 import { PaymentOverlay } from "./components/payment/PaymentOverlay";
-import { PaymentHandoffModal, type Handoff } from "./components/payment/PaymentHandoffModal";
+import {
+  PaymentHandoffModal,
+  type Handoff,
+  type HandoffStatus,
+} from "./components/payment/PaymentHandoffModal";
 import { LoyaltyModal } from "./components/payment/LoyaltyModal";
 import {
   GiftCardModal,
@@ -63,7 +67,11 @@ import {
 import { createHeldTicket, loadLocalHolds, pruneExpiredHolds, saveLocalHolds, type HeldTicket } from "./lib/holds";
 import { buildRefundSale } from "./lib/refunds";
 import { pendingSaleCount as countPendingSales } from "./lib/sales";
-import { requestCharge } from "./lib/payments";
+import {
+  requestCharge,
+  verifyPayment,
+  type PaymentProvider,
+} from "./lib/payments";
 import { useStoreSettings, useTills } from "./lib/use-store-settings";
 import {
   listLoyaltyCards,
@@ -79,6 +87,7 @@ import { TablesScreen } from "./screens/tables/TablesScreen";
 import { RoomsScreen } from "./screens/rooms/RoomsScreen";
 import { KitchenHome } from "./screens/kitchen/KitchenHome";
 import { startHqOrgSync } from "./lib/hq-settings-sync";
+import { bestPromotion, loadPromotions, type PromotionRecord } from "./lib/promotions";
 import { useHardwareHex } from "./lib/device-hex";
 import {
   getPrinterGeometry,
@@ -244,6 +253,7 @@ export default function App() {
       : local;
   });
   const [discountMinor, setDiscountMinor] = useState(0);
+  const [promotions, setPromotions] = useState<PromotionRecord[]>([]);
   const [saleDetails, setSaleDetails] = useState<Record<string, string>>({});
   const [holdOpen, setHoldOpen] = useState(false);
   const [discountOpen, setDiscountOpen] = useState(false);
@@ -278,6 +288,9 @@ export default function App() {
   const [paying, setPaying] = useState(false);
   const [busyLabel, setBusyLabel] = useState<string | null>(null);
   const [handoff, setHandoff] = useState<Handoff | null>(null);
+  const [handoffStatus, setHandoffStatus] = useState<HandoffStatus>("pending");
+  const [handoffMessage, setHandoffMessage] = useState("");
+  const [paymentProvider, setPaymentProvider] = useState<PaymentProvider | null>(null);
   const [loyaltyOpen, setLoyaltyOpen] = useState(false);
   const [loyaltyNumber, setLoyaltyNumber] = useState<string | null>(null);
   const [loyaltyConfirm, setLoyaltyConfirm] = useState<LoyaltyConfirmation | null>(null);
@@ -320,6 +333,23 @@ export default function App() {
 
   useEffect(() => startHqOrgSync(), []);
 
+  // HQ promotion campaigns are read live from the directory. A failed fetch
+  // simply means no automatic campaign is applied to the current ticket.
+  useEffect(() => {
+    let stopped = false;
+    const refresh = () => {
+      void loadPromotions().then((rows) => {
+        if (!stopped) setPromotions(rows);
+      });
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 60_000);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, []);
+
   // Keep the receipt printer's geometry warm so the first receipt prints
   // without paying a printer-detection scan (which used to add seconds).
   useEffect(() => {
@@ -341,7 +371,16 @@ export default function App() {
       item.barcode.toLowerCase().includes(q)
     );
   });
-  const totals = computeLineTotals(cart, settings, discountMinor);
+  const subtotalMinor = cartSubtotal(cart);
+  const promotion = useMemo(
+    () => bestPromotion(promotions, subtotalMinor),
+    [promotions, subtotalMinor],
+  );
+  const effectiveDiscountMinor = Math.min(
+    subtotalMinor,
+    discountMinor + (promotion?.discountMinor ?? 0),
+  );
+  const totals = computeLineTotals(cart, settings, effectiveDiscountMinor);
   const redemptionMinor = checkout?.loyaltyRedeemMinor ?? 0;
   const chargeBaseMinor = Math.max(0, totals.totalMinor - redemptionMinor);
   const activeTill = tills[0] ?? findTill();
@@ -577,6 +616,9 @@ export default function App() {
     setPaying(false);
     setBusyLabel(null);
     setHandoff(null);
+    setHandoffStatus("pending");
+    setHandoffMessage("");
+    setPaymentProvider(null);
     setLoyaltyOpen(false);
     setLoyaltyNumber(null);
     setLoyaltyConfirm(null);
@@ -1397,7 +1439,7 @@ export default function App() {
       return;
     }
     const saleCtx = ctx ?? blankCheckout();
-    const baseTotal = computeLineTotals(cart, settings, discountMinor).totalMinor;
+    const baseTotal = computeLineTotals(cart, settings, effectiveDiscountMinor).totalMinor;
     const tipAmount = Math.max(0, Math.round(tip));
     const totalMinor = baseTotal + tipAmount;
     const till = activeTill;
@@ -1420,12 +1462,15 @@ export default function App() {
       giftCardChargedMinor: saleCtx.giftCardChargedMinor,
       giftCardBalanceAfterMinor: saleCtx.giftCardBalanceAfterMinor,
       tillKey: till?.name ?? null,
-      discountMinor,
+      discountMinor: effectiveDiscountMinor,
       tipMinor: tipAmount > 0 ? tipAmount : null,
       customerName: saleDetails.customer?.trim() || null,
       customerPhone: saleDetails.phone?.trim() || null,
       customerEmail: saleDetails.email?.trim() || null,
-      note: saleDetails.notes?.trim() || null,
+      note:
+        [saleDetails.notes?.trim(), promotion ? `Promotion: ${promotion.name}` : null]
+          .filter(Boolean)
+          .join(" · ") || null,
       reference: saleDetails.reference?.trim() || null,
       taxExemption: saleDetails.tax?.trim() || null,
     };
@@ -1519,14 +1564,18 @@ export default function App() {
       return "failed";
     }
     setPaying(true);
+    const manual = method === "cash" || method === "split" || method === "gift-card";
     try {
       const charge = await requestCharge({
         tender: method,
         amountMinor,
         parts: options.parts,
         reference: saleDetails.reference?.trim() || undefined,
+        ...(manual ? {} : { provider: paymentProvider ?? undefined }),
       });
       if (charge.status === "paid") return "paid";
+      setHandoffStatus("pending");
+      setHandoffMessage("");
       setHandoff({
         method,
         label: tenderLabel(method),
@@ -1536,6 +1585,8 @@ export default function App() {
         kind: options.kind,
         part: options.part,
         splitIndex: options.splitIndex,
+        checkoutUrl: charge.checkoutUrl ?? charge.hostedUrl,
+        mode: charge.mode,
       });
       return "handoff";
     } catch (error) {
@@ -1876,9 +1927,52 @@ export default function App() {
     finishSplitIfComplete(next, ctx);
   }
 
+  async function checkHandoff() {
+    const current = handoff;
+    if (!current) return;
+    setHandoffStatus("checking");
+    setHandoffMessage("");
+    try {
+      const result = await verifyPayment({
+        provider: current.provider as PaymentProvider,
+        reference: current.reference,
+        amountMinor: current.amountMinor,
+      });
+      if (result.status === "paid") {
+        setHandoffStatus("paid");
+        toast.success(
+          result.source === "webhook"
+            ? "Provider webhook confirmed the payment."
+            : "Provider confirmed the payment.",
+        );
+        return;
+      }
+      if (result.status === "failed") {
+        setHandoffStatus("failed");
+        setHandoffMessage(result.message ?? "The provider reported this payment as failed.");
+        return;
+      }
+      setHandoffStatus("pending");
+      setHandoffMessage(
+        result.amountMatches === false
+          ? "The provider amount does not match this payment."
+          : "Payment is still pending at the provider. Check again after the customer pays.",
+      );
+    } catch (error) {
+      setHandoffStatus("failed");
+      setHandoffMessage(
+        error instanceof Error ? error.message : "Payment status could not be checked.",
+      );
+    }
+  }
+
   function confirmHandoff() {
     const ctx = checkoutRef.current;
     if (!handoff || !ctx) return;
+    if (handoffStatus !== "paid") {
+      toast.error("Check the payment status before completing this sale.");
+      return;
+    }
     setHandoff(null);
     if (handoff.kind === "split" && handoff.splitIndex !== undefined) {
       const index = handoff.splitIndex;
@@ -1898,6 +1992,8 @@ export default function App() {
 
   function cancelHandoff() {
     setHandoff(null);
+    setHandoffStatus("pending");
+    setHandoffMessage("");
     setPaying(false);
     void reverseCheckout();
   }
@@ -1941,6 +2037,9 @@ export default function App() {
     setPaying(false);
     setBusyLabel(null);
     setHandoff(null);
+    setHandoffStatus("pending");
+    setHandoffMessage("");
+    setPaymentProvider(null);
     setLoyaltyOpen(false);
     setLoyaltyNumber(null);
     setLoyaltyConfirm(null);
@@ -2174,6 +2273,8 @@ export default function App() {
             blockedReason={missingRequiredSaleFields().length
               ? `Required before checkout: ${missingRequiredSaleFields().map((field) => field.label).join(", ")}`
               : ""}
+            provider={paymentProvider}
+            onProvider={setPaymentProvider}
             onSelect={(method) => void startCharge(method)}
             onReference={(value) =>
               setSaleDetails((previous) => ({ ...previous, reference: value }))
@@ -2305,6 +2406,7 @@ lines={cart}
             onQty={changeQty}
           onPrice={changePrice}
           discountMinor={discountMinor}
+          promotion={promotion}
           onRegisterAction={runRegisterAction}
           saleDetails={saleDetails}
           onSaleDetail={(key, value) =>
@@ -2484,6 +2586,9 @@ lines={cart}
         <PaymentHandoffModal
           handoff={handoff}
           currency={settings.currency}
+          status={handoffStatus}
+          message={handoffMessage}
+          onCheck={() => void checkHandoff()}
           onConfirm={confirmHandoff}
           onCancel={cancelHandoff}
         />

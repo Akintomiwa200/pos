@@ -3,13 +3,18 @@
 Unsigned Windows EXEs and debug Android APKs are fine for **internal testing**.
 Stores, domain-joined PCs, and Google Play need **signed** artifacts.
 
+**Release CI does not sign anything.** No certificate or keystore secret is used
+by the workflows, so every EXE/MSI attached to a tag is unsigned and every
+APK/AAB from the manual Android job is an unsigned sideload build. Nothing is
+notarised (no macOS artifacts are produced). See [release-ci.md](release-ci.md).
+
 ## Windows (Authenticode)
 
 Without a signature, SmartScreen shows “Windows protected your PC”.
 
 1. Obtain an **Authenticode** certificate (OV or EV) as a `.pfx`.
-2. After `pnpm tauri build`, sign the NSIS setup (and the inner `.exe` if your
-   CA requires it):
+2. After `pnpm exec tauri build --bundles nsis,msi`, sign the NSIS setup (and the
+   inner `.exe` if your CA requires it):
 
 ```powershell
 signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /f store.pfx /p <pfx-password> `
@@ -58,10 +63,15 @@ Then tag git: `v0.1.1`.
 
 ## What to attach to a GitHub Release
 
-- POS `*-setup.exe` (signed)
-- Price Check `*-setup.exe` (signed)
-- POS `app-universal-release.apk` (internal) or `.aab` (Play)
-- Price Check APK / AAB
+- `pos-terminal-setup.exe` / `pos-terminal.msi` (signed)
+- `price-check-setup.exe` / `price-check.msi` (signed)
+- `label-studio-setup.exe` / `label-studio.msi` (signed, if shipped)
+- `pos-terminal.apk` (internal) / `pos-terminal.aab` (Play, signed with your key)
+- `price-check.apk` / `price-check.aab` (same rule)
 - Notes: API version, required `VITE_API_URL` / LAN IP, till activation reminder
+
+CI already uploads unsigned assets with those names. Use `gh release upload ...
+--clobber` to replace them with signed files; the `/download` links will then
+point at the signed versions.
 
 Do not attach `backend/data`, `.env`, or till **session** tokens.

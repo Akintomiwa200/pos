@@ -10,6 +10,7 @@ service** for HQ and the API.
 | --- | --- | --- | --- |
 | Point of sale (till) | [`pos/`](../../pos/) | Windows **setup.exe** (NSIS) or **.msi**; optional **APK** for a tablet | Cashier PC or Android tablet |
 | Price check | [`price-check/`](../../price-check/) | Windows **setup.exe**; **APK** for a handheld | Gun scanner / phone / small PC |
+| Label studio | [`label-studio/`](../../label-studio/) | Windows **setup.exe** (Tauri 2) | Label / back-office PC |
 | API (backend) | [`backend/`](../../backend/) | Node process or **Windows Service** (not an APK) | Back-office server or the till PC |
 | HQ console | [`web/`](../../web/) | Node process or **Windows Service** (browser app) | Manager PC / browser |
 
@@ -25,6 +26,7 @@ public URL) at build time or, for price check, in the in-app API field.
 4. [API and HQ services](services.md) — keep `/api` running
 5. [Signing and release](signing.md) — store / enterprise install
 6. [GitHub Releases](github-releases.md) — tags, assets; Packages are not used
+7. [Native release CI](release-ci.md) — what a `v*` tag builds and the exact asset names
 
 Example config files live in [`examples/`](examples/).
 
@@ -44,6 +46,12 @@ After a successful Android build:
 src-tauri/gen/android/app/build/outputs/apk/universal/release/*.apk
 src-tauri/gen/android/app/build/outputs/bundle/universalRelease/*.aab
 ```
+
+On a pushed `v*` tag, CI copies and renames these into predictable Release
+assets such as `pos-terminal-setup.exe`, `pos-terminal.msi`, and
+`pos-terminal.apk` / `pos-terminal.aab` (Android only after its project is
+committed). See [release-ci.md](release-ci.md).
+**CI assets are unsigned and Android builds are sideload-only.**
 
 ## Development vs packaged
 

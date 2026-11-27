@@ -79,34 +79,47 @@ export function BalanceSheetPage() {
         </p>
         <h1 className="mt-1 text-2xl font-semibold tracking-tight text-pos-ink">Balance sheet</h1>
         <p className="mt-1.5 text-sm text-pos-ink-muted">
-          Assets, liabilities, and equity snapshot derived from live HQ books.
+          Recorded cash, stock, VAT and payables only. This is not a full statutory balance sheet.
         </p>
       </header>
 
       <section
         className={`mb-5 flex flex-col items-center gap-2 rounded-[24px] p-6 text-center shadow-pos-md sm:flex-row sm:justify-between ${
-          reconciles
+          reconciles && books.dataGaps.length === 0
             ? "bg-pos-success-soft"
             : "bg-rose-50 dark:bg-rose-950/30"
         }`}
       >
         <div className="flex flex-wrap items-center justify-center gap-2 text-2xl font-bold tabular-nums">
           <span className="rounded-2xl bg-white px-4 py-2 text-pos-ink shadow-pos-sm">{naira(assets)}</span>
-          <Equal size={20} className={reconciles ? "text-pos-success" : "text-pos-danger"} />
+          <Equal size={20} className={reconciles && books.dataGaps.length === 0 ? "text-pos-success" : "text-pos-danger"} />
           <span className="rounded-2xl bg-white px-4 py-2 text-pos-ink shadow-pos-sm">{naira(liabilities)}</span>
           <span className="text-pos-ink-faint">+</span>
           <span className="rounded-2xl bg-white px-4 py-2 text-pos-ink shadow-pos-sm">{naira(equity)}</span>
         </div>
         <p
           className={`text-sm font-medium ${
-            reconciles ? "text-pos-success" : "text-pos-danger"
+            reconciles && books.dataGaps.length === 0 ? "text-pos-success" : "text-pos-danger"
           }`}
         >
-          {reconciles
-            ? "A = L + E — the sheet balances"
-            : `Difference ${naira(Math.abs(assets - liabilities - equity))} — mixed-sign sections hidden`}
+          {books.dataGaps.length > 0
+            ? reconciles
+              ? "Recorded totals match, but the books are incomplete — see omissions below."
+              : `Difference ${naira(Math.abs(assets - liabilities - equity))} — no plug entry has been added.`
+            : "A = L + E — the recorded sheet balances."}
         </p>
       </section>
+
+      {books.dataGaps.length > 0 && (
+        <section className="mb-5 rounded-[20px] border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+          <p className="font-semibold">Incomplete books — recorded data only</p>
+          <ul className="mt-2 list-disc space-y-1 pl-5">
+            {books.dataGaps.map((gap) => (
+              <li key={gap}>{gap}</li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <div className="grid gap-5 md:grid-cols-3">
         {sections.map((section) => {

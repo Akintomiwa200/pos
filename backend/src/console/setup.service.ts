@@ -11,6 +11,7 @@ import {
   SEED_TAXES,
   type HqBranch,
   type HqCompany,
+  type GatewayMode,
   type HqGateway,
   type HqOrgSettings,
   type HqOrgSnapshot,
@@ -22,6 +23,49 @@ import {
 
 function nid(prefix: string) {
   return `${prefix}-${randomBytes(4).toString("hex")}`;
+}
+
+/** Bullets/asterisks sent back by masked forms are placeholders, not new keys. */
+const SECRET_MASK = "••••";
+
+function isMaskedSecret(value: string | undefined) {
+  return Boolean(value && /^[•*]{2,}$/.test(value.trim()));
+}
+
+function maskSecret(value: string | undefined) {
+  return value ? SECRET_MASK : "";
+}
+
+/**
+ * HQ forms echo masked values. Keep the stored credential unless the client
+ * submitted a real replacement or explicitly cleared the field with "".
+ */
+function preserveSecret(next: string | undefined, current: string | undefined) {
+  if (next === undefined || isMaskedSecret(next)) return current ?? "";
+  return next.trim();
+}
+
+function normalizeGateway(row: HqGateway): HqGateway {
+  const mode: GatewayMode = row.mode === "live" ? "live" : "test";
+  return {
+    ...row,
+    secretKey: preserveSecret(row.secretKey, undefined),
+    webhookSecret: preserveSecret(row.webhookSecret, undefined),
+    merchantId: row.merchantId?.trim() ?? "",
+    apiBase: row.apiBase?.trim() ?? "",
+    mode,
+  };
+}
+
+/** Only masked copies leave this service; adapters use listGatewayCredentials(). */
+function publicGateway(row: HqGateway): HqGateway {
+  return {
+    ...row,
+    publicKey: maskSecret(row.publicKey),
+    secretKey: maskSecret(row.secretKey),
+    webhookSecret: maskSecret(row.webhookSecret),
+    merchantId: row.merchantId ? SECRET_MASK : "",
+  };
 }
 
 export type SettingsEvent = {
@@ -63,7 +107,7 @@ export class SetupService implements OnModuleInit {
     this.branches = this.pick<HqBranch[]>(stored, "branches", []);
     this.stores = this.pick<HqStore[]>(stored, "stores", []);
     this.storefronts = this.pick<HqStorefront[]>(stored, "storefronts", []);
-    this.gateways = this.pick<HqGateway[]>(stored, "gateways", []);
+    this.gateways = this.pick<HqGateway[]>(stored, "gateways", []).map(normalizeGateway);
     this.taxes = this.pick<HqTax[]>(stored, "taxes", SEED_TAXES);
     this.settings = {
       ...SEED_SETTINGS,
@@ -119,7 +163,7 @@ export class SetupService implements OnModuleInit {
       branches: this.branches,
       stores: this.stores,
       storefronts: this.storefronts,
-      gateways: this.gateways.map((row) => ({ ...row, publicKey: row.publicKey ? "••••" : "" })),
+      gateways: this.gateways.map(publicGateway),
       taxes: this.taxes,
       settings: this.settings,
     };
@@ -295,25 +339,43 @@ export class SetupService implements OnModuleInit {
     return { ok: true };
   }
 
+  /** Masked view for web/POS responses. */
   listGateways() {
-    return this.gateways;
+    return this.gateways.map(publicGateway);
+  }
+
+  /** Full credentials for server-side payment adapters only. Never expose. */
+  listGatewayCredentials() {
+    return this.gateways.map((row) => ({ ...row }));
+  }
+
+  getGatewayCredentials(provider: string, enabledOnly = true) {
+    return this.gateways.find(
+      (row) => row.provider === provider && (!enabledOnly || row.enabled),
+    );
   }
 
   async saveGateway(input: Partial<HqGateway>) {
     const name = input.name?.trim();
     if (!name) throw new BadRequestException("Gateway name is required");
     const existing = input.id ? this.gateways.find((row) => row.id === input.id) : undefined;
-    const next: HqGateway = {
+    const mode: GatewayMode = input.mode === "live" ? "live" : input.mode === "test" ? "test" : (existing?.mode ?? "test");
+    const next: HqGateway = normalizeGateway({
       id: existing?.id ?? nid("gw"),
       name,
       provider: input.provider || existing?.provider || "paystack",
       enabled: input.enabled ?? existing?.enabled ?? true,
       isDefault: input.isDefault ?? existing?.isDefault ?? false,
-      publicKey: input.publicKey?.trim() ?? existing?.publicKey ?? "",
+      publicKey: preserveSecret(input.publicKey, existing?.publicKey),
+      secretKey: preserveSecret(input.secretKey, existing?.secretKey),
+      webhookSecret: preserveSecret(input.webhookSecret, existing?.webhookSecret),
+      merchantId: preserveSecret(input.merchantId, existing?.merchantId),
+      apiBase: input.apiBase === undefined ? (existing?.apiBase ?? "") : input.apiBase.trim(),
+      mode,
       accountName: input.accountName?.trim() ?? existing?.accountName ?? "",
       accountNumber: input.accountNumber?.trim() ?? existing?.accountNumber ?? "",
       bankName: input.bankName?.trim() ?? existing?.bankName ?? "",
-    };
+    });
     this.gateways = existing
       ? this.gateways.map((row) => (row.id === existing.id ? next : row))
       : [...this.gateways, next];
@@ -321,7 +383,8 @@ export class SetupService implements OnModuleInit {
       this.gateways = this.gateways.map((row) => ({ ...row, isDefault: row.id === next.id }));
     }
     await this.persist();
-    return this.gateways.find((row) => row.id === next.id)!;
+    this.publishSettings();
+    return publicGateway(next);
   }
 
   async deleteGateway(id: string) {
@@ -331,6 +394,7 @@ export class SetupService implements OnModuleInit {
       this.gateways[0] = { ...this.gateways[0]!, isDefault: true };
     }
     await this.persist();
+    this.publishSettings();
     return { ok: true };
   }
 

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Wifi, WifiOff } from "lucide-react";
+import { useLiveDirectory } from "@/lib/live-directory";
 import { useLivePos } from "@/lib/live-pos";
 import { COMPANY_LIST_STATUSES, companyPath, type CompanyListStatus } from "@/lib/company-workspace";
 import { ManagerSkeleton } from "@/components/Skeleton";
@@ -18,6 +19,12 @@ export function SuperCompanies() {
   const search = useSearchParams();
   const filter = (search.get("status") as CompanyListStatus | null) || "all";
   const { company, stores, branches, tills, live, ready } = useLivePos();
+  const { accounts, ready: dirReady } = useLiveDirectory();
+
+  const companyIds = accounts
+    .map((row) => row.companyId)
+    .filter((id): id is string => Boolean(id && id.trim()));
+  const companyCount = accounts.length ? new Set(companyIds).size : null;
 
   const rows = useMemo(() => {
     if (!company) return [];
@@ -26,14 +33,14 @@ export function SuperCompanies() {
     return [{ company, status }];
   }, [company, filter]);
 
-  if (!ready) return <ManagerSkeleton variant="table" />;
+  if (!ready || !dirReady) return <ManagerSkeleton variant="table" />;
 
   return (
     <div>
       <SetupHeader
         kicker="Producer · Business"
         title="Companies"
-        copy="Tenants on this platform. Open a company for its workspace — branches, tills, staff, catalogue, and billing stay there."
+        copy="Company workspaces. This build lists the connected company; the count reflects tenants with accounts in the directory. Open a company for its workspace — branches, tills, staff, catalogue, and billing stay there."
         action={
           <div className="flex items-center gap-2">
             <span
@@ -75,7 +82,11 @@ export function SuperCompanies() {
       </div>
 
       <div className="mb-6 grid gap-3 sm:grid-cols-3">
-        <SetupStat label="Companies" value={company ? "1" : "0"} />
+        <SetupStat
+          label="Companies"
+          value={companyCount === null ? "—" : String(companyCount)}
+          hint={companyCount === null ? "No accounts to count" : "Tenants with accounts"}
+        />
         <SetupStat label="Stores" value={String(stores.length)} />
         <SetupStat label="Tills" value={String(tills.length)} hint={`${branches.length} branches`} />
       </div>

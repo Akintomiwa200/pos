@@ -1,0 +1,241 @@
+name: Native installers
+
+# Pushed v* tags build Windows NSIS + MSI installers for every app that has a
+# src-tauri directory (pos, price-check, label-studio) and attach them to the
+# GitHub Release for that tag.
+#
+# Android builds only for apps that commit src-tauri/gen/android (created by
+# `tauri android init`). No app does that today, so tag pushes skip it; once a
+# project is committed, the same tag build produces APK/AAB automatically. The
+# job can also be dispatched manually. Setup uses documented actions; no secrets
+# are used.
+#
+# HONEST LIMITS: nothing here is Authenticode-signed, keystore-signed, or
+# notarised. EXE/MSI files are unsigned; APK/AAB files are unsigned sideload
+# builds, not Play Store releases. Do not describe them as verified or safe.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Optional existing tag (e.g. v0.1.0) to attach manual Android assets to; blank = artifacts only"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+# release.yml also updates the same tag's Release. The shared concurrency group
+# prevents the two workflows from racing to create/update it.
+concurrency:
+  group: release-${{ github.event.inputs.release_tag || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    name: Windows installers (${{ matrix.app }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - app: pos
+            asset: pos-terminal
+          - app: price-check
+            asset: price-check
+          - app: label-studio
+            asset: label-studio
+    defaults:
+      run:
+        working-directory: ${{ matrix.app }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.5.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          cache-dependency-path: ${{ matrix.app }}/pnpm-lock.yaml
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ matrix.app }}/src-tauri -> target
+
+      - name: Install WiX Toolset v3 (required by Tauri 2 for MSI)
+        shell: pwsh
+        run: |
+          choco install wixtoolset --version=3.14.1.20250415 --no-progress -y
+          $bin = Get-ChildItem "${env:ProgramFiles(x86)}" -Directory -Filter "WiX Toolset*" -ErrorAction SilentlyContinue |
+            ForEach-Object { Join-Path $_.FullName "bin" } |
+            Where-Object { Test-Path (Join-Path $_ "candle.exe") } |
+            Select-Object -First 1
+          if (-not $bin) { throw "WiX v3 binaries (candle.exe / light.exe) were not found after installation." }
+          $bin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          $env:PATH = "$bin;$env:PATH"
+          Get-Command candle.exe, light.exe -ErrorAction SilentlyContinue | Select-Object Name, Source
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Generate Tauri icons if the app has none committed
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "src-tauri/icons/icon.ico")) {
+            if (-not (Test-Path "public/icon.svg")) {
+              throw "No src-tauri/icons and no public/icon.svg for ${{ matrix.app }}; cannot bundle."
+            }
+            pnpm exec tauri icon public/icon.svg
+          }
+
+      # No signing secrets are used. These installers are unsigned.
+      - name: Build unsigned NSIS and MSI installers
+        run: pnpm exec tauri build --bundles nsis,msi --ci
+
+      - name: Give the bundles predictable release asset names
+        shell: pwsh
+        run: |
+          $dest = Join-Path $env:GITHUB_WORKSPACE "release-assets"
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          $bundle = Join-Path $env:GITHUB_WORKSPACE "${{ matrix.app }}/src-tauri/target/release/bundle"
+          $exe = Get-ChildItem (Join-Path $bundle "nsis") -Filter "*-setup.exe" -File -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+          $msi = Get-ChildItem (Join-Path $bundle "msi") -Filter "*.msi" -File -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+          if (-not $exe) { throw "No NSIS installer found under $bundle/nsis" }
+          if (-not $msi) { throw "No MSI found under $bundle/msi" }
+          Copy-Item $exe.FullName (Join-Path $dest "${{ matrix.asset }}-setup.exe")
+          Copy-Item $msi.FullName (Join-Path $dest "${{ matrix.asset }}.msi")
+          Get-ChildItem $dest | Select-Object Name, Length
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.asset }}-windows
+          path: release-assets/*
+          if-no-files-found: error
+
+  android:
+    name: Android APK/AAB (${{ matrix.app }}, manual)
+    # Runs on tag pushes and manual dispatch, but builds only apps that have a
+    # committed Gradle project. Missing projects emit a warning, not a fake APK.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - app: pos
+            asset: pos-terminal
+          - app: price-check
+            asset: price-check
+    defaults:
+      run:
+        working-directory: ${{ matrix.app }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check whether this app has a committed Android project
+        id: check
+        shell: bash
+        run: |
+          if [ -f "src-tauri/gen/android/build.gradle.kts" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::${{ matrix.app }} has no src-tauri/gen/android. Run 'pnpm exec tauri android init' and commit it first; Android build steps are skipped."
+          fi
+
+      - uses: pnpm/action-setup@v4
+        if: steps.check.outputs.configured == 'true'
+        with:
+          version: 11.5.1
+
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.configured == 'true'
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          cache-dependency-path: ${{ matrix.app }}/pnpm-lock.yaml
+
+      - uses: actions/setup-java@v4
+        if: steps.check.outputs.configured == 'true'
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # Documented setup action for Android SDK/NDK on hosted runners.
+      - uses: android-actions/setup-android@v3
+        if: steps.check.outputs.configured == 'true'
+
+      - uses: dtolnay/rust-toolchain@stable
+        if: steps.check.outputs.configured == 'true'
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+
+      - uses: swatinem/rust-cache@v2
+        if: steps.check.outputs.configured == 'true'
+        with:
+          workspaces: ${{ matrix.app }}/src-tauri -> target
+
+      - if: steps.check.outputs.configured == 'true'
+        run: pnpm install --frozen-lockfile
+
+      # Unsigned / debug-key sideload builds only. No Play Store upload and no
+      # keystore secrets are involved.
+      - name: Build unsigned APK and AAB
+        if: steps.check.outputs.configured == 'true'
+        run: pnpm exec tauri android build --apk --aab --ci
+
+      - name: Give the Android bundles predictable release asset names
+        if: steps.check.outputs.configured == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          dest="$GITHUB_WORKSPACE/release-assets"
+          mkdir -p "$dest"
+          outputs="src-tauri/gen/android/app/build/outputs"
+          apk="$(find "$outputs/apk/universal/release" -maxdepth 1 -name '*.apk' -type f 2>/dev/null | head -n 1 || true)"
+          aab="$(find "$outputs/bundle/universalRelease" -maxdepth 1 -name '*.aab' -type f 2>/dev/null | head -n 1 || true)"
+          if [ -z "$apk" ]; then apk="$(find "$outputs/apk" -name '*.apk' -type f 2>/dev/null | sort | head -n 1 || true)"; fi
+          if [ -z "$aab" ]; then aab="$(find "$outputs/bundle" -name '*.aab' -type f 2>/dev/null | sort | head -n 1 || true)"; fi
+          [ -n "$apk" ] || { echo "No APK produced under $outputs/apk" >&2; exit 1; }
+          [ -n "$aab" ] || { echo "No AAB produced under $outputs/bundle" >&2; exit 1; }
+          cp "$apk" "$dest/${{ matrix.asset }}.apk"
+          cp "$aab" "$dest/${{ matrix.asset }}.aab"
+          ls -l "$dest"
+
+      - uses: actions/upload-artifact@v4
+        if: steps.check.outputs.configured == 'true'
+        with:
+          name: native-${{ matrix.asset }}-android
+          path: release-assets/*
+          if-no-files-found: error
+
+  release:
+    name: Attach native assets to the Release
+    needs: [windows, android]
+    if: ${{ always() && needs.windows.result == 'success' && (needs.android.result == 'success' || needs.android.result == 'skipped') && (github.event_name == 'push' || github.event.inputs.release_tag != '') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: List files that will be attached
+        run: ls -l release-assets
+
+      # Updates the Release created by release.yml rather than racing it.
+      - name: Attach EXE / MSI / APK / AAB assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.release_tag || github.ref_name }}
+          files: release-assets/*
+          fail_on_unmatched_files: true
+          overwrite_files: true

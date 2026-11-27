@@ -235,7 +235,7 @@ function DetailShell({
     try {
       const saved = await saveDirectory(directory, editing);
       setDraft(null);
-      toast.success(saved.active ? "Saved and live." : "Saved (paused).");
+      toast.success(saved.active ? "Saved." : "Saved (paused).");
     } catch (err) {
       toast.error(err, "Could not save");
     } finally {
@@ -626,12 +626,12 @@ export function PromotionDetailPage({ id }: { id: string }) {
       titleHint={fixedTender ? "Fixed amount discount" : "Percentage discount"}
       stats={[
         { label: "Value", value: valueLabel },
-        { label: "Window", value: windowLabel, hint: live ? "Live now" : row?.active ? "Scheduled" : "Paused" },
+        { label: "Window", value: windowLabel, hint: live ? "Active by date" : row?.active ? "Scheduled" : "Paused" },
         { label: "Minimum order", value: Number(extra.minOrder ?? 0) > 0 ? naira(Number(extra.minOrder)) : "None" },
-        { label: "Status", value: live ? "Live" : row?.active ? "Scheduled" : "Paused", tone: live ? "accent" : "default" },
+        { label: "Status", value: live ? "In window" : row?.active ? "Scheduled" : "Paused", tone: live ? "accent" : "default" },
       ]}
       activity={{
-        title: "How it applies at the till",
+        title: "Campaign window & till use",
         rows: [
           {
             id: "window",
@@ -642,18 +642,21 @@ export function PromotionDetailPage({ id }: { id: string }) {
           ...(live
             ? [
                 {
-                  id: "onshelf",
+                  id: "recorded",
                   at: now,
-                  headline: "Live on every till",
-                  sub: "Cashiers see this discount when matching items are on the bill.",
+                  headline: "Eligible on tills",
+                  sub:
+                    String(row?.extra?.appliesTo ?? "all") === "all"
+                      ? "Applied automatically at checkout when the minimum order is met."
+                      : "Item-specific rules are reference notes; only All-items campaigns apply automatically.",
                 },
               ]
             : [
                 {
                   id: "off",
                   at: to || now,
-                  headline: "Not being applied",
-                  sub: "Outside its window or paused — cashiers will not see it.",
+                  headline: "Outside its window",
+                  sub: "Outside its dates or paused — no till action is implied.",
                 },
               ]),
         ],

@@ -51,7 +51,7 @@ const GROUP_DEFS: Array<{
   { id: "branches", label: "Branches", desc: "Every branch of the organisation.", countKey: "branches", fetch: listBranches },
   { id: "stores", label: "Stores", desc: "Stores and warehouses under each branch.", countKey: "stores", fetch: listStores },
   { id: "storefronts", label: "Storefronts", desc: "Online storefronts and syncing rules.", countKey: "storefronts", fetch: listStorefronts },
-  { id: "gateways", label: "Payment gateways", desc: "Paystack, Flutterwave, bank and cash setups.", countKey: "gateways", fetch: listGateways },
+  { id: "gateways", label: "Payment gateways", desc: "Opay, Paystack, Flutterwave, Moniepoint, bank and cash setups.", countKey: "gateways", fetch: listGateways },
   { id: "taxes", label: "Taxes", desc: "VAT and other tax rules.", countKey: "taxes", fetch: listTaxes },
   { id: "settings", label: "Settings", desc: "Receipts, pricing, security and appearance settings.", fetch: getOrgSettings },
   { id: "catalog", label: "Catalog", desc: "All products — individually or as a full CSV/JSON.", countKey: "catalog", fetch: () => Promise.resolve([]) },

@@ -3,25 +3,25 @@ import {
   Body,
   Controller,
   Get,
+  Param,
   Post,
-  ServiceUnavailableException,
+  Query,
+  Req,
+  Sse,
 } from "@nestjs/common";
-import { SetupService } from "../console/setup.service";
+import type { Request as ExpressRequest } from "express";
+import { map } from "rxjs";
 import { SalesService } from "../sales/sales.service";
+import { PaymentsService } from "./payments.service";
+import type { ChargeInput, VerifyInput } from "./payments.types";
 
-type ChargeBody = {
-  tender?: string;
-  provider?: string;
-  amountMinor?: number;
-  parts?: number;
-  reference?: string;
-};
+type RawRequest = ExpressRequest & { rawBody?: Buffer };
 
 @Controller("payments")
 export class PaymentsController {
   constructor(
     private readonly sales: SalesService,
-    private readonly setup: SetupService,
+    private readonly payments: PaymentsService,
   ) {}
 
   @Get()
@@ -49,56 +49,49 @@ export class PaymentsController {
 
   /**
    * Starts a payment attempt. Manual tenders are confirmed locally; electronic
-   * tenders require an enabled HQ gateway and return a hand-off reference. A
-   * terminal must only record the sale after it receives an explicit success
-   * confirmation from the provider or the cashier's manual confirmation.
+   * tenders call the real provider and return a hosted-checkout hand-off. A
+   * terminal must only record the sale after an explicit status check.
    */
   @Post("charge")
-  charge(@Body() body: ChargeBody) {
-    const amountMinor = Math.round(Number(body.amountMinor ?? 0));
-    if (!Number.isFinite(amountMinor) || amountMinor <= 0) {
-      throw new BadRequestException("A positive amountMinor is required");
-    }
-    const parts = Math.max(1, Math.min(12, Math.round(Number(body.parts ?? 1) || 1)));
-    const tender = String(body.tender ?? "cash").trim().toLowerCase() || "cash";
-    const manual = tender === "cash" || tender === "split" || tender === "gift-card";
-    const gateways = this.setup.listGateways().filter((gateway) => gateway.enabled);
-
-    if (!manual) {
-      const requested = String(body.provider ?? "").trim().toLowerCase();
-      const gateway =
-        (requested
-          ? gateways.find((row) => row.provider === requested)
-          : gateways.find((row) => row.isDefault) ?? gateways[0]) ?? undefined;
-      if (!gateway) {
-        throw new ServiceUnavailableException(
-          `No enabled payment gateway is configured for ${tender}`,
-        );
-      }
-      return {
-        status: "in_progress",
-        currency: "NGN",
-        tender,
-        provider: gateway.provider,
-        gatewayId: gateway.id,
-        amountMinor,
-        splitParts: parts,
-        reference: String(body.reference ?? "").trim() || this.paymentReference(tender),
-      };
-    }
-
-    return {
-      status: "paid",
-      currency: "NGN",
-      tender,
-      provider: "manual",
-      amountMinor,
-      splitParts: parts,
-      reference: String(body.reference ?? "").trim() || this.paymentReference(tender),
-    };
+  charge(@Body() body: ChargeInput) {
+    return this.payments.charge(body);
   }
 
-  private paymentReference(tender: string) {
-    return `${tender.slice(0, 3).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
+  /** Cashier-triggered status check; never called on a timer by the POS. */
+  @Post("verify")
+  verify(@Body() body: VerifyInput) {
+    return this.payments.verify(body);
+  }
+
+  @Get("events")
+  events(
+    @Query("provider") provider?: string,
+    @Query("reference") reference?: string,
+  ) {
+    return this.payments.listEvents({
+      provider: provider?.trim() || undefined,
+      reference: reference?.trim() || undefined,
+    });
+  }
+
+  @Sse("events/stream")
+  eventStream() {
+    return this.payments.eventStream().pipe(map((data) => ({ data })));
+  }
+
+  /**
+   * Provider webhook. Signature verification uses the raw bytes captured by
+   * express.json's verify hook in main.ts, never a re-serialized body.
+   */
+  @Post("webhooks/:provider")
+  async webhook(
+    @Param("provider") provider: string,
+    @Req() request: RawRequest,
+    @Body() body: unknown,
+  ) {
+    if (!request.rawBody || !Buffer.isBuffer(request.rawBody)) {
+      throw new BadRequestException("Raw webhook body was not captured");
+    }
+    return this.payments.handleWebhook(provider, request.headers, request.rawBody, body);
   }
 }

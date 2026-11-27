@@ -59,10 +59,16 @@ export type HqStorefront = {
 export type HqGateway = {
   id: string;
   name: string;
-  provider: "paystack" | "flutterwave" | "moniepoint" | "bank" | "cash" | "card";
+  provider: "paystack" | "flutterwave" | "moniepoint" | "opay" | "bank" | "cash" | "card";
   enabled: boolean;
   isDefault: boolean;
   publicKey: string;
+  /** Masked on reads. Leave unchanged to keep the stored credential. */
+  secretKey?: string;
+  webhookSecret?: string;
+  merchantId?: string;
+  mode?: "test" | "live";
+  apiBase?: string;
   accountName: string;
   accountNumber: string;
   bankName: string;

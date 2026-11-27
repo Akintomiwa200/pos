@@ -1,7 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { COMPANY_SECTIONS, companyPath } from "@/lib/company-workspace";
+import {
+  COMPANY_SECTION_FALLBACK_LINKS,
+  COMPANY_SECTIONS,
+  companyPath,
+} from "@/lib/company-workspace";
 import { useLivePos } from "@/lib/live-pos";
 import { CompanyManager } from "@/components/setup/CompanyManager";
 import { BranchManager } from "@/components/setup/BranchManager";
@@ -56,14 +60,29 @@ export function CompanySection({
   if (section === "billing") return <TaxManager />;
   if (!section) return <CompanyOverview companyId={companyId} />;
 
-  const meta = COMPANY_SECTIONS.find((row) => row.id === section);
+  const sectionLabel = COMPANY_SECTIONS.find((row) => row.id === section)?.label ?? section;
   return (
     <div className="rounded-[18px] border border-pos-border bg-pos-surface p-5">
-      <h2 className="text-[16px] font-semibold">{meta?.label ?? section}</h2>
+      <h2 className="text-[16px] font-semibold">{sectionLabel}</h2>
       <p className="mt-2 text-sm text-pos-ink-muted">
-        This company record is scoped to the organisation — not the Super Admin daily sidebar.
-        Live data for this area will attach here as the tenant APIs land.
+        <span className="font-medium text-pos-ink">Status: No dedicated view in this build.</span>{" "}
+        The “{sectionLabel}” workspace has no company-scoped screen here, so this page shows no live data.
       </p>
+      <p className="mt-4 text-[13px] font-medium text-pos-ink">Nearest available pages</p>
+      <ul className="mt-2 flex flex-wrap gap-x-5 gap-y-2 text-sm">
+        <li>
+          <Link href={companyPath(companyId)} className="font-medium text-pos-primary hover:underline">
+            Company overview
+          </Link>
+        </li>
+        {COMPANY_SECTION_FALLBACK_LINKS.map((link) => (
+          <li key={link.href}>
+            <Link href={link.href} className="font-medium text-pos-primary hover:underline">
+              {link.label}
+            </Link>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

@@ -931,12 +931,12 @@ export const NAV: NavSection[] = [
     ],
   },
   {
-    heading: "Stock Taking",
+    heading: "Stock",
     department: "Transaction",
     items: [
       {
         id: "stock-taking",
-        label: "Stock Taking",
+        label: "Stock",
         icon: ClipboardCheck,
         children: [
           { id: "stock-taking-overview", label: "Overview", href: "/stock-taking" },

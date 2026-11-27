@@ -83,7 +83,7 @@ function StatCell({
   );
 }
 
-export function InventoryAdjustment() {
+export function InventoryAdjustment({ hideHeader = false }: { hideHeader?: boolean } = {}) {
   const { levels, movements, live, ready, setLevels, setMovements } = useLiveInventory();
   const { session } = useAuth();
 
@@ -204,35 +204,49 @@ export function InventoryAdjustment() {
 
   return (
     <div className="pb-8">
-      <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-pos-primary">
-            Transaction • Stock
-          </p>
-          <h1 className="mt-1 flex items-center gap-3 text-2xl font-semibold tracking-tight text-pos-ink">
-            Inventory Adjustment
-            <span className="flex items-center gap-1.5 rounded-full bg-pos-success-soft px-2.5 py-1 text-xs font-medium text-pos-success">
-              <span className="relative flex h-2 w-2">
-                <span
-                  className={`absolute inline-flex h-full w-full rounded-full bg-pos-success opacity-75 ${live ? "animate-ping" : ""}`}
-                />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-pos-success" />
+      {!hideHeader ? (
+        <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-pos-primary">
+              Transaction • Stock
+            </p>
+            <h1 className="mt-1 flex items-center gap-3 text-2xl font-semibold tracking-tight text-pos-ink">
+              Inventory Adjustment
+              <span className="flex items-center gap-1.5 rounded-full bg-pos-success-soft px-2.5 py-1 text-xs font-medium text-pos-success">
+                <span className="relative flex h-2 w-2">
+                  <span
+                    className={`absolute inline-flex h-full w-full rounded-full bg-pos-success opacity-75 ${live ? "animate-ping" : ""}`}
+                  />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-pos-success" />
+                </span>
+                {live ? "Live" : "Connecting"}
               </span>
-              {live ? "Live" : "Connecting"}
-            </span>
-          </h1>
-          <p className="mt-1.5 text-sm text-pos-ink-muted">
-            Correct the stock ledger — write off damaged or expired stock, record theft, giveaway and
-            short-ship, and reconcile physical counts. Refreshed in real-time.
+            </h1>
+            <p className="mt-1.5 text-sm text-pos-ink-muted">
+              Correct the stock ledger — write off damaged or expired stock, record theft, giveaway and
+              short-ship, and reconcile physical counts. Refreshed in real-time.
+            </p>
+          </div>
+          <button
+            onClick={() => openFor("")}
+            className="inline-flex h-10 items-center justify-center rounded-full bg-pos-primary px-5 text-sm font-semibold text-white shadow-pos-primary transition-all hover:bg-pos-primary/90 focus:outline-none"
+          >
+            New adjustment
+          </button>
+        </header>
+      ) : (
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-pos-border pb-3">
+          <p className="text-xs text-pos-ink-muted">
+            Record manual stock movements, write-offs, shrinkages and receipts.
           </p>
+          <button
+            onClick={() => openFor("")}
+            className="inline-flex h-9 items-center justify-center rounded-xl bg-pos-primary px-4 text-xs font-semibold text-white shadow-pos-primary transition-all hover:bg-pos-primary/90 focus:outline-none"
+          >
+            New adjustment
+          </button>
         </div>
-        <button
-          onClick={() => openFor("")}
-          className="inline-flex h-10 items-center justify-center rounded-full bg-pos-primary px-5 text-sm font-semibold text-white shadow-pos-primary transition-all hover:bg-pos-primary/90 focus:outline-none"
-        >
-          New adjustment
-        </button>
-      </header>
+      )}
 
       <div className="mb-6 overflow-hidden rounded-[20px] bg-pos-surface shadow-pos-md">
         <div className="grid divide-y divide-pos-border/70 sm:grid-cols-4 sm:divide-x sm:divide-y-0">

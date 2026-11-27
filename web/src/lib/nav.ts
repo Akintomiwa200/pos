@@ -798,6 +798,7 @@ export const ACCESS_NAV: NavSection[] = [
           { id: "others-settings", label: "Settings", href: "/setup/others/settings" },
           { id: "others-data", label: "Data", href: "/setup/others/data" },
           { id: "others-export", label: "Export", href: "/setup/others/export" },
+          { id: "others-data-transfer", label: "Data Transfer", href: "/setup/others/data-transfer" },
         ],
       },
       { id: "help", label: "Help", icon: HelpCircle, href: "/help" },
@@ -1217,6 +1218,11 @@ export const NAV: NavSection[] = [
             id: "settings-data",
             label: "Data",
             href: "/setup/others/settings?section=data",
+          },
+          {
+            id: "settings-data-transfer",
+            label: "Data Transfer",
+            href: "/setup/others/data-transfer",
           },
           {
             id: "settings-advanced",

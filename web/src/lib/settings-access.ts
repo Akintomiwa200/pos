@@ -25,7 +25,7 @@ export type SettingsSectionId = (typeof SETTINGS_SECTION_IDS)[number];
  */
 const AGGREGATE_REQUIREMENTS: Partial<Record<SettingsSectionId, readonly string[]>> = {
   people: ["users-account", "users-group", "staff"],
-  data: ["others-data", "others-export", "others-import"],
+  data: ["others-data", "others-export", "others-import", "others-data-transfer"],
   advanced: ["others-tax", "others-payment-gateway"],
   organization: [
     "others-company",

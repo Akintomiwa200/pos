@@ -452,6 +452,35 @@ app, not the HQ console.
 
 **Settings → Organization → Data / Export** (under full Setup tree) supports
 data export for backups or migration — coordinate with IT before bulk exports.
+The **Data** panel includes quick downloads for customers, gift cards, expenses,
+orders, staff, CRM contacts and ledger accounts, alongside the original
+organization, catalog, sales and full-backup exports. Use the **Export as**
+selector to receive them as CSV, Excel, PDF, JSON, TSV or legacy `.xls`.
+
+**Setup → Others → Data Transfer** (`/setup/others/data-transfer`) is the full
+export/import centre:
+
+- **Export centre** — choose any dataset (products, loyalty members, customer
+  groups, gift cards, expenses, orders, combos, ledger, CRM, production,
+  branches, taxes, storefronts, staff, sales and inventory) and download CSV,
+  a formatted Excel workbook (`.xlsx`), a paginated PDF report, JSON, TSV or an
+  Excel-compatible table (`.xls`). Excel files get styled headers, filters,
+  frozen panes and number formats; PDFs get titled pages and row striping. Pick
+  the delimiter/header row, preview the first six rows live, then download.
+  **Full backup** exports everything HQ holds in the selected format; choose
+  JSON when the file needs to be restored back into the software. The Excel and
+  PDF generators load on demand, so they do not slow down the rest of the app.
+- **Import centre** — import the same datasets from an uploaded file, pasted
+  text, a downloadable template or a sample row. CSV (comma, semicolon or pipe),
+  TSV, JSON and Excel-compatible HTML tables all use one parser, so column
+  matching, validation and duplicate detection work identically whichever
+  method you choose. Rows with errors are listed live; you can update or skip
+  records that already have an id, and review the created/updated/failed
+  counts after import. `.xlsx` workbooks must be saved as CSV or `.xls` first.
+
+Imports go through `POST /api/console/data-transfer/import`; each dataset has
+a strict allow-list of writable fields and a 5,000-row batch limit. Exports
+only read data — they never wipe sales or tills.
 
 ---
 

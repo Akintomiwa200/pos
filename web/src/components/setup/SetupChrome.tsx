@@ -122,10 +122,12 @@ export function FormSelect(props: SelectHTMLAttributes<HTMLSelectElement> & { la
 export function ToggleField({
   label,
   checked,
+  disabled,
   onChange,
 }: {
   label: string;
   checked: boolean;
+  disabled?: boolean;
   onChange: (value: boolean) => void;
 }) {
   return (
@@ -135,7 +137,8 @@ export function ToggleField({
         type="button"
         role="switch"
         aria-checked={checked}
-        className={`relative h-6 w-11 rounded-full transition-colors ${
+        disabled={disabled}
+        className={`relative h-6 w-11 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
           checked ? "bg-pos-primary" : "bg-pos-border"
         }`}
         onClick={() => onChange(!checked)}

@@ -12,6 +12,7 @@ import {
   MonitorSmartphone,
 } from "lucide-react";
 import type { HqOrgSettings } from "@/lib/hq-setup";
+import { EXPORT_FORMATS, type ExportFormat, type QuickExportKind } from "@/lib/data-transfer-export";
 import { settingsFieldClass, type SettingsFieldErrors } from "@/lib/settings-validation";
 import {
   Field,
@@ -363,17 +364,36 @@ export function PeoplePanel({ granted }: { granted: Set<string> }) {
 
 export function DataPanel({
   granted,
+  format,
+  onFormatChange,
   onExport,
 }: {
   granted: Set<string>;
-  onExport: (kind: "org" | "catalog" | "sales" | "all") => void;
+  format: ExportFormat;
+  onFormatChange: (format: ExportFormat) => void;
+  onExport: (kind: QuickExportKind) => void;
 }) {
   return (
     <div className="space-y-5">
       <SettingsCard
         title="Backup & export"
-        copy="Download company data for safekeeping or migration."
+        copy="Download company data as CSV, Excel, PDF or JSON for safekeeping and migration."
       >
+        <div className="flex flex-wrap items-center gap-3 px-5 pt-5 sm:px-6">
+          <span className="text-[13px] font-medium text-pos-ink-muted">Export as</span>
+          <select
+            aria-label="Export format"
+            className={`${fieldClass} w-44`}
+            value={format}
+            onChange={(event) => onFormatChange(event.target.value as ExportFormat)}
+          >
+            {EXPORT_FORMATS.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        </div>
         <div className="grid gap-3 p-5 sm:grid-cols-2 sm:px-6">
           {(
             [
@@ -381,6 +401,13 @@ export function DataPanel({
               { kind: "catalog" as const, label: "Catalog", hint: "Products and prices" },
               { kind: "sales" as const, label: "Sales", hint: "Ticket history" },
               { kind: "all" as const, label: "Full backup", hint: "Everything above" },
+              { kind: "loyalty-members" as const, label: "Customers", hint: "Loyalty members and points" },
+              { kind: "gift-cards" as const, label: "Gift cards", hint: "Codes and balances" },
+              { kind: "expenses" as const, label: "Expenses", hint: "Operating costs" },
+              { kind: "orders" as const, label: "Orders", hint: "POs, invoices and quotes" },
+              { kind: "staff" as const, label: "Staff", hint: "Operators and roles" },
+              { kind: "crm-contacts" as const, label: "CRM contacts", hint: "Leads and customers" },
+              { kind: "ledger-accounts" as const, label: "Ledger", hint: "Chart of accounts" },
             ] as const
           ).map((row) => (
             <button
@@ -418,6 +445,10 @@ export function DataPanel({
               Import products
             </Link>
           ) : null}
+          <Link href="/setup/others/data-transfer" className={secondaryButtonClass}>
+            <Database size={14} />
+            Data transfer
+          </Link>
         </div>
       </SettingsCard>
       <p className="flex items-center gap-2 text-sm text-pos-ink-muted">

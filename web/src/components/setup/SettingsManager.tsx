@@ -25,7 +25,8 @@ import {
   MonitorSmartphone,
 } from "lucide-react";
 import { toast } from "@/lib/toast";
-import { exportSetup, type HqOrgSettings } from "@/lib/hq-setup";
+import { type HqOrgSettings } from "@/lib/hq-setup";
+import { exportQuick, type ExportFormat, type QuickExportKind } from "@/lib/data-transfer-export";
 import { useLiveOrgSettings } from "@/lib/settings-live";
 import {
   firstSettingsError,
@@ -173,6 +174,7 @@ export function SettingsManager() {
   const active: SettingsSectionId =
     requested && allowed.includes(requested) ? requested : (allowed[0] ?? "general");
   const [errors, setErrors] = useState<SettingsFieldErrors>({});
+  const [quickExportFormat, setQuickExportFormat] = useState<ExportFormat>("csv");
 
   function go(section: SettingsSectionId) {
     const params = new URLSearchParams(searchParams.toString());
@@ -248,16 +250,9 @@ export function SettingsManager() {
     }
   }
 
-  async function onExport(kind: "org" | "catalog" | "sales" | "all") {
+  async function onExport(kind: QuickExportKind) {
     try {
-      const data = await exportSetup(kind);
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `pos-${kind}-${new Date().toISOString().slice(0, 10)}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
+      await exportQuick(kind, quickExportFormat);
       toast.success("Export downloaded.");
     } catch (err) {
       toast.error(err, "Could not export");
@@ -595,7 +590,12 @@ export function SettingsManager() {
           {active === "people" ? <PeoplePanel granted={granted} /> : null}
 
           {active === "data" ? (
-            <DataPanel granted={granted} onExport={(kind) => void onExport(kind)} />
+            <DataPanel
+              granted={granted}
+              format={quickExportFormat}
+              onFormatChange={setQuickExportFormat}
+              onExport={(kind) => void onExport(kind)}
+            />
           ) : null}
 
           {active === "advanced" ? (

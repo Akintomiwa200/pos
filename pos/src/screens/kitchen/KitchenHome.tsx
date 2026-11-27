@@ -1,4 +1,7 @@
+import { useMemo } from "react";
 import { ChevronRight } from "lucide-react";
+import { useCatalog } from "../../lib/catalog";
+import { useStoreSettings } from "../../lib/use-store-settings";
 import { formatMoney } from "../../lib/types";
 import {
   KITCHEN_CHANNELS,
@@ -18,6 +21,12 @@ type Props = {
 };
 
 export function KitchenHome({ tickets, activeTicketId, onSelect, onNew }: Props) {
+  const settings = useStoreSettings();
+  const { items } = useCatalog();
+  const categoryByItemId = useMemo(
+    () => new Map(items.map((item) => [item.id, item.category.trim()] as const)),
+    [items],
+  );
   return (
     <section className="floor-page">
       <div className="header">
@@ -56,6 +65,15 @@ export function KitchenHome({ tickets, activeTicketId, onSelect, onNew }: Props)
                 ) : (
                   rows.map((ticket) => {
                     const meta = TICKET_STATUS[ticket.status];
+                    const categories = settings.showCategoryOnKitchen
+                      ? Array.from(
+                          new Set(
+                            ticket.lines
+                              .map((line) => categoryByItemId.get(line.itemId))
+                              .filter((category): category is string => Boolean(category)),
+                          ),
+                        )
+                      : [];
                     return (
                       <button
                         key={ticket.id}
@@ -66,6 +84,7 @@ export function KitchenHome({ tickets, activeTicketId, onSelect, onNew }: Props)
                       >
                         <strong>{ticket.orderNo}</strong>
                         <small>{ticket.guestName || channelLabel(ticket.channel)}</small>
+                        {categories.length ? <small>{categories.join(", ")}</small> : null}
                         <em>{formatMoney(ticketTotal(ticket))}</em>
                       </button>
                     );

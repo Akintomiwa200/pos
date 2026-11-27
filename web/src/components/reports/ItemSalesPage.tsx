@@ -42,8 +42,8 @@ type ItemSalesRow = HqCatalogItem & {
 
 type Period = "month" | "week";
 
-function pctChange(current: number, previous: number) {
-  if (previous <= 0) return current > 0 ? 100 : 0;
+function pctChange(current: number, previous: number): number | null {
+  if (previous <= 0) return null;
   return Math.round(((current - previous) / previous) * 1000) / 10;
 }
 
@@ -64,24 +64,16 @@ function monthlyTrendSeries(byDay: Array<{ day: string; totalMinor: number }>) {
 
   for (const row of byDay) {
     const date = new Date(`${row.day}T00:00:00`);
+    if (!Number.isFinite(date.getTime())) continue;
     const month = date.getMonth();
     const bucket = date.getFullYear() === year ? current : previous;
     bucket.set(month, (bucket.get(month) ?? 0) + row.totalMinor);
   }
 
-  const hasData = [...current.values(), ...previous.values()].some((v) => v > 0);
-  if (!hasData) {
-    return monthNames.map((label, index) => ({
-      label,
-      current: [42, 48, 36, 52, 58, 44, 62, 55, 49, 66, 60, 54][index] * 100_000,
-      previous: [28, 32, 24, 34, 38, 30, 40, 36, 32, 42, 38, 34][index] * 100_000,
-    }));
-  }
-
   return monthNames.map((label, index) => ({
     label,
     current: current.get(index) ?? 0,
-    previous: previous.get(index) ?? Math.round((current.get(index) ?? 0) * 0.62),
+    previous: previous.get(index) ?? 0,
   }));
 }
 
@@ -91,10 +83,56 @@ function formatCompactMinor(minor: number) {
   return String(Math.round(major));
 }
 
-function GrowthBadge({ value }: { value: number }) {
+function csvCell(value: string | number) {
+  const text = String(value);
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function exportItemsCsv(rows: ItemSalesRow[]) {
+  const header = ["Name", "SKU", "Category", "Brand", "Price (NGN)", "Stock", "Units sold", "Revenue (NGN)"];
+  const lines = [
+    header.map(csvCell).join(","),
+    ...rows.map((row) =>
+      [
+        row.name,
+        row.sku,
+        row.category,
+        row.brand ?? "",
+        (row.priceMinor / 100).toFixed(2),
+        row.onHand,
+        row.soldUnits,
+        (row.revenueMinor / 100).toFixed(2),
+      ]
+        .map(csvCell)
+        .join(","),
+    ),
+  ];
+  const blob = new Blob([`\uFEFF${lines.join("\r\n")}`], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `item-sales-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function GrowthBadge({ value }: { value: number | null }) {
+  if (value === null) {
+    return (
+      <span className="text-[12px] text-pos-ink-faint" title="No prior-period data">
+        —
+      </span>
+    );
+  }
   const positive = value >= 0;
   return (
-    <span className="text-[13px] font-semibold text-pos-success">
+    <span
+      className={`text-[13px] font-semibold ${
+        positive ? "text-pos-success" : "text-red-600 dark:text-red-400"
+      }`}
+    >
       {positive ? "+" : ""}
       {value}%
     </span>
@@ -110,7 +148,7 @@ function FigmaSummaryCard({
 }: {
   label: string;
   value: string;
-  growth: number;
+  growth: number | null;
   icon: typeof Package;
   iconClass: string;
 }) {
@@ -137,11 +175,11 @@ function ChartLegend() {
     <div className="hidden items-center gap-4 sm:flex">
       <span className="inline-flex items-center gap-1.5 text-[12px] text-pos-ink-muted">
         <span className="h-2.5 w-2.5 rounded-full bg-pos-success" />
-        Last Month
+        This year
       </span>
       <span className="inline-flex items-center gap-1.5 text-[12px] text-pos-ink-muted">
         <span className="h-2.5 w-2.5 rounded-full bg-sky-400" />
-        Prev Month
+        Prior year
       </span>
     </div>
   );
@@ -279,6 +317,8 @@ export function ItemSalesPage() {
     [aggregate],
   );
 
+  const hasChartData = chartData.some((row) => row.current > 0 || row.previous > 0);
+
   const topSellers = useMemo(() => {
     if (!aggregate) return [];
     return aggregate.byItem.slice(0, 5).map((row) => {
@@ -292,26 +332,16 @@ export function ItemSalesPage() {
     });
   }, [aggregate, catalog]);
 
-  const growth = useMemo(() => {
-    if (!sales?.length) return { revenue: 0, tickets: 0, units: 0 };
+  const revenueGrowth = useMemo(() => {
+    if (!sales?.length) return null;
     const now = Date.now();
     const span = period === "week" ? 7 * 86_400_000 : 30 * 86_400_000;
     const currentStart = now - span;
     const previousStart = currentStart - span;
     const currentRev = revenueInRange(sales, currentStart, now);
     const previousRev = revenueInRange(sales, previousStart, currentStart);
-    const currentTickets = sales.filter((s) => new Date(s.paidAt).getTime() >= currentStart).length;
-    const previousTickets = sales.filter((s) => {
-      const t = new Date(s.paidAt).getTime();
-      return t >= previousStart && t < currentStart;
-    }).length;
-    const currentUnits = aggregate?.units ?? 0;
-    return {
-      revenue: pctChange(currentRev, previousRev),
-      tickets: pctChange(currentTickets, previousTickets),
-      units: pctChange(currentUnits, Math.max(1, Math.round(currentUnits * 0.7))),
-    };
-  }, [sales, period, aggregate?.units]);
+    return pctChange(currentRev, previousRev);
+  }, [sales, period]);
 
   const summary = useMemo(() => {
     if (!sales?.length || !aggregate) {
@@ -319,9 +349,9 @@ export function ItemSalesPage() {
         total: naira(0),
         recent: naira(0),
         pending: naira(0),
-        totalGrowth: 0,
-        recentGrowth: 0,
-        pendingGrowth: 0,
+        totalGrowth: null as number | null,
+        recentGrowth: null as number | null,
+        pendingGrowth: null as number | null,
       };
     }
     const now = Date.now();
@@ -335,11 +365,11 @@ export function ItemSalesPage() {
       total: naira(aggregate.revenueMinor),
       recent: naira(recentRev),
       pending: naira(pendingValue),
-      totalGrowth: growth.revenue,
+      totalGrowth: revenueGrowth,
       recentGrowth: pctChange(recentRev, prevRecent),
-      pendingGrowth: pctChange(pendingValue, Math.max(1, pendingValue * 0.7)),
+      pendingGrowth: null as number | null,
     };
-  }, [sales, aggregate, catalog, growth.revenue]);
+  }, [sales, aggregate, catalog, revenueGrowth]);
 
   if (!sales || !aggregate) return <ManagerSkeleton variant="table" />;
 
@@ -397,46 +427,52 @@ export function ItemSalesPage() {
             </label>
           </div>
           <div className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} margin={{ top: 8, right: 4, left: -8, bottom: 0 }} barGap={2}>
-                <CartesianGrid stroke={colors.chartGrid} vertical={false} />
-                <XAxis
-                  dataKey="label"
-                  tickLine={false}
-                  axisLine={false}
-                  stroke={colors.inkFaint}
-                  fontSize={11}
-                />
-                <YAxis
-                  tickLine={false}
-                  axisLine={false}
-                  width={36}
-                  stroke={colors.inkFaint}
-                  fontSize={11}
-                  tickFormatter={(v: number) => `${formatCompactMinor(v)}k`}
-                />
-                <Tooltip
-                  formatter={(value, key) => [
-                    naira(Number(value)),
-                    key === "current" ? "Last Month" : "Prev Month",
-                  ]}
-                  contentStyle={{
-                    background: colors.surface,
-                    border: `1px solid ${colors.border}`,
-                    borderRadius: 12,
-                    color: colors.ink,
-                  }}
-                />
-                <Bar dataKey="current" stackId="trend" fill={colors.success} maxBarSize={28} />
-                <Bar
-                  dataKey="previous"
-                  stackId="trend"
-                  fill="#38bdf8"
-                  radius={[6, 6, 0, 0]}
-                  maxBarSize={28}
-                />
-              </BarChart>
-            </ResponsiveContainer>
+            {hasChartData ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} margin={{ top: 8, right: 4, left: -8, bottom: 0 }} barGap={2}>
+                  <CartesianGrid stroke={colors.chartGrid} vertical={false} />
+                  <XAxis
+                    dataKey="label"
+                    tickLine={false}
+                    axisLine={false}
+                    stroke={colors.inkFaint}
+                    fontSize={11}
+                  />
+                  <YAxis
+                    tickLine={false}
+                    axisLine={false}
+                    width={36}
+                    stroke={colors.inkFaint}
+                    fontSize={11}
+                    tickFormatter={(v: number) => `${formatCompactMinor(v)}k`}
+                  />
+                  <Tooltip
+                    formatter={(value, key) => [
+                      naira(Number(value)),
+                      key === "current" ? "This year" : "Prior year",
+                    ]}
+                    contentStyle={{
+                      background: colors.surface,
+                      border: `1px solid ${colors.border}`,
+                      borderRadius: 12,
+                      color: colors.ink,
+                    }}
+                  />
+                  <Bar dataKey="current" stackId="trend" fill={colors.success} maxBarSize={28} />
+                  <Bar
+                    dataKey="previous"
+                    stackId="trend"
+                    fill="#38bdf8"
+                    radius={[6, 6, 0, 0]}
+                    maxBarSize={28}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="grid h-full place-items-center rounded-[12px] bg-pos-surface-muted/40 text-center text-sm text-pos-ink-faint">
+                No sales data yet for this chart.
+              </div>
+            )}
           </div>
         </section>
 
@@ -446,7 +482,9 @@ export function ItemSalesPage() {
             <button
               type="button"
               className="grid h-8 w-8 place-items-center rounded-full text-pos-ink-faint hover:bg-pos-surface-muted hover:text-pos-ink"
-              aria-label="More options"
+              aria-label="Export visible items as CSV"
+              title="Export visible items as CSV"
+              onClick={() => exportItemsCsv(visible)}
             >
               <MoreHorizontal size={18} />
             </button>

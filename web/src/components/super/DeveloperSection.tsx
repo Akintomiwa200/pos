@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Activity,
   Braces,
@@ -22,6 +22,9 @@ import {
 } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { useLivePos } from "@/lib/live-pos";
+import { api } from "@/lib/hq-api";
+import { asBool, asNum, asStr } from "@/lib/hq-policies";
+import { usePolicyCollection } from "@/lib/use-policy-collection";
 import { ManagerSkeleton } from "@/components/Skeleton";
 import {
   PrimaryButton,
@@ -52,21 +55,60 @@ async function copyText(text: string) {
   }
 }
 
-const BASE_URL = "https://api.pos-saas.com/v1";
+function apiBaseUrl() {
+  return typeof window === "undefined" ? "/api" : `${window.location.origin}/api`;
+}
 
 function ApiDashboardPage() {
   const { live, ready } = useLivePos();
-  const [endpoint, setEndpoint] = useState("/tills");
-  const [output, setOutput] = useState<string>("// press Send to preview a response");
+  const keys = usePolicyCollection("apiKeys");
+  const logs = usePolicyCollection("apiLogs");
+  const [endpoint, setEndpoint] = useState("/console/setup");
+  const [output, setOutput] = useState<string>("// press Send to call the API");
+  const [busy, setBusy] = useState(false);
 
   const modules = [
-    { name: "tills", method: "GET /tills", desc: "All till licences across companies" },
-    { name: "stores", method: "GET /stores", desc: "Store directory for every company" },
-    { name: "branches", method: "GET /branches", desc: "Branch records with addresses" },
-    { name: "people", method: "GET /accounts", desc: "Directory accounts and roles" },
-    { name: "groups", method: "GET /groups", desc: "Role groups and permissions" },
-    { name: "commerce", method: "GET /commerce/gateways", desc: "Connected payment gateways" },
+    { name: "setup", method: "GET /console/setup", desc: "HQ setup snapshot" },
+    { name: "catalogue", method: "GET /catalog/items", desc: "Live catalogue items" },
+    { name: "staff", method: "GET /staff", desc: "Staff and roles" },
+    { name: "sales", method: "GET /sales", desc: "Recorded sales" },
+    { name: "orders", method: "GET /orders", desc: "Purchase and sales documents" },
+    { name: "policies", method: "GET /policies", desc: "Persisted console collections" },
   ];
+
+  async function send() {
+    const path = endpoint.trim().startsWith("/") ? endpoint.trim() : `/${endpoint.trim()}`;
+    const started = performance.now();
+    setBusy(true);
+    try {
+      const data = await api<unknown>(path);
+      const latency = Math.max(1, Math.round(performance.now() - started));
+      setOutput(JSON.stringify(data, null, 2).slice(0, 20_000));
+      await logs.save({
+        id: `LOG-${Date.now()}`,
+        method: "GET",
+        path,
+        status: 200,
+        latency: `${latency} ms`,
+        ip: "console",
+        at: new Date().toISOString(),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Request failed";
+      setOutput(message);
+      await logs.save({
+        id: `LOG-${Date.now()}`,
+        method: "GET",
+        path,
+        status: 0,
+        latency: `${Math.max(1, Math.round(performance.now() - started))} ms`,
+        ip: "console",
+        at: new Date().toISOString(),
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
 
   if (!ready) return <ManagerSkeleton variant="table" />;
 
@@ -79,10 +121,10 @@ function ApiDashboardPage() {
         action={<LiveBadge live={live} />}
       />
       <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <SetupStat label="Calls today" value="0" hint="All authenticated keys" tone="accent" />
+        <SetupStat label="Calls today" value={String(logs.rows.filter((row) => asStr(row.at).slice(0, 10) === new Date().toISOString().slice(0, 10)).length)} hint="Console requests" tone="accent" />
         <SetupStat label="Endpoints" value={String(modules.length)} hint="Read modules" />
-        <SetupStat label="Keys" value="0" hint="Active API keys" />
-        <SetupStat label="Base URL" value="—" hint="v1 (stable)" />
+        <SetupStat label="Keys" value={String(keys.rows.filter((row) => !asBool(row.revoked)).length)} hint="Active keys" />
+        <SetupStat label="Base URL" value="/api" hint="Local backend" />
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="rounded-[20px] border border-pos-border bg-pos-surface p-5">
@@ -91,7 +133,7 @@ function ApiDashboardPage() {
           </div>
           <div className="flex items-center gap-2 rounded-2xl bg-pos-surface-muted px-3.5 py-2">
             <span className="text-[12px] font-bold text-pos-success">GET</span>
-            <span className="shrink-0 text-[12px] text-pos-ink-faint">{BASE_URL}</span>
+            <span className="shrink-0 text-[12px] text-pos-ink-faint">{apiBaseUrl()}</span>
             <input
               className="min-w-0 flex-1 bg-transparent text-[13px] text-pos-ink outline-none"
               value={endpoint}
@@ -100,18 +142,11 @@ function ApiDashboardPage() {
           </div>
           <button
             type="button"
-            onClick={() =>
-              setOutput(
-                JSON.stringify(
-                  { ok: true, message: "Demo response", endpoint, data: [] },
-                  null,
-                  2,
-                ),
-              )
-            }
-            className="mt-3 inline-flex items-center gap-2 rounded-full bg-pos-primary px-5 py-2 text-[13px] font-semibold text-white shadow-pos-primary transition hover:opacity-90"
+            disabled={busy}
+            onClick={() => void send()}
+            className="mt-3 inline-flex items-center gap-2 rounded-full bg-pos-primary px-5 py-2 text-[13px] font-semibold text-white shadow-pos-primary transition hover:opacity-90 disabled:opacity-60"
           >
-            <PlayIcon /> Send
+            <PlayIcon /> {busy ? "Calling…" : "Send"}
           </button>
           <pre className="mt-3 max-h-56 overflow-auto rounded-2xl bg-pos-ink p-4 text-[12px] leading-relaxed text-pos-surface">
             {output}
@@ -156,53 +191,48 @@ function PlayIcon() {
   return <RefreshCw size={13} />;
 }
 
-type ApiKey = {
-  id: number;
-  name: string;
-  prefix: string;
-  scopes: string[];
-  lastUsed: string;
-  key: string;
-};
-
 function ApiKeysPage() {
   const { live } = useLivePos();
-  const [keys, setKeys] = useState<ApiKey[]>([]);
+  const { rows, loading, save } = usePolicyCollection("apiKeys");
   const [label, setLabel] = useState("");
 
-  function createKey() {
-    const key = `pos_live_${Math.random().toString(36).slice(2, 12)}_${Math.random().toString(36).slice(2, 10)}`;
-    const row: ApiKey = {
-      id: keys.length + 1,
-      name: label.trim() || `Key ${keys.length + 1}`,
-      prefix: key.slice(0, 10) + "…",
+  async function createKey() {
+    const id = `KEY-${Date.now().toString(36).toUpperCase()}`;
+    const secret = `pos_live_${Math.random().toString(36).slice(2, 12)}_${Math.random().toString(36).slice(2, 10)}`;
+    await save({
+      id,
+      name: label.trim() || `Key ${rows.length + 1}`,
+      prefix: `${secret.slice(0, 10)}…`,
+      secret,
       scopes: ["reads"],
+      revoked: false,
       lastUsed: "Never",
-      key,
-    };
-    setKeys([row, ...keys]);
+      createdAt: new Date().toISOString(),
+    });
     setLabel("");
-    toast.success("API key created — copy it now, it is shown once.");
+    toast.success("Integration key saved to the console. Copy the secret before sharing it.");
   }
 
-  function revoke(id: number) {
-    setKeys((rows) => rows.filter((r) => r.id !== id));
-    toast.success("API key revoked.");
+  async function revoke(id: string) {
+    await save({ id, revoked: true, revokedAt: new Date().toISOString() });
+    toast.success("Key marked as revoked.");
   }
+
+  const active = rows.filter((row) => !asBool(row.revoked));
 
   return (
     <div>
       <SetupHeader
         kicker="Producer · Developer"
-        title="API keys"
-        copy="Create and revoke keys for external integrations. Keys are shown once at creation."
+        title="Integration keys"
+        copy="Store credentials and labels for external integrations. These records are saved to the console; the local backend does not yet enforce them as bearer tokens."
         action={<LiveBadge live={live} />}
       />
       <div className="mb-6 grid gap-3 sm:grid-cols-4">
-        <SetupStat label="Active" value={String(keys.length)} hint="Valid keys" tone="accent" />
-        <SetupStat label="Revoked" value="0" hint="Inactive keys" />
-        <SetupStat label="Scope" value="read" hint="Default privilege" />
-        <SetupStat label="TTL" value="365 d" hint="Auto-expiry" />
+        <SetupStat label="Active" value={String(active.length)} hint="Available keys" tone="accent" />
+        <SetupStat label="Revoked" value={String(rows.length - active.length)} hint="Disabled keys" />
+        <SetupStat label="Scope" value="read" hint="Default label" />
+        <SetupStat label="Stored" value={String(rows.length)} hint="Console records" />
       </div>
       <div className="mb-4 flex gap-2 rounded-[18px] border border-pos-border bg-pos-surface p-4">
         <input
@@ -210,46 +240,48 @@ function ApiKeysPage() {
           placeholder="Key label, e.g. staging sync"
           value={label}
           onChange={(e) => setLabel(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && createKey()}
+          onKeyDown={(e) => e.key === "Enter" && void createKey()}
         />
-        <PrimaryButton onClick={createKey}>
+        <PrimaryButton onClick={() => void createKey()} disabled={loading}>
           <Plus size={15} /> Create key
         </PrimaryButton>
       </div>
-      {keys.length === 0 ? (
+      {rows.length === 0 ? (
         <div className="rounded-[18px] border border-pos-border bg-pos-surface p-8 text-center text-sm text-pos-ink-muted">
           <KeyRound size={20} className="mx-auto mb-2 text-pos-ink-faint" />
-          No keys yet. Create one to connect an external service to the platform API.
+          No keys saved yet. Create one to keep an integration credential with this console.
         </div>
       ) : (
         <ul className="overflow-hidden rounded-[20px] border border-pos-border bg-pos-surface">
-          {keys.map((row) => (
+          {rows.map((row) => (
             <li key={row.id} className="flex flex-wrap items-center gap-3 border-b border-pos-border/60 px-5 py-4 last:border-0">
               <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-pos-primary/10 text-pos-primary">
                 <KeyRound size={16} />
               </span>
               <div className="min-w-0 flex-1">
-                <p className="text-[14px] font-medium text-pos-ink">{row.name}</p>
-                <code className="block text-[12px] text-pos-ink-muted">{row.prefix}</code>
-                <span className="mt-1 inline-block rounded-full bg-pos-success/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-pos-success">
-                  read
+                <p className="text-[14px] font-medium text-pos-ink">{asStr(row.name)}</p>
+                <code className="block text-[12px] text-pos-ink-muted">{asStr(row.prefix)}</code>
+                <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${asBool(row.revoked) ? "bg-pos-surface-muted text-pos-ink-faint" : "bg-pos-success/10 text-pos-success"}`}>
+                  {asBool(row.revoked) ? "revoked" : "read"}
                 </span>
               </div>
-              <span className="text-[12px] text-pos-ink-faint">Last used: {row.lastUsed}</span>
+              <span className="text-[12px] text-pos-ink-faint">Last used: {asStr(row.lastUsed) || "Never"}</span>
               <button
                 type="button"
-                onClick={() => copyText(row.key)}
+                onClick={() => void copyText(asStr(row.secret))}
                 className="inline-flex items-center gap-1.5 rounded-full border border-pos-border px-3 py-1.5 text-[12px] font-semibold text-pos-ink transition hover:bg-pos-surface-muted"
               >
                 <Copy size={13} /> Copy
               </button>
-              <button
-                type="button"
-                onClick={() => revoke(row.id)}
-                className="inline-flex items-center gap-1.5 rounded-full border border-pos-danger/20 px-3 py-1.5 text-[12px] font-semibold text-pos-danger transition hover:bg-pos-danger/10"
-              >
-                <Trash2 size={13} /> Revoke
-              </button>
+              {!asBool(row.revoked) && (
+                <button
+                  type="button"
+                  onClick={() => void revoke(row.id)}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-pos-danger/20 px-3 py-1.5 text-[12px] font-semibold text-pos-danger transition hover:bg-pos-danger/10"
+                >
+                  <Trash2 size={13} /> Revoke
+                </button>
+              )}
             </li>
           ))}
         </ul>
@@ -260,38 +292,40 @@ function ApiKeysPage() {
 
 const WEBHOOK_EVENTS = ["till.created", "till.renewed", "sale.completed", "account.created"];
 
-type WebhookRow = {
-  id: number;
-  url: string;
-  events: string[];
-  healthy: boolean;
-};
-
 function WebhooksPage() {
   const { live } = useLivePos();
-  const [hooks, setHooks] = useState<WebhookRow[]>([]);
+  const { rows: hooks, save, remove } = usePolicyCollection("webhooks");
   const [url, setUrl] = useState("");
   const [event, setEvent] = useState(WEBHOOK_EVENTS[0]);
 
-  function addHook() {
-    if (!url.trim()) return;
-    const rows: WebhookRow[] = [
-      ...hooks,
-      { id: hooks.length + 1, url: url.trim(), events: [event], healthy: true },
-    ];
-    setHooks(rows);
+  async function addHook() {
+    const value = url.trim();
+    if (!value) return;
+    try {
+      new URL(value);
+    } catch {
+      toast.error("Enter a full URL, including https://.");
+      return;
+    }
+    await save({
+      id: `HOOK-${Date.now().toString(36).toUpperCase()}`,
+      url: value,
+      events: [event],
+      active: true,
+      deliveries: 0,
+      retries: 0,
+      createdAt: new Date().toISOString(),
+    });
     setUrl("");
-    toast.success("Webhook registered.");
+    toast.success("Webhook endpoint saved.");
   }
 
-  function toggleEvent(id: number, evt: string) {
-    setHooks((rows) =>
-      rows.map((r) => {
-        if (r.id !== id) return r;
-        const events = r.events.includes(evt) ? r.events.filter((e) => e !== evt) : [...r.events, evt];
-        return { ...r, events };
-      }),
-    );
+  async function toggleEvent(id: string, evt: string) {
+    const row = hooks.find((item) => item.id === id);
+    if (!row) return;
+    const current = Array.isArray(row.events) ? row.events.map(String) : [];
+    const events = current.includes(evt) ? current.filter((item) => item !== evt) : [...current, evt];
+    await save({ ...row, events });
   }
 
   return (
@@ -299,14 +333,14 @@ function WebhooksPage() {
       <SetupHeader
         kicker="Producer · Developer"
         title="Webhooks"
-        copy="Deliver platform events to your endpoints over HTTP. Each webhook is retried up to 5 times on failure."
+        copy="Record event subscriptions for integration endpoints. The console stores the subscriptions; delivery workers are not enabled in this local deployment."
         action={<LiveBadge live={live} />}
       />
       <div className="mb-6 grid gap-3 sm:grid-cols-4">
-        <SetupStat label="Active" value={String(hooks.length)} hint="Registered webhooks" tone="accent" />
+        <SetupStat label="Endpoints" value={String(hooks.length)} hint="Saved subscriptions" tone="accent" />
         <SetupStat label="Events" value={String(WEBHOOK_EVENTS.length)} hint="Subscribable" />
-        <SetupStat label="Delivered" value="0" hint="Successful" />
-        <SetupStat label="Retries" value="0" hint="Failed then retried" />
+        <SetupStat label="Delivered" value={String(hooks.reduce((sum, row) => sum + asNum(row.deliveries), 0))} hint="Recorded deliveries" />
+        <SetupStat label="Retries" value={String(hooks.reduce((sum, row) => sum + asNum(row.retries), 0))} hint="Recorded retries" />
       </div>
       <div className="mb-4 flex flex-col gap-2 rounded-[18px] border border-pos-border bg-pos-surface p-4 sm:flex-row">
         <input
@@ -314,7 +348,7 @@ function WebhooksPage() {
           placeholder="https://example.com/hooks/pos"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && addHook()}
+          onKeyDown={(e) => e.key === "Enter" && void addHook()}
         />
         <select className={`${fieldClass} sm:max-w-[220px]`} value={event} onChange={(e) => setEvent(e.target.value)}>
           {WEBHOOK_EVENTS.map((evt) => (
@@ -323,79 +357,86 @@ function WebhooksPage() {
             </option>
           ))}
         </select>
-        <PrimaryButton onClick={addHook}>
+        <PrimaryButton onClick={() => void addHook()}>
           <Plus size={15} /> Register
         </PrimaryButton>
       </div>
       {hooks.length === 0 ? (
         <div className="rounded-[18px] border border-pos-border bg-pos-surface p-8 text-center text-sm text-pos-ink-muted">
           <Webhook size={20} className="mx-auto mb-2 text-pos-ink-faint" />
-          No webhook endpoints yet. Register one to receive real-time platform events.
+          No endpoints saved yet. Register one to keep its event subscriptions here.
         </div>
       ) : (
         <ul className="space-y-3">
-          {hooks.map((row) => (
-            <li key={row.id} className="rounded-[20px] border border-pos-border bg-pos-surface p-5">
-              <div className="flex items-center gap-3">
-                <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-pos-primary/10 text-pos-primary">
-                  <Radio size={17} />
-                </span>
-                <code className="min-w-0 flex-1 truncate text-[13px] text-pos-ink">{row.url}</code>
-                <span className="shrink-0 text-[12px] text-pos-ink-faint">healthy · 0 retries</span>
-              </div>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {WEBHOOK_EVENTS.map((evt) => {
-                  const active = row.events.includes(evt);
-                  return (
-                    <button
-                      key={evt}
-                      type="button"
-                      onClick={() => toggleEvent(row.id, evt)}
-                      className={`rounded-full px-3 py-1.5 font-mono text-[11px] font-semibold transition ${
-                        active
-                          ? "bg-pos-primary text-white shadow-pos-primary"
-                          : "bg-pos-surface-muted text-pos-ink-faint hover:text-pos-ink"
-                      }`}
-                    >
-                      {evt}
-                    </button>
-                  );
-                })}
-              </div>
-            </li>
-          ))}
+          {hooks.map((row) => {
+            const events = Array.isArray(row.events) ? row.events.map(String) : [];
+            return (
+              <li key={row.id} className="rounded-[20px] border border-pos-border bg-pos-surface p-5">
+                <div className="flex items-center gap-3">
+                  <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-pos-primary/10 text-pos-primary">
+                    <Radio size={17} />
+                  </span>
+                  <code className="min-w-0 flex-1 truncate text-[13px] text-pos-ink">{asStr(row.url)}</code>
+                  <button
+                    type="button"
+                    aria-label="Delete webhook"
+                    className="shrink-0 text-pos-ink-faint hover:text-pos-danger"
+                    onClick={() => void remove(row.id)}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {WEBHOOK_EVENTS.map((evt) => {
+                    const active = events.includes(evt);
+                    return (
+                      <button
+                        key={evt}
+                        type="button"
+                        onClick={() => void toggleEvent(row.id, evt)}
+                        className={`rounded-full px-3 py-1.5 font-mono text-[11px] font-semibold transition ${
+                          active
+                            ? "bg-pos-primary text-white shadow-pos-primary"
+                            : "bg-pos-surface-muted text-pos-ink-faint hover:text-pos-ink"
+                        }`}
+                      >
+                        {evt}
+                      </button>
+                    );
+                  })}
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>
   );
 }
 
-type OAuthApp = {
-  id: number;
-  name: string;
-  owner: string;
-  scopes: string[];
-  status: "Connected" | "Pending" | "Revoked";
-};
+const STARTER_APPS = [
+  { id: "APP-analytics", name: "Analytics Sync", owner: "Partner API", scopes: ["tills:read", "sales:read"], status: "Connected" },
+  { id: "APP-accounting", name: "Accounting Bridge", owner: "Partner API", scopes: ["accounts:read"], status: "Pending" },
+];
 
 function ApplicationsPage() {
   const { live } = useLivePos();
-  const [apps, setApps] = useState<OAuthApp[]>([
-    { id: 1, name: "Analytics Sync", owner: "Partner API", scopes: ["tills:read", "sales:read"], status: "Connected" },
-    { id: 2, name: "Accounting Bridge", owner: "Partner API", scopes: ["accounts:read"], status: "Pending" },
-  ]);
+  const { rows: apps, save, loading } = usePolicyCollection("apps");
+  const [seeded, setSeeded] = useState(false);
 
-  function toggle(id: number) {
-    setApps((rows) =>
-      rows.map((a) =>
-        a.id === id
-          ? { ...a, status: a.status === "Revoked" ? "Pending" : "Revoked" }
-          : a,
-      ),
-    );
+  useEffect(() => {
+    if (!loading && apps.length === 0 && !seeded) {
+      setSeeded(true);
+      void Promise.all(STARTER_APPS.map((app) => save(app)));
+    }
+  }, [apps.length, loading, seeded, save]);
+
+  async function toggle(id: string, status: string) {
+    const next = status === "Revoked" ? "Pending" : "Revoked";
+    await save({ id, status: next, updatedAt: new Date().toISOString() });
   }
 
-  const toneOf = (status: OAuthApp["status"]) =>
+  const toneOf = (status: string) =>
     status === "Connected"
       ? "bg-pos-success/10 text-pos-success"
       : status === "Pending"
@@ -407,14 +448,14 @@ function ApplicationsPage() {
       <SetupHeader
         kicker="Producer · Developer"
         title="Applications"
-        copy="Third-party applications and OAuth clients requesting access to platform data."
+        copy="Third-party applications and OAuth clients requesting access to platform data. Approval state is saved to the console."
         action={<LiveBadge live={live} />}
       />
       <div className="mb-6 grid gap-3 sm:grid-cols-4">
-        <SetupStat label="Connected" value={String(apps.filter((a) => a.status === "Connected").length)} hint="Active apps" tone="accent" />
-        <SetupStat label="Pending" value={String(apps.filter((a) => a.status === "Pending").length)} hint="Awaiting approval" />
-        <SetupStat label="Revoked" value={String(apps.filter((a) => a.status === "Revoked").length)} hint="Disconnected" />
-        <SetupStat label="Permissions" value="3" hint="Distinct scopes" />
+        <SetupStat label="Connected" value={String(apps.filter((app) => asStr(app.status) === "Connected").length)} hint="Active apps" tone="accent" />
+        <SetupStat label="Pending" value={String(apps.filter((app) => asStr(app.status) === "Pending").length)} hint="Awaiting approval" />
+        <SetupStat label="Revoked" value={String(apps.filter((app) => asStr(app.status) === "Revoked").length)} hint="Disconnected" />
+        <SetupStat label="Permissions" value={String(new Set(apps.flatMap((app) => Array.isArray(app.scopes) ? app.scopes.map(String) : [])).size)} hint="Distinct scopes" />
       </div>
       {apps.length === 0 ? (
         <div className="rounded-[18px] border border-pos-border bg-pos-surface p-8 text-center text-sm text-pos-ink-muted">
@@ -423,76 +464,74 @@ function ApplicationsPage() {
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
-          {apps.map((app) => (
-            <div key={app.id} className="rounded-[20px] border border-pos-border bg-pos-surface p-5">
-              <div className="flex items-center gap-3">
-                <span className="grid size-11 shrink-0 place-items-center rounded-[14px] bg-pos-primary/10 text-pos-primary">
-                  <Plug size={19} />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[14px] font-medium text-pos-ink">{app.name}</p>
-                  <p className="text-[12px] text-pos-ink-muted">{app.owner}</p>
-                </div>
-                <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${toneOf(app.status)}`}>
-                  {app.status}
-                </span>
-              </div>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {app.scopes.map((scope) => (
-                  <span key={scope} className="inline-flex items-center gap-1.5 rounded-full bg-pos-surface-muted px-2.5 py-1 font-mono text-[11px] text-pos-ink-muted">
-                    <Lock size={10} /> {scope}
+          {apps.map((app) => {
+            const status = asStr(app.status);
+            const scopes = Array.isArray(app.scopes) ? app.scopes.map(String) : [];
+            return (
+              <div key={app.id} className="rounded-[20px] border border-pos-border bg-pos-surface p-5">
+                <div className="flex items-center gap-3">
+                  <span className="grid size-11 shrink-0 place-items-center rounded-[14px] bg-pos-primary/10 text-pos-primary">
+                    <Plug size={19} />
                   </span>
-                ))}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[14px] font-medium text-pos-ink">{asStr(app.name)}</p>
+                    <p className="text-[12px] text-pos-ink-muted">{asStr(app.owner)}</p>
+                  </div>
+                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${toneOf(status)}`}>
+                    {status}
+                  </span>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {scopes.map((scope) => (
+                    <span key={scope} className="inline-flex items-center gap-1.5 rounded-full bg-pos-surface-muted px-2.5 py-1 font-mono text-[11px] text-pos-ink-muted">
+                      <Lock size={10} /> {scope}
+                    </span>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void toggle(app.id, status)}
+                  className={`mt-4 inline-flex items-center gap-2 rounded-full px-4 py-2 text-[12px] font-semibold transition ${
+                    status === "Revoked"
+                      ? "bg-pos-primary text-white shadow-pos-primary hover:opacity-90"
+                      : "border border-pos-danger/20 text-pos-danger hover:bg-pos-danger/10"
+                  }`}
+                >
+                  {status === "Revoked" ? <ShieldCheck size={14} /> : <Trash2 size={14} />}
+                  {status === "Revoked" ? "Re-approve" : "Revoke access"}
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => toggle(app.id)}
-                className={`mt-4 inline-flex items-center gap-2 rounded-full px-4 py-2 text-[12px] font-semibold transition ${
-                  app.status === "Revoked"
-                    ? "bg-pos-primary text-white shadow-pos-primary hover:opacity-90"
-                    : "border border-pos-danger/20 text-pos-danger hover:bg-pos-danger/10"
-                }`}
-              >
-                {app.status === "Revoked" ? <ShieldCheck size={14} /> : <Trash2 size={14} />}
-                {app.status === "Revoked" ? "Re-approve" : "Revoke access"}
-              </button>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
   );
 }
 
-const SAMPLE_LOGS = [
-  { id: 1, method: "GET", path: "/tills", status: 200, latency: "38 ms", ip: "10.0.0.4", at: "14:02:11" },
-  { id: 2, method: "GET", path: "/stores", status: 200, latency: "52 ms", ip: "10.0.0.4", at: "14:01:03" },
-  { id: 3, method: "POST", path: "/webhooks", status: 201, latency: "89 ms", ip: "10.0.0.9", at: "13:58:47" },
-  { id: 4, method: "GET", path: "/accounts", status: 401, latency: "12 ms", ip: "172.16.2.1", at: "13:55:20" },
-  { id: 5, method: "GET", path: "/groups", status: 200, latency: "31 ms", ip: "10.0.0.9", at: "13:50:02" },
-];
-
 function ApiLogsPage() {
   const { live } = useLivePos();
+  const { rows: logs, remove } = usePolicyCollection("apiLogs");
   const [filter, setFilter] = useState(0);
 
   const statusTone = (status: number) =>
     status >= 400 ? "text-pos-danger" : status >= 300 ? "text-pos-warning" : "text-pos-success";
-  const rows = SAMPLE_LOGS.filter((row) => (filter ? row.status === filter : true));
+  const rows = logs.filter((row) => (filter ? asNum(row.status) === filter : true));
+  const avg = rows.length ? rows.reduce((sum, row) => sum + asNum(String(row.latency).replace(/[^\d.]/g, "")), 0) / rows.length : 0;
 
   return (
     <div>
       <SetupHeader
         kicker="Producer · Developer"
         title="API logs"
-        copy="Request log for all authenticated API calls. Filter by response status to debug integrations."
+        copy="Requests made from this console's API tester. Successful and failed calls are both recorded here."
         action={<LiveBadge live={live} />}
       />
       <div className="mb-6 grid gap-3 sm:grid-cols-4">
-        <SetupStat label="Today" value={String(SAMPLE_LOGS.length)} hint="Total requests" tone="accent" />
-        <SetupStat label="Errors" value={String(SAMPLE_LOGS.filter((r) => r.status >= 400).length)} hint="4xx / 5xx" tone="inverse" />
-        <SetupStat label="Avg. latency" value="44 ms" hint="Response time" />
-        <SetupStat label="Keys" value="0" hint="Distinct callers" />
+        <SetupStat label="Requests" value={String(logs.length)} hint="Console calls" tone="accent" />
+        <SetupStat label="Errors" value={String(logs.filter((row) => asNum(row.status) >= 400).length)} hint="Failed calls" tone="inverse" />
+        <SetupStat label="Avg. latency" value={`${Math.round(avg)} ms`} hint="Measured locally" />
+        <SetupStat label="Paths" value={String(new Set(logs.map((row) => asStr(row.path))).size)} hint="Distinct endpoints" />
       </div>
       <div className="mb-4 flex flex-wrap gap-2">
         {[0, 200, 201, 401].map((code) => (
@@ -509,11 +548,16 @@ function ApiLogsPage() {
             {code === 0 ? "All" : code}
           </button>
         ))}
+        {logs.length > 0 && (
+          <button type="button" className="ml-auto text-[12px] font-semibold text-pos-danger hover:underline" onClick={() => void Promise.all(logs.map((row) => remove(row.id)))}>
+            Clear log
+          </button>
+        )}
       </div>
       {rows.length === 0 ? (
         <div className="rounded-[18px] border border-pos-border bg-pos-surface p-8 text-center text-sm text-pos-ink-muted">
           <Activity size={20} className="mx-auto mb-2 text-pos-ink-faint" />
-          No requests match this filter.
+          {logs.length === 0 ? "No requests yet. Use the API console to make a call." : "No requests match this filter."}
         </div>
       ) : (
         <div className="overflow-hidden rounded-[20px] border border-pos-border bg-pos-surface">
@@ -534,14 +578,14 @@ function ApiLogsPage() {
                   <tr key={row.id}>
                     <td className="px-5 py-3.5">
                       <span className="rounded-lg bg-pos-surface-muted px-2 py-1 font-mono text-[11px] font-bold">
-                        {row.method}
+                        {asStr(row.method)}
                       </span>
                     </td>
-                    <td className="px-5 py-3.5 font-mono text-pos-ink">{row.path}</td>
-                    <td className={`px-5 py-3.5 font-mono font-bold ${statusTone(row.status)}`}>{row.status}</td>
-                    <td className="px-5 py-3.5 tabular-nums text-pos-ink-muted">{row.latency}</td>
-                    <td className="px-5 py-3.5 font-mono text-pos-ink-muted">{row.ip}</td>
-                    <td className="px-5 py-3.5 tabular-nums text-pos-ink-faint">{row.at}</td>
+                    <td className="px-5 py-3.5 font-mono text-pos-ink">{asStr(row.path)}</td>
+                    <td className={`px-5 py-3.5 font-mono font-bold ${statusTone(asNum(row.status))}`}>{asNum(row.status) || "—"}</td>
+                    <td className="px-5 py-3.5 tabular-nums text-pos-ink-muted">{asStr(row.latency)}</td>
+                    <td className="px-5 py-3.5 font-mono text-pos-ink-muted">{asStr(row.ip)}</td>
+                    <td className="px-5 py-3.5 tabular-nums text-pos-ink-faint">{asStr(row.at).slice(11, 19) || asStr(row.at)}</td>
                   </tr>
                 ))}
               </tbody>

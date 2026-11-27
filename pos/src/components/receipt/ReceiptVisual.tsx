@@ -199,6 +199,18 @@ export function ReceiptVisual({
         {showPhone && settings.storePhone ? (
           <div style={{ textAlign: "center", ...muted }}>{settings.storePhone}</div>
         ) : null}
+        {settings.showTinOnReceipt && settings.storeTin?.trim() ? (
+          <div style={{ textAlign: "center", ...muted }}>TIN: {settings.storeTin.trim()}</div>
+        ) : null}
+        {settings.showTinOnReceipt && settings.companyLegalName?.trim() ? (
+          <div style={{ textAlign: "center", ...muted }}>{settings.companyLegalName.trim()}</div>
+        ) : null}
+        {settings.showTinOnReceipt && settings.companyRc?.trim() ? (
+          <div style={{ textAlign: "center", ...muted }}>RC: {settings.companyRc.trim()}</div>
+        ) : null}
+        {settings.showTinOnReceipt && settings.companyState?.trim() ? (
+          <div style={{ textAlign: "center", ...muted }}>{settings.companyState.trim()}</div>
+        ) : null}
         {showHeader && settings.receiptHeader ? (
           <div
             style={{
@@ -469,7 +481,7 @@ export function ReceiptVisual({
         {settings.receiptShowBarcode ? (
           <div style={{ marginTop: 10 }}>
             <ReceiptBarcode
-              value={ticketId}
+              value={settings.receiptBarcodeValue?.trim() || ticketId}
               width={settings.receiptPaper === "58mm" ? 1.1 : 1.35}
               height={settings.receiptPaper === "58mm" ? 36 : 44}
             />
@@ -479,6 +491,11 @@ export function ReceiptVisual({
         {showFooter && settings.receiptFooter ? (
           <div style={{ marginTop: 10, textAlign: "center", opacity: 0.8 }}>
             {settings.receiptFooter}
+          </div>
+        ) : null}
+        {showFooter && settings.storeHours?.trim() ? (
+          <div style={{ marginTop: 4, textAlign: "center", opacity: 0.7 }}>
+            Hours: {settings.storeHours.trim()}
           </div>
         ) : null}
         {settings.receiptShowPoweredBy ? (

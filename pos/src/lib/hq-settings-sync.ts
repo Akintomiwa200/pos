@@ -5,7 +5,10 @@ import {
   loadCachedHqOrg,
   type HqOrgSnapshot,
 } from "./hq-org";
+import { SETTINGS_EVENT, loadStoreSettings } from "./store-settings";
 import { ingestHqOrg, loadDeviceTill, TILLS_EVENT } from "./tills";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 function tillLocation() {
   const till = loadDeviceTill();
@@ -41,6 +44,8 @@ export function startHqOrgSync() {
       await pullHqOrgSnapshot();
     } catch {
       applyCachedToTill();
+    } finally {
+      lastPull = Date.now();
     }
   }
 
@@ -82,17 +87,42 @@ export function startHqOrgSync() {
     }
   }
 
-  void refresh().finally(() => {
+  let lastPull = 0;
+  let mode = loadStoreSettings().syncMode;
+
+  function configure() {
     if (stopped) return;
-    poll = window.setInterval(() => void refresh(), 8_000);
-    connectStream();
+    const next = loadStoreSettings().syncMode;
+    const changed = next !== mode;
+    mode = next;
+    window.clearInterval(poll);
+    window.clearTimeout(reconnect);
+    source?.close();
+    source = null;
+    if (mode === "realtime") {
+      poll = window.setInterval(() => void refresh(), 8_000);
+      connectStream();
+    } else {
+      // Daily mode still pulls once at startup and at most once a day after
+      // that; visibility changes only trigger a pull when the day is stale.
+      poll = window.setInterval(() => void refresh(), DAY_MS);
+    }
+    if (changed) void refresh();
+  }
+
+  void refresh().finally(() => {
+    lastPull = Date.now();
+    if (!stopped) configure();
   });
 
   const onTill = () => applyCachedToTill();
+  const onSettings = () => configure();
   const onVisible = () => {
-    if (document.visibilityState === "visible") void refresh();
+    if (document.visibilityState !== "visible") return;
+    if (mode === "realtime" || Date.now() - lastPull >= DAY_MS) void refresh();
   };
   window.addEventListener(TILLS_EVENT, onTill);
+  window.addEventListener(SETTINGS_EVENT, onSettings);
   document.addEventListener("visibilitychange", onVisible);
 
   return () => {
@@ -101,6 +131,7 @@ export function startHqOrgSync() {
     window.clearTimeout(reconnect);
     source?.close();
     window.removeEventListener(TILLS_EVENT, onTill);
+    window.removeEventListener(SETTINGS_EVENT, onSettings);
     document.removeEventListener("visibilitychange", onVisible);
   };
 }

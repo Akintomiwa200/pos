@@ -693,8 +693,9 @@ export function SuperDashboard() {
     const previous = sales.filter((row) => inRange(row, prevFrom, prevTo));
     const revenue = current.reduce((sum, row) => sum + row.totalMinor, 0);
     const prevRevenue = previous.reduce((sum, row) => sum + row.totalMinor, 0);
-    const delta = revenue - prevRevenue;
-    const pct = prevRevenue ? (delta / prevRevenue) * 100 : current.length ? 100 : 0;
+    const hasBaseline = prevRevenue > 0;
+    const delta = hasBaseline ? revenue - prevRevenue : null;
+    const pct = hasBaseline && delta !== null ? (delta / prevRevenue) * 100 : null;
     const byStore = groupBy(current, (row) => row.storeName || "Main store", (row) => row.totalMinor);
     const spark = revenueBuckets(current, from, to);
     const auth = bucketAuth(security?.logins.trend ?? [], from, to);
@@ -704,7 +705,7 @@ export function SuperDashboard() {
   const feed = useMemo(() => buildFeed(security), [security]);
   const people = [...admins, ...users];
   const live = dirLive && posLive;
-  const up = report.pct >= 0;
+  const up = (report.pct ?? 0) >= 0;
   const activePeriod = PERIODS.find((row) => row.id === period) ?? PERIODS[1]!;
   const storeTotal = report.byStore.reduce((sum, row) => sum + row.total, 0) || 1;
 
@@ -877,19 +878,31 @@ export function SuperDashboard() {
                 {money(report.revenue)}
               </p>
             </div>
-            <div className="flex flex-col items-end gap-1">
-              <span
-                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-semibold text-white ${
-                  up ? "bg-pos-success" : "bg-pos-primary"
-                }`}
-              >
-                {up ? <TrendingUp size={13} strokeWidth={2.6} /> : <TrendingDown size={13} strokeWidth={2.6} />}
-                {Math.abs(report.pct).toFixed(1)}%
-              </span>
-              <span className="text-[12px] text-pos-ink-faint">
-                {money(Math.abs(report.delta))} vs previous period
-              </span>
-            </div>
+            {report.pct !== null && report.delta !== null ? (
+              <div className="flex flex-col items-end gap-1">
+                <span
+                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-semibold text-white ${
+                    up ? "bg-pos-success" : "bg-pos-primary"
+                  }`}
+                >
+                  {up ? <TrendingUp size={13} strokeWidth={2.6} /> : <TrendingDown size={13} strokeWidth={2.6} />}
+                  {Math.abs(report.pct).toFixed(1)}%
+                </span>
+                <span className="text-[12px] text-pos-ink-faint">
+                  {money(Math.abs(report.delta))} vs previous period
+                </span>
+              </div>
+            ) : (
+              <div className="flex flex-col items-end gap-1">
+                <span
+                  className="inline-flex items-center rounded-full bg-pos-surface-muted px-2.5 py-1 text-[12px] font-medium text-pos-ink-faint"
+                  title="No prior-period data"
+                >
+                  —
+                </span>
+                <span className="text-[12px] text-pos-ink-faint">No prior-period data</span>
+              </div>
+            )}
           </div>
           <div className="mt-5">
             <SparkBars points={report.spark.buckets} />

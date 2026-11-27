@@ -11,8 +11,35 @@ type CatalogPayload =
   | { type: "snapshot"; items: CatalogItem[] }
   | { type: "updated"; item: CatalogItem };
 
+const OFFLINE_KEY = "pos-offline-catalog";
+const OFFLINE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
 function readStockMode(): StockMode {
   return loadStoreSettings().stockMode;
+}
+
+function cacheOfflineCatalog(items: CatalogItem[]) {
+  try {
+    localStorage.setItem(
+      OFFLINE_KEY,
+      JSON.stringify({ at: Date.now(), items }),
+    );
+  } catch {
+    // Storage can be full or blocked; offline simply has no snapshot.
+  }
+}
+
+function readOfflineCatalog(): CatalogItem[] {
+  try {
+    const raw = localStorage.getItem(OFFLINE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as { at?: number; items?: CatalogItem[] };
+    if (!Array.isArray(parsed.items) || typeof parsed.at !== "number") return [];
+    if (Date.now() - parsed.at > OFFLINE_TTL_MS) return [];
+    return parsed.items;
+  } catch {
+    return [];
+  }
 }
 
 export function useCatalog() {
@@ -37,7 +64,7 @@ export function useCatalog() {
     let cancelled = false;
 
     if (mode === "offline") {
-      setItems([]);
+      setItems(readOfflineCatalog());
       setLive(false);
       return () => {
         cancelled = true;
@@ -50,8 +77,10 @@ export function useCatalog() {
         return response.json() as Promise<CatalogItem[]>;
       })
       .then((data) => {
-        if (!cancelled && Array.isArray(data) && data.length) setItems(data);
-        else if (!cancelled && mode === "online") setItems([]);
+        if (!cancelled && Array.isArray(data) && data.length) {
+          setItems(data);
+          cacheOfflineCatalog(data);
+        } else if (!cancelled && mode === "online") setItems([]);
       })
       .catch(() => {
         if (!cancelled && mode === "online") setItems([]);
@@ -65,13 +94,16 @@ export function useCatalog() {
         const payload = JSON.parse(event.data) as CatalogPayload;
         if (payload.type === "snapshot" && Array.isArray(payload.items)) {
           setItems(payload.items);
+          cacheOfflineCatalog(payload.items);
         }
         if (payload.type === "updated" && payload.item) {
           setItems((current) => {
             const index = current.findIndex((item) => item.id === payload.item.id);
-            if (index === -1) return [...current, payload.item];
-            const next = current.slice();
-            next[index] = payload.item;
+            const next =
+              index === -1
+                ? [...current, payload.item]
+                : [...current.slice(0, index), payload.item, ...current.slice(index + 1)];
+            cacheOfflineCatalog(next);
             return next;
           });
         }
@@ -88,13 +120,15 @@ export function useCatalog() {
 
   const updateItem = useCallback(
     async (id: string, patch: { priceMinor?: number; onHand?: number }) => {
-      setItems((current) =>
-        current.map((item) =>
+      setItems((current) => {
+        const next = current.map((item) =>
           item.id === id
             ? { ...item, ...patch, updatedAt: new Date().toISOString() }
             : item,
-        ),
-      );
+        );
+        cacheOfflineCatalog(next);
+        return next;
+      });
       if (readStockMode() === "offline") return;
       const response = await fetch(apiUrl(`/api/catalog/items/${id}`), {
         method: "PATCH",
@@ -219,7 +253,7 @@ export function findCatalogByCode(items: CatalogItem[], query: string) {
 }
 
 export async function lookupCatalog(query: string) {
-  if (readStockMode() === "offline") return null;
+  if (readStockMode() === "offline") return findCatalogByCode(readOfflineCatalog(), query);
   const response = await fetch(
     apiUrl(`/api/catalog/lookup?q=${encodeURIComponent(query.trim())}`),
   );

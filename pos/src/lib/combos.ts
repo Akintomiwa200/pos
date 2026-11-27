@@ -40,8 +40,32 @@ type ComboPayload =
   | { type: "updated"; combo: ComboView }
   | { type: "removed"; id: string };
 
+const OFFLINE_KEY = "pos-offline-combos";
+const OFFLINE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
 function readStockMode(): StockMode {
   return loadStoreSettings().stockMode;
+}
+
+function cacheOfflineCombos(combos: ComboView[]) {
+  try {
+    localStorage.setItem(OFFLINE_KEY, JSON.stringify({ at: Date.now(), combos }));
+  } catch {
+    // Storage can be full or blocked; offline simply has no snapshot.
+  }
+}
+
+function readOfflineCombos(): ComboView[] {
+  try {
+    const raw = localStorage.getItem(OFFLINE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as { at?: number; combos?: ComboView[] };
+    if (!Array.isArray(parsed.combos) || typeof parsed.at !== "number") return [];
+    if (Date.now() - parsed.at > OFFLINE_TTL_MS) return [];
+    return parsed.combos;
+  } catch {
+    return [];
+  }
 }
 
 /** Live combo (bundle) list from HQ, kept in sync over the combo SSE stream. */
@@ -67,7 +91,7 @@ export function useCombos() {
     let cancelled = false;
 
     if (mode === "offline") {
-      setCombos([]);
+      setCombos(readOfflineCombos());
       setLive(false);
       return () => {
         cancelled = true;
@@ -80,7 +104,10 @@ export function useCombos() {
         return response.json() as Promise<ComboView[]>;
       })
       .then((data) => {
-        if (!cancelled && Array.isArray(data)) setCombos(data);
+        if (!cancelled && Array.isArray(data)) {
+          setCombos(data);
+          cacheOfflineCombos(data);
+        }
       })
       .catch(() => {
         /* the stream snapshot reconciles once connected */
@@ -94,18 +121,29 @@ export function useCombos() {
         const payload = JSON.parse(event.data) as ComboPayload;
         if (payload.type === "snapshot" && Array.isArray(payload.combos)) {
           setCombos(payload.combos);
+          cacheOfflineCombos(payload.combos);
         }
         if (payload.type === "updated" && payload.combo) {
           setCombos((current) => {
             const index = current.findIndex((row) => row.id === payload.combo.id);
-            if (index === -1) return [...current, payload.combo];
-            const next = current.slice();
-            next[index] = payload.combo;
+            const next =
+              index === -1
+                ? [...current, payload.combo]
+                : [
+                    ...current.slice(0, index),
+                    payload.combo,
+                    ...current.slice(index + 1),
+                  ];
+            cacheOfflineCombos(next);
             return next;
           });
         }
         if (payload.type === "removed" && payload.id) {
-          setCombos((current) => current.filter((row) => row.id !== payload.id));
+          setCombos((current) => {
+            const next = current.filter((row) => row.id !== payload.id);
+            cacheOfflineCombos(next);
+            return next;
+          });
         }
       } catch {
         /* ignore malformed frames */

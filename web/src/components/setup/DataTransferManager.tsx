@@ -41,6 +41,7 @@ import {
   encodeTable,
   getDataset,
   importTransferRows,
+  listDatasetCounts,
   listTransferRows,
   prepareRows,
   type ImportResult,
@@ -174,6 +175,7 @@ export function DataTransferManager() {
   const [filterRowsStatus, setFilterRowsStatus] = useState<"all" | "errors" | "valid" | "new" | "update">("all");
   const [existing, setExisting] = useState<Record<string, unknown>[]>([]);
   const [loadingExisting, setLoadingExisting] = useState(true);
+  const [datasetCounts, setDatasetCounts] = useState<Record<string, number>>({});
   const [result, setResult] = useState<ImportResult | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -228,6 +230,22 @@ export function DataTransferManager() {
       disposed = true;
     };
   }, [importDataset]);
+
+  useEffect(() => {
+    let disposed = false;
+    listDatasetCounts()
+      .then((counts) => {
+        if (!disposed) {
+          setDatasetCounts(Object.fromEntries(Object.entries(counts).map(([id, row]) => [id, row.count])));
+        }
+      })
+      .catch(() => {
+        if (!disposed) setDatasetCounts({});
+      });
+    return () => {
+      disposed = true;
+    };
+  }, []);
 
   // Filtered dataset lists
   const filteredExportDatasets = useMemo(() => {
@@ -417,10 +435,14 @@ export function DataTransferManager() {
       const outcome = await importTransferRows(
         importId,
         ready.map((row) => row.payload),
+        duplicateMode,
       );
       const refreshed = await listTransferRows(importDataset, { fresh: true });
       setExisting(refreshed);
       if (exportId === importId) setExportRows(refreshed);
+      void listDatasetCounts()
+        .then((counts) => setDatasetCounts(Object.fromEntries(Object.entries(counts).map(([id, row]) => [id, row.count]))))
+        .catch(() => undefined);
       setResult(outcome);
       toast.success(`Successfully imported: ${outcome.created} created, ${outcome.updated} updated.`);
     } catch (err) {
@@ -600,7 +622,9 @@ export function DataTransferManager() {
                       {dataset.label}
                     </span>
                     <span className="mt-1 line-clamp-1 text-[11px] text-pos-ink-muted">
-                      {dataset.fields.length} columns
+                      {datasetCounts[dataset.id] !== undefined
+                        ? `${datasetCounts[dataset.id]} records · ${dataset.fields.length} columns`
+                        : `${dataset.fields.length} columns`}
                     </span>
                   </button>
                 );
@@ -1095,7 +1119,9 @@ export function DataTransferManager() {
                       {dataset.label}
                     </span>
                     <span className="mt-1 line-clamp-1 text-[11px] text-pos-ink-muted">
-                      {dataset.fields.length} columns
+                      {datasetCounts[dataset.id] !== undefined
+                        ? `${datasetCounts[dataset.id]} records · ${dataset.fields.length} columns`
+                        : `${dataset.fields.length} columns`}
                     </span>
                   </button>
                 );

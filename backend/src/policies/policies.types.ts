@@ -16,7 +16,21 @@ export type PolicyKind =
   | "bulkRuns"
   | "historicalSyncs"
   | "sharedDevices"
-  | "accountData";
+  | "accountData"
+  | "supportTickets"
+  | "supportRequests"
+  | "knowledgeArticles"
+  | "announcements"
+  | "systemSettings"
+  | "systemAlerts"
+  | "featureFlags"
+  | "backups"
+  | "apiKeys"
+  | "webhooks"
+  | "apps"
+  | "apiLogs"
+  | "adminActivity"
+  | "discountCodes";
 
 export type PolicyRecord = { id: string; [key: string]: unknown };
 
@@ -41,6 +55,20 @@ export const POLICY_KINDS: PolicyKind[] = [
   "historicalSyncs",
   "sharedDevices",
   "accountData",
+  "supportTickets",
+  "supportRequests",
+  "knowledgeArticles",
+  "announcements",
+  "systemSettings",
+  "systemAlerts",
+  "featureFlags",
+  "backups",
+  "apiKeys",
+  "webhooks",
+  "apps",
+  "apiLogs",
+  "adminActivity",
+  "discountCodes",
 ];
 
 export function emptyPolicies(): PoliciesStore {

@@ -32,6 +32,9 @@ export type ShiftRecord = {
   closedAt: string | null;
   salesCount: number;
   salesMinor: number;
+  /** Optional so older persisted shifts stay readable. */
+  refundCount?: number;
+  refundMinor?: number;
 };
 
 export function publicStaff(user: StaffUser) {

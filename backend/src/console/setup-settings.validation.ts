@@ -209,6 +209,9 @@ function validateRegisterPatch(
         break;
       }
     }
+    if (!rows.some((row) => row.active === true)) {
+      errors.push({ field, message: "At least one payment method must stay active" });
+    }
     if (!errors.some((error) => error.field === field)) {
       (data as Record<string, unknown>)[field] = rows;
     }

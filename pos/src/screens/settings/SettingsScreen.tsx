@@ -12,7 +12,6 @@ import {
   Keyboard,
   LayoutGrid,
   Network,
-  Palette,
   Percent,
   Plug,
   Printer,
@@ -58,7 +57,6 @@ type Page =
   | "loyalty"
   | "printing"
   | "receipt"
-  | "branding"
   | "payments"
   | "sales"
   | "holds"
@@ -95,7 +93,6 @@ const TILES: { id: Page; label: string; icon: typeof Boxes }[] = [
   { id: "security", label: "Security", icon: Shield },
   { id: "help", label: "Help & Training", icon: HelpCircle },
   { id: "general", label: "General", icon: Store },
-  { id: "branding", label: "Receipt branding", icon: Palette },
   { id: "invoice", label: "Invoices", icon: FileText },
   { id: "notifications", label: "Notifications", icon: Bell },
   { id: "categories", label: "Categories & display", icon: LayoutGrid },
@@ -113,7 +110,6 @@ const TITLES: Record<Page, string> = {
   loyalty: "Loyalty",
   printing: "Printing",
   receipt: "Receipt",
-  branding: "Receipt branding",
   payments: "Payments",
   sales: "Sales",
   holds: "Holds",
@@ -173,7 +169,6 @@ export function SettingsScreen({
           {page === "stock" && <StockSettings items={items} />}
           {page === "printing" && <PrintingSettings />}
           {page === "receipt" && <ReceiptSettings />}
-          {page === "branding" && <ReceiptSettings />}
           {page === "payments" && <PaymentsSettings />}
           {page === "security" && (
             <SecuritySettings staff={staff} onLockTerminal={onLockTerminal} />

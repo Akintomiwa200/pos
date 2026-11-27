@@ -15,7 +15,10 @@ import type { RegisterTender } from "../../lib/register-config";
 type Props = {
   selected: TenderType;
   amountMinor: number;
+  reference: string;
+  blockedReason?: string;
   onSelect: (tender: TenderType) => void;
+  onReference: (value: string) => void;
   onBack: () => void;
 };
 
@@ -76,15 +79,27 @@ const FALLBACK_METHODS: RegisterTender[] = [
 export function PaymentMethodsScreen({
   selected,
   amountMinor,
+  reference,
+  blockedReason,
   onSelect,
+  onReference,
   onBack,
 }: Props) {
   const settings = useStoreSettings();
+  const activeIds = enabledTenders(settings) as TenderType[];
   const configured = settings.registerTenders?.length
     ? settings.registerTenders
     : FALLBACK_METHODS;
-  const activeIds = enabledTenders(settings) as TenderType[];
-  const methods = configured.filter((method) => method.active && activeIds.includes(method.id));
+  const selectedMethods = configured.filter(
+    (method) => method.active && activeIds.includes(method.id),
+  );
+  // HQ can leave a non-empty list with every method switched off. Never strand
+  // the cashier on an empty payment grid.
+  const methods = selectedMethods.length
+    ? selectedMethods
+    : FALLBACK_METHODS.filter((method) => activeIds.includes(method.id));
+  const selectedMethod = methods.find((method) => method.id === selected);
+  const needsReference = Boolean(selectedMethod?.requiresReference);
 
   return (
     <section className="pay">
@@ -112,14 +127,26 @@ export function PaymentMethodsScreen({
           <strong>Wallet</strong>
           {settings.payWalletHint}
           {settings.payCard
-            ? ` Cards go through ${settings.gatewayDefault}.`
+            ? ` Cards go through ${settings.gatewayDefault} (set at HQ, shown read-only).`
             : ""}
         </div>
       ) : settings.payCard ? (
         <div className="pay-account">
           <strong>Cards</strong>
-          Charged through {settings.gatewayDefault}.
+          Charged through {settings.gatewayDefault} (HQ-derived, read-only).
         </div>
+      ) : null}
+      {blockedReason ? <div className="pay-blocked">{blockedReason}</div> : null}
+      {needsReference ? (
+        <label className="loyalty-field pay-reference">
+          Payment reference ({selectedMethod?.label})
+          <input
+            value={reference}
+            onChange={(event) => onReference(event.target.value)}
+            placeholder="Transfer or transaction reference"
+            autoComplete="off"
+          />
+        </label>
       ) : null}
       <div className="methods">
         {methods.map((method) => {

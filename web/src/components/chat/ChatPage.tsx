@@ -38,6 +38,12 @@ import { NewChatModal } from "./NewChatModal";
 const TYPING_IDLE_MS = 1_500;
 const TYPING_REFRESH_MS = 2_000;
 
+const EMOJI = [
+  "😀", "😄", "😊", "😍", "😎", "🥳", "😅", "😂",
+  "👍", "👎", "👏", "🙏", "💪", "🤝", "👀", "🤔",
+  "✅", "❌", "⚠️", "🔥", "💡", "📦", "🚚", "💰",
+];
+
 function relativeTime(iso: string, now = Date.now()) {
   const diff = now - new Date(iso).getTime();
   const mins = Math.max(0, Math.round(diff / 60_000));
@@ -250,6 +256,8 @@ export function ChatPage() {
   const [active, setActive] = useState<ChatConversation | null>(null);
   const [search, setSearch] = useState("");
   const [draft, setDraft] = useState("");
+  const [emojiOpen, setEmojiOpen] = useState(false);
+  const composerRef = useRef<HTMLInputElement>(null);
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [openPurchased, setOpenPurchased] = useState(true);
@@ -313,6 +321,7 @@ export function ChatPage() {
     const request = ++threadRequestRef.current;
     stopTyping();
     setDraft("");
+    setEmojiOpen(false);
     setActiveId(id);
     const thread = await getChatThread(id, self?.id ?? "");
     if (request !== threadRequestRef.current) return;
@@ -387,6 +396,19 @@ export function ChatPage() {
     return groups;
   }, [messages]);
 
+  function insertEmoji(emoji: string) {
+    const input = composerRef.current;
+    const start = input?.selectionStart ?? draft.length;
+    const end = input?.selectionEnd ?? draft.length;
+    setDraft((current) => `${current.slice(0, start)}${emoji}${current.slice(end)}`);
+    setEmojiOpen(false);
+    requestAnimationFrame(() => {
+      input?.focus();
+      const caret = start + emoji.length;
+      input?.setSelectionRange(caret, caret);
+    });
+  }
+
   async function onSend() {
     const text = draft.trim();
     if (!activeId || !text || busy) return;
@@ -401,6 +423,7 @@ export function ChatPage() {
       );
       setMessages((current) => upsertMessage(current, message));
       setDraft("");
+      setEmojiOpen(false);
       setConversations((current) =>
         current
           .map((row) =>
@@ -580,25 +603,60 @@ export function ChatPage() {
             </div>
 
             <footer className="border-t border-pos-border/70 bg-pos-surface px-3 py-3 sm:px-4">
-              <div className="flex items-center gap-1 rounded-full bg-pos-surface-muted px-2.5 py-2 sm:gap-2 sm:px-3">
-                <button type="button" className="rounded-full p-1.5 text-pos-ink-faint hover:text-pos-ink">
+              <div className="relative flex items-center gap-1 rounded-full bg-pos-surface-muted px-2.5 py-2 sm:gap-2 sm:px-3">
+                <button
+                  type="button"
+                  title="Add emoji"
+                  aria-label="Add emoji"
+                  aria-expanded={emojiOpen}
+                  onClick={() => setEmojiOpen((value) => !value)}
+                  className="rounded-full p-1.5 text-pos-ink-faint hover:text-pos-ink"
+                >
                   <Smile size={18} />
                 </button>
+                {emojiOpen ? (
+                  <div
+                    role="group"
+                    aria-label="Emoji picker"
+                    className="absolute bottom-full left-2 z-20 mb-2 grid w-max grid-cols-8 gap-1 rounded-2xl border border-pos-border bg-pos-surface p-2 shadow-pos-md"
+                  >
+                    {EMOJI.map((emoji) => (
+                      <button
+                        key={emoji}
+                        type="button"
+                        aria-label={`Insert ${emoji}`}
+                        onClick={() => insertEmoji(emoji)}
+                        className="grid size-8 place-items-center rounded-lg text-lg transition hover:bg-pos-surface-muted"
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
                 <input
+                  ref={composerRef}
                   className="min-w-0 flex-1 bg-transparent text-sm text-pos-ink outline-none placeholder:text-pos-ink-faint"
                   placeholder="Type a Message"
                   value={draft}
                   onChange={(event) => setDraft(event.target.value)}
                   onKeyDown={(event) => {
+                    if (event.key === "Escape") setEmojiOpen(false);
                     if (event.key === "Enter" && !event.shiftKey) {
                       event.preventDefault();
                       void onSend();
                     }
                   }}
                 />
-                <button type="button" className="rounded-full p-1.5 text-pos-ink-faint hover:text-pos-ink">
-                  <Paperclip size={18} />
-                </button>
+                <span className="inline-flex" title="Attachments not available in this build">
+                  <button
+                    type="button"
+                    disabled
+                    aria-label="Attachments not available in this build"
+                    className="cursor-not-allowed rounded-full p-1.5 text-pos-ink-faint opacity-50"
+                  >
+                    <Paperclip size={18} />
+                  </button>
+                </span>
                 <button
                   type="button"
                   disabled={busy || !draft.trim()}

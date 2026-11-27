@@ -769,6 +769,14 @@ export function clearTransferRows(datasetId?: string) {
   if (endpoint) rowCache.delete(endpoint);
 }
 
+export type DatasetCount = { id: string; count: number; importable: boolean };
+
+/** Live counts from HQ, keyed by dataset id. The catalogue itself stays on the client. */
+export async function listDatasetCounts(): Promise<Record<string, DatasetCount>> {
+  const data = await api<{ datasets: DatasetCount[] }>("/api/console/data-transfer/datasets");
+  return Object.fromEntries((data.datasets ?? []).map((row) => [row.id, row]));
+}
+
 export async function listTransferRows(
   dataset: TransferDataset,
   options: { fresh?: boolean } = {},
@@ -801,10 +809,14 @@ export type ImportResult = {
 };
 
 /** Every import method ends here, so behaviour does not depend on how data arrived. */
-export async function importTransferRows(dataset: string, rows: Record<string, unknown>[]): Promise<ImportResult> {
+export async function importTransferRows(
+  dataset: string,
+  rows: Record<string, unknown>[],
+  mode: "update" | "skip" = "update",
+): Promise<ImportResult> {
   const result = await api<ImportResult>("/api/console/data-transfer/import", {
     method: "POST",
-    body: JSON.stringify({ dataset, rows }),
+    body: JSON.stringify({ dataset, rows, mode }),
   });
   clearTransferRows(dataset);
   return result;

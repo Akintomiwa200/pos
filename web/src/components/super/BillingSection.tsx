@@ -36,9 +36,12 @@ import {
   savePlan,
   useLiveBilling,
   type BillingInvoice,
+  type BillingPayment,
   type BillingPlan,
 } from "@/lib/billing";
 import { listSales, renewTill, type HqSale } from "@/lib/hq-api";
+import { asBool, asNum, asStr } from "@/lib/hq-policies";
+import { usePolicyCollection } from "@/lib/use-policy-collection";
 import { useAuth } from "@/components/AuthProvider";
 import { ManagerSkeleton } from "@/components/Skeleton";
 import {
@@ -397,8 +400,31 @@ function PlansPage() {
   );
 }
 
+/** Only report a fee when a paid licence invoice or payment for that till exists. */
+function tillLicenceFeeMinor(
+  tillId: string,
+  invoices: BillingInvoice[],
+  payments: BillingPayment[],
+): number | null {
+  const paid = invoices
+    .filter(
+      (row) =>
+        row.tillId === tillId &&
+        row.kind === "till_licence" &&
+        row.status === "paid" &&
+        row.amountMinor > 0,
+    )
+    .sort((a, b) => Date.parse(b.paidAt ?? b.issuedAt) - Date.parse(a.paidAt ?? a.issuedAt));
+  if (paid.length > 0) return paid[0].amountMinor;
+
+  const payment = payments
+    .filter((row) => row.tillId === tillId && row.amountMinor > 0)
+    .sort((a, b) => Date.parse(b.paidAt) - Date.parse(a.paidAt));
+  return payment[0]?.amountMinor ?? null;
+}
+
 function SubscriptionsPage() {
-  const { subscriptions, live, ready } = useLiveBilling();
+  const { subscriptions, invoices, payments, live, ready } = useLiveBilling();
   const { tills } = useLivePos();
   if (!ready) return <ManagerSkeleton variant="table" />;
 
@@ -409,15 +435,17 @@ function SubscriptionsPage() {
   const expiring = tills.filter(
     (t) => !t.expired && t.subscriptionExpiresAt && new Date(t.subscriptionExpiresAt).getTime() - now < 30 * 86400000,
   );
-  const maxTills = (sub && sub.planTillCap > 0 ? sub.planTillCap : Math.max(1, tills.length));
-  const utilisation = sub && sub.planTillCap > 0 ? Math.min(100, Math.round((tills.length / maxTills) * 100)) : 100;
+  const cap = sub?.planTillCap ?? null;
+  const hasCap = cap !== null && cap > 0;
+  const capCopy = cap === -1 ? "unlimited" : hasCap ? `up to ${cap}` : "no recorded cap";
+  const utilisation = cap !== null && cap > 0 ? Math.min(100, Math.round((tills.length / cap) * 100)) : null;
 
   return (
     <div>
       <SetupHeader
         kicker="Producer · Billing"
         title="Subscriptions"
-        copy="Company plan plus the live till licences attached to it. Renew before a licence lapses."
+        copy="Company plan plus the live till licences attached to it. Renew before a licence lapses; offline tills are marked below."
         action={<LiveBadge live={live} />}
       />
       <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -452,7 +480,7 @@ function SubscriptionsPage() {
                 {sub.planPopular ? <Sparkles size={16} className="ml-2 inline text-pos-primary" /> : null}
               </h2>
               <p className="mt-1 text-sm text-pos-ink-muted">
-                {money(sub.planPriceMinor)} / year · up to {planCapLabel({ tillCap: sub.planTillCap } as BillingPlan)} till{" "}
+                {money(sub.planPriceMinor)} / year · {capCopy} till{" "}
                 {sub.planTillCap === 1 ? "licence" : "licences"} · renews {dateLabel(sub.renewsAt)}
               </p>
             </div>
@@ -469,17 +497,27 @@ function SubscriptionsPage() {
             <div className="mb-1.5 flex items-center justify-between text-[12px] text-pos-ink-muted">
               <span className="font-medium text-pos-ink">Till allowance usage</span>
               <span className="tabular-nums">
-                {tills.length} of {maxTills} {sub.planTillCap > 0 ? "used" : "· unlimited"} · {utilisation}%
+                {utilisation === null
+                  ? `${tills.length} tills · ${cap === -1 ? "Unlimited" : "No cap recorded"}`
+                  : `${tills.length} of ${cap} used · ${utilisation}%`}
               </span>
             </div>
-            <div className="h-2 overflow-hidden rounded-full bg-pos-surface-muted">
-              <div
-                className={`h-full rounded-full transition-all ${
-                  utilisation > 85 ? "bg-pos-danger" : utilisation > 60 ? "bg-pos-warning" : "bg-pos-primary"
-                }`}
-                style={{ width: `${utilisation}%` }}
-              />
-            </div>
+            {utilisation === null ? (
+              <p className="text-[12px] text-pos-ink-faint">
+                {cap === -1
+                  ? "Unlimited allowance — there is no cap to report."
+                  : "No allowance cap recorded for this plan."}
+              </p>
+            ) : (
+              <div className="h-2 overflow-hidden rounded-full bg-pos-surface-muted">
+                <div
+                  className={`h-full rounded-full transition-all ${
+                    utilisation > 85 ? "bg-pos-danger" : utilisation > 60 ? "bg-pos-warning" : "bg-pos-primary"
+                  }`}
+                  style={{ width: `${utilisation}%` }}
+                />
+              </div>
+            )}
           </div>
         </section>
       ) : (
@@ -507,6 +545,15 @@ function SubscriptionsPage() {
             const urgent = !pastDue && Boolean(
               till.subscriptionExpiresAt && new Date(till.subscriptionExpiresAt).getTime() - now < 30 * 86400000,
             );
+            const status = pastDue ? "Expired" : urgent ? "Expiring soon" : till.online ? "Active" : "Offline";
+            const statusTone = pastDue
+              ? "bg-pos-danger/10 text-pos-danger"
+              : urgent
+                ? "bg-pos-warning/10 text-pos-warning"
+                : till.online
+                  ? "bg-pos-success/10 text-pos-success"
+                  : "bg-pos-surface-muted text-pos-ink-faint";
+            const feeMinor = tillLicenceFeeMinor(till.id, invoices, payments);
             return (
               <div
                 key={till.id}
@@ -521,28 +568,25 @@ function SubscriptionsPage() {
                       {till.branchName || "Unassigned branch"} · {till.product}
                     </p>
                   </div>
-                  <span
-                    className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                      pastDue
-                        ? "bg-pos-danger/10 text-pos-danger"
-                        : urgent
-                          ? "bg-pos-warning/10 text-pos-warning"
-                          : "bg-pos-success/10 text-pos-success"
-                    }`}
-                  >
-                    {pastDue ? "Expired" : urgent ? "Expiring soon" : till.online ? "Active" : "Active"}
+                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusTone}`}>
+                    {status}
                   </span>
                 </div>
                 <dl className="mt-4 grid grid-cols-2 gap-3 text-[13px]">
                   <div className="rounded-2xl bg-pos-surface-muted p-3">
                     <dt className="text-[11px] text-pos-ink-faint">Licence fee</dt>
-                    <dd className="mt-0.5 font-medium text-pos-ink">{money(2_500_000)} / yr</dd>
+                    <dd className="mt-0.5 font-medium text-pos-ink">
+                      {feeMinor === null ? "—" : `${money(feeMinor)} / yr`}
+                    </dd>
                   </div>
                   <div className="rounded-2xl bg-pos-surface-muted p-3">
                     <dt className="text-[11px] text-pos-ink-faint">Renews on</dt>
                     <dd className="mt-0.5 font-medium text-pos-ink">{dateLabel(till.subscriptionExpiresAt)}</dd>
                   </div>
                 </dl>
+                <p className="mt-2 text-[11px] text-pos-ink-faint">
+                  Fee is shown only when a paid licence invoice or payment is recorded.
+                </p>
                 {pastDue || urgent ? (
                   <button
                     type="button"
@@ -559,8 +603,9 @@ function SubscriptionsPage() {
                     <Zap size={15} /> Renew now
                   </button>
                 ) : (
-                  <p className="mt-4 flex items-center gap-1.5 text-[12px] text-pos-success">
-                    <BadgeCheck size={14} /> Licence covered for this period.
+                  <p className={`mt-4 flex items-center gap-1.5 text-[12px] ${till.online ? "text-pos-success" : "text-pos-ink-faint"}`}>
+                    {till.online ? <BadgeCheck size={14} /> : <WifiOff size={14} />}
+                    {till.online ? "Licence covered for this period." : "Offline · licence covered for this period."}
                   </p>
                 )}
               </div>
@@ -573,7 +618,7 @@ function SubscriptionsPage() {
 }
 
 const PAY_METHODS = [
-  { id: "paystack", label: "Paystack", hint: "Card, transfer or USSD" },
+  { id: "paystack", label: "Manual Paystack reconciliation", hint: "Record a settled Paystack payment" },
   { id: "bank", label: "Bank transfer", hint: "Account transfer" },
   { id: "cash", label: "Cash", hint: "Paid in person" },
   { id: "credit", label: "Credit", hint: "Granted by Super Admin" },
@@ -593,7 +638,8 @@ function PayInvoiceModal({
     setBusy(true);
     try {
       await payInvoice(invoice.id, { provider: method });
-      toast.success(`${invoice.invoiceNo} marked as paid via ${method}.`);
+      const label = PAY_METHODS.find((row) => row.id === method)?.label ?? method;
+      toast.success(`${invoice.invoiceNo} marked as paid via ${label}.`);
       onClose();
     } catch (err) {
       toast.error(err, "Could not confirm payment");
@@ -628,8 +674,8 @@ function PayInvoiceModal({
               {money(invoice.amountMinor)} due
             </p>
             <p className="mt-1 text-[12px] leading-relaxed text-pos-ink-muted">
-              Confirm how {invoice.companyName} settled this invoice on the platform — it updates
-              everywhere in real time.
+              Record how {invoice.companyName} settled this invoice. No charge is initiated here —
+              this only marks the invoice as paid once you have confirmed the money arrived.
             </p>
           </div>
 
@@ -682,10 +728,10 @@ function PayInvoiceModal({
             <PrimaryButton disabled={busy} onClick={confirm}>
               {busy ? (
                 <>
-                  <Loader2 size={14} className="mr-1.5 animate-spin" /> Confirming…
+                  <Loader2 size={14} className="mr-1.5 animate-spin" /> Marking…
                 </>
               ) : (
-                "Confirm payment"
+                "Mark as paid"
               )}
             </PrimaryButton>
           </div>
@@ -874,22 +920,95 @@ function PaymentsPage() {
   );
 }
 
-function DiscountsPage() {
-  const [codes, setCodes] = useState<Array<{ code: string; percent: number; uses: number; expires: string; active: boolean }>>([
-    { code: "LAUNCH-10", percent: 10, uses: 0, expires: "31 Dec 2026", active: true },
-    { code: "TEAM-25", percent: 25, uses: 0, expires: "31 Dec 2026", active: true },
-    { code: "RETAIL50", percent: 50, uses: 0, expires: "31 Dec 2026", active: false },
-  ]);
-  const [newCode, setNewCode] = useState("");
+type DiscountRow = {
+  id: string;
+  code: string;
+  percent: number | null;
+  uses: number | null;
+  discountMinor: number | null;
+  expiry: string;
+  active: boolean;
+};
 
-  function addCode() {
-    if (!newCode.trim()) return;
-    setCodes((rows) => [
-      { code: newCode.trim().toUpperCase(), percent: 10, uses: 0, expires: "31 Dec 2026", active: true },
-      ...rows,
-    ]);
-    setNewCode("");
-    toast.success("Discount code created.");
+function expiryLabel(value: string) {
+  if (!value) return "—";
+  const at = new Date(value);
+  return Number.isNaN(at.getTime()) ? value : dateLabel(value);
+}
+
+function DiscountsPage() {
+  const { rows, loading, error, save, remove } = usePolicyCollection("discountCodes");
+  const [newCode, setNewCode] = useState("");
+  const [percent, setPercent] = useState("10");
+  const [expires, setExpires] = useState("");
+
+  const codes: DiscountRow[] = rows.map((row) => {
+    const rawPercent = row.percent ?? row.percentOff ?? row.discountPercent;
+    const rawUses = row.uses ?? row.usageCount;
+    const rawDiscount = row.discountMinor ?? row.revenueMinor ?? row.revenueLostMinor;
+    const rawExpiry = row.expiry ?? row.expiresAt ?? row.expires;
+    return {
+      id: row.id,
+      code: asStr(row.code),
+      percent: rawPercent === undefined || rawPercent === null ? null : asNum(rawPercent),
+      uses: rawUses === undefined || rawUses === null ? null : asNum(rawUses),
+      discountMinor: rawDiscount === undefined || rawDiscount === null ? null : asNum(rawDiscount),
+      expiry: asStr(rawExpiry),
+      active: asBool(row.active ?? row.enabled),
+    };
+  });
+
+  // Only report totals when every code carries a real recorded value.
+  const totalUses =
+    codes.length > 0 && codes.every((row) => row.uses !== null)
+      ? codes.reduce((sum, row) => sum + (row.uses ?? 0), 0)
+      : null;
+  const totalDiscount =
+    codes.length > 0 && codes.every((row) => row.discountMinor !== null)
+      ? codes.reduce((sum, row) => sum + (row.discountMinor ?? 0), 0)
+      : null;
+  const expiries = Array.from(new Set(codes.map((row) => row.expiry).filter(Boolean)));
+  const sharedExpiry = codes.length > 0 && expiries.length === 1 ? expiryLabel(expiries[0]) : "—";
+
+  async function addCode() {
+    const code = newCode.trim().toUpperCase();
+    const percentValue = Number(percent);
+    if (!code) {
+      toast.error("Enter a discount code.");
+      return;
+    }
+    if (!Number.isFinite(percentValue) || percentValue <= 0 || percentValue > 100) {
+      toast.error("Discount percent must be between 1 and 100.");
+      return;
+    }
+    try {
+      await save({ code, percent: percentValue, expiry: expires || null, active: true });
+      setNewCode("");
+      setPercent("10");
+      setExpires("");
+      toast.success("Discount code created.");
+    } catch (err) {
+      toast.error(err, "Could not create code");
+    }
+  }
+
+  async function toggleCode(row: DiscountRow) {
+    try {
+      await save({ id: row.id, active: !row.active });
+      toast.success(row.active ? "Code paused." : "Code activated.");
+    } catch (err) {
+      toast.error(err, "Could not update code");
+    }
+  }
+
+  async function deleteCode(row: DiscountRow) {
+    if (!window.confirm(`Delete discount code ${row.code || row.id}?`)) return;
+    try {
+      await remove(row.id);
+      toast.success("Discount code deleted.");
+    } catch (err) {
+      toast.error(err, "Could not delete code");
+    }
   }
 
   return (
@@ -897,63 +1016,108 @@ function DiscountsPage() {
       <SetupHeader
         kicker="Producer · Billing"
         title="Discounts"
-        copy="Promotional codes that apply to subscription licences. Codes are distributed to prospective tenants."
+        copy="Promotional codes that apply to subscription licences. Create, pause and delete codes — changes are saved."
       />
       <div className="mb-6 grid gap-3 sm:grid-cols-4">
         <SetupStat label="Active codes" value={String(codes.filter((c) => c.active).length)} tone="accent" />
-        <SetupStat label="Total uses" value={String(codes.reduce((sum, c) => sum + c.uses, 0))} />
-        <SetupStat label="Revenue lost" value="₦0" hint="Discount given" />
-        <SetupStat label="Expiry" value="31 Dec 2026" hint="Uniform across codes" />
+        <SetupStat label="Total uses" value={totalUses === null ? "—" : String(totalUses)} hint="Where recorded" />
+        <SetupStat label="Discount given" value={totalDiscount === null ? "—" : money(totalDiscount)} hint="Where recorded" />
+        <SetupStat label="Expiry" value={sharedExpiry} hint="Per code" />
       </div>
+      {loading ? <p className="mb-4 text-sm text-pos-ink-faint">Loading codes…</p> : null}
+      {error ? <p className="mb-4 text-sm text-pos-danger">{error}</p> : null}
       <div className="mb-6 rounded-[20px] border border-pos-border bg-pos-surface p-5">
         <p className="text-[15px] font-semibold text-pos-ink">Create a code</p>
         <div className="mt-3 flex flex-col gap-2 sm:flex-row">
           <input
-            className="flex-1 rounded-full bg-pos-surface-muted px-4 py-2.5 text-sm text-pos-ink outline-none ring-1 ring-transparent transition focus:ring-pos-primary/30"
+            className="min-w-0 flex-1 rounded-full bg-pos-surface-muted px-4 py-2.5 text-sm text-pos-ink outline-none ring-1 ring-transparent transition focus:ring-pos-primary/30"
             placeholder="e.g. BLACKFRIDAY-30"
             value={newCode}
             onChange={(e) => setNewCode(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && addCode()}
+            onKeyDown={(e) => e.key === "Enter" && void addCode()}
           />
-          <PrimaryButton onClick={addCode}>
+          <input
+            type="number"
+            min={1}
+            max={100}
+            aria-label="Discount percent"
+            className="w-full rounded-full bg-pos-surface-muted px-4 py-2.5 text-sm text-pos-ink outline-none ring-1 ring-transparent transition focus:ring-pos-primary/30 sm:w-24"
+            value={percent}
+            onChange={(e) => setPercent(e.target.value)}
+          />
+          <input
+            type="date"
+            aria-label="Expiry date"
+            className="w-full rounded-full bg-pos-surface-muted px-4 py-2.5 text-sm text-pos-ink outline-none ring-1 ring-transparent transition focus:ring-pos-primary/30 sm:w-40"
+            value={expires}
+            onChange={(e) => setExpires(e.target.value)}
+          />
+          <PrimaryButton onClick={() => void addCode()}>
             <Percent size={15} /> Create code
           </PrimaryButton>
         </div>
       </div>
-      <ul className="space-y-2">
-        {codes.map((row) => (
-          <li
-            key={row.code}
-            className="flex flex-wrap items-center gap-3 rounded-[18px] border border-pos-border bg-pos-surface px-5 py-4"
-          >
-            <code className="rounded-lg bg-pos-surface-muted px-2.5 py-1 font-semibold text-pos-primary">{row.code}</code>
-            <span className="text-[12px] text-pos-ink-faint">{row.percent}% off licence</span>
-            <span className="text-[12px] text-pos-ink-faint">{row.uses} uses</span>
-            <span className="text-[12px] text-pos-ink-faint">Expires {row.expires}</span>
-            <span
-              className={`ml-auto rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                row.active ? "bg-pos-success/10 text-pos-success" : "bg-pos-surface-muted text-pos-ink-faint"
-              }`}
+      {!loading && codes.length === 0 ? (
+        <div className="rounded-[18px] border border-pos-border bg-pos-surface p-8 text-center text-sm text-pos-ink-muted">
+          No discount codes yet — create one above.
+        </div>
+      ) : (
+        <ul className="space-y-2">
+          {codes.map((row) => (
+            <li
+              key={row.id}
+              className="flex flex-wrap items-center gap-3 rounded-[18px] border border-pos-border bg-pos-surface px-5 py-4"
             >
-              {row.active ? "Active" : "Paused"}
-            </span>
-            <button
-              type="button"
-              className="inline-flex items-center gap-1.5 rounded-full bg-pos-surface-muted px-3 py-1.5 text-[12px] font-medium text-pos-ink hover:text-pos-primary"
-              onClick={async () => {
-                try {
-                  await navigator.clipboard.writeText(row.code);
-                  toast.success("Code copied.");
-                } catch {
-                  toast.error("Could not copy code.");
-                }
-              }}
-            >
-              <Copy size={13} /> Copy
-            </button>
-          </li>
-        ))}
-      </ul>
+              <code className="rounded-lg bg-pos-surface-muted px-2.5 py-1 font-semibold text-pos-primary">
+                {row.code || "Untitled code"}
+              </code>
+              <span className="text-[12px] text-pos-ink-faint">
+                {row.percent === null ? "—" : `${row.percent}% off licence`}
+              </span>
+              <span className="text-[12px] text-pos-ink-faint">
+                {row.uses === null ? "—" : `${row.uses} uses`}
+              </span>
+              <span className="text-[12px] text-pos-ink-faint">Expires {expiryLabel(row.expiry)}</span>
+              <span
+                className={`ml-auto rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                  row.active ? "bg-pos-success/10 text-pos-success" : "bg-pos-surface-muted text-pos-ink-faint"
+                }`}
+              >
+                {row.active ? "Active" : "Paused"}
+              </span>
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 rounded-full bg-pos-surface-muted px-3 py-1.5 text-[12px] font-medium text-pos-ink hover:text-pos-primary"
+                onClick={() => void toggleCode(row)}
+              >
+                <Percent size={13} /> {row.active ? "Pause" : "Activate"}
+              </button>
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 rounded-full bg-pos-surface-muted px-3 py-1.5 text-[12px] font-medium text-pos-ink hover:text-pos-primary"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(row.code);
+                    toast.success("Code copied.");
+                  } catch {
+                    toast.error("Could not copy code.");
+                  }
+                }}
+              >
+                <Copy size={13} /> Copy
+              </button>
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 rounded-full bg-pos-surface-muted px-3 py-1.5 text-[12px] font-medium text-pos-ink hover:text-pos-danger"
+                onClick={() => void deleteCode(row)}
+                aria-label={`Delete ${row.code || row.id}`}
+              >
+                <Trash2 size={13} /> Delete
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -967,8 +1131,10 @@ function UsagePage() {
   const plan = plans.find((row) => row.id === (sub?.planId ?? "")) ?? null;
   const active = tills.filter((t) => t.online).length;
   const total = tills.length;
-  const allowance = plan?.tillCap !== undefined && plan.tillCap > 0 ? plan.tillCap : total;
-  const pct = total ? Math.min(100, Math.round((total / (plan?.tillCap && plan.tillCap > 0 ? plan.tillCap : total)) * 100)) : 0;
+  const cap = plan?.tillCap ?? null;
+  const hasCap = cap !== null && cap > 0;
+  const allowanceLabel = cap === -1 ? "Unlimited" : hasCap ? String(cap) : "—";
+  const pct = cap !== null && cap > 0 ? Math.min(100, Math.round((total / cap) * 100)) : null;
 
   return (
     <div>
@@ -980,7 +1146,7 @@ function UsagePage() {
       />
       <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <SetupStat label="Till licences" value={String(total)} hint={`${active} online now`} tone="accent" />
-        <SetupStat label="Allowance" value={String(allowance)} hint={plan?.name ?? "No plan"} />
+        <SetupStat label="Allowance" value={allowanceLabel} hint={plan?.name ?? "No plan"} />
         <SetupStat label="Plan price" value={plan ? planPrice(plan) : "—"} hint="Per year" />
         <SetupStat label="Branches" value={String(branches.length)} hint={`${stores.length} stores`} />
       </div>
@@ -988,19 +1154,27 @@ function UsagePage() {
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-sm">
           <span className="font-medium text-pos-ink">Licence usage · {plan?.name ?? "custom"}</span>
           <span className="tabular-nums text-pos-ink-muted">
-            {plan?.tillCap && plan.tillCap > 0
-              ? `${total} of ${plan.tillCap} used · ${pct}%`
-              : `${total} tills · unlimited`}
+            {pct === null
+              ? `${total} tills · ${cap === -1 ? "Unlimited" : "No cap recorded"}`
+              : `${total} of ${cap} used · ${pct}%`}
           </span>
         </div>
-        <div className="h-3 overflow-hidden rounded-full bg-pos-surface-muted">
-          <div
-            className={`h-full rounded-full transition-all ${
-              pct > 85 ? "bg-pos-danger" : pct > 60 ? "bg-pos-warning" : "bg-pos-primary"
-            }`}
-            style={{ width: `${Math.min(100, pct)}%` }}
-          />
-        </div>
+        {pct === null ? (
+          <p className="text-[12px] text-pos-ink-faint">
+            {plan
+              ? "Unlimited allowance — no utilisation cap to report."
+              : "No plan assigned, so no allowance cap is available."}
+          </p>
+        ) : (
+          <div className="h-3 overflow-hidden rounded-full bg-pos-surface-muted">
+            <div
+              className={`h-full rounded-full transition-all ${
+                pct > 85 ? "bg-pos-danger" : pct > 60 ? "bg-pos-warning" : "bg-pos-primary"
+              }`}
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+        )}
         {plan?.tillCap != null && plan.tillCap > 0 && total > plan.tillCap ? (
           <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-pos-danger/10 px-3 py-1 text-[12px] font-medium text-pos-danger">
             Over your allowance — upgrade the plan under Billing → Plans.

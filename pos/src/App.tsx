@@ -4,12 +4,17 @@ import type { CartLine, CatalogItem, TenderType } from "./lib/types";
 import type { RegisterAction } from "./lib/register-config";
 import { computeLineTotals, formatMoney, sellPrice } from "./lib/types";
 import { formatStock, formatUnitLabel } from "./lib/units";
-import { Sidebar } from "./components/layout/Sidebar";
+import { Sidebar, type NavId } from "./components/layout/Sidebar";
 import { ProfileMenu, type MenuAction } from "./components/layout/ProfileMenu";
 import { CurrentOrder } from "./components/order/CurrentOrder";
 import { HoldModal } from "./components/order/HoldModal";
 import { PaymentOverlay } from "./components/payment/PaymentOverlay";
+import { PaymentHandoffModal, type Handoff } from "./components/payment/PaymentHandoffModal";
 import { LoyaltyModal } from "./components/payment/LoyaltyModal";
+import {
+  GiftCardModal,
+  type GiftCardSelection,
+} from "./components/payment/GiftCardModal";
 import { DiscountModal } from "./components/payment/DiscountModal";
 import { RefundModal } from "./components/payment/RefundModal";
 import { TipModal } from "./components/payment/TipModal";
@@ -58,8 +63,16 @@ import {
 import { createHeldTicket, loadLocalHolds, pruneExpiredHolds, saveLocalHolds, type HeldTicket } from "./lib/holds";
 import { buildRefundSale } from "./lib/refunds";
 import { pendingSaleCount as countPendingSales } from "./lib/sales";
+import { requestCharge } from "./lib/payments";
 import { useStoreSettings, useTills } from "./lib/use-store-settings";
-import { syncLoyaltyProgram } from "./lib/loyalty";
+import {
+  listLoyaltyCards,
+  listLoyaltyMembers,
+  syncLoyaltyProgram,
+  type LoyaltyMember,
+} from "./lib/loyalty";
+import { redeemLoyalty, reverseRedemption } from "./lib/redemptions";
+import { redeemGiftCard, reverseGiftCard } from "./lib/gift-cards";
 import { findTill, heartbeatDeviceTill, TILL_EXPIRED_EVENT, TILL_TAKEN_EVENT, tillLabel, tillNeedsActivation } from "./lib/tills";
 import { normalizeTillProduct } from "./lib/till-code";
 import { TablesScreen } from "./screens/tables/TablesScreen";
@@ -67,7 +80,12 @@ import { RoomsScreen } from "./screens/rooms/RoomsScreen";
 import { KitchenHome } from "./screens/kitchen/KitchenHome";
 import { startHqOrgSync } from "./lib/hq-settings-sync";
 import { useHardwareHex } from "./lib/device-hex";
-import { getPrinterGeometry, loadPrinterConfig } from "./lib/printers";
+import {
+  getPrinterGeometry,
+  loadPrinterConfig,
+  sendReceiptLayout,
+  type ReceiptRichLine,
+} from "./lib/printers";
 import {
   canAccessSettings,
   isSellOnly,
@@ -95,6 +113,47 @@ type Gate =
   | "price-override"
   | "discount"
   | "refund";
+
+/** Shared state for one checkout attempt, including any redemption to reverse. */
+type CheckoutContext = {
+  ticketId: string;
+  baseMinor: number;
+  loyaltyNumber: string | null;
+  loyaltyPointsRedeemed: number;
+  loyaltyRedeemMinor: number;
+  loyaltyBalanceBefore: number | null;
+  loyaltyBalanceAfter: number | null;
+  giftCardCode: string | null;
+  giftCardChargedMinor: number | null;
+  giftCardBalanceAfterMinor: number | null;
+  redeemedLoyalty: boolean;
+  redeemedGiftCard: boolean;
+  loyaltyRedemptionId: string | null;
+  giftRedemptionId: string | null;
+};
+
+type ChargeOutcome = "paid" | "handoff" | "failed";
+
+type TipContext = { method: TenderType; checkout: CheckoutContext };
+
+type LoyaltyConfirmation = {
+  member: LoyaltyMember;
+  points: number;
+  valueMinor: number;
+  method: TenderType;
+};
+
+function equalSplit(totalMinor: number, parts: number) {
+  const count = Math.max(1, parts);
+  const base = Math.floor(Math.max(0, totalMinor) / count);
+  const remainder = Math.max(0, totalMinor) - base * count;
+  return Array.from({ length: count }, (_, index) => base + (index < remainder ? 1 : 0));
+}
+
+/** TENDER_LABEL may not yet include gift-card while HQ copy is syncing. */
+function tenderLabel(method: TenderType) {
+  return (TENDER_LABEL as Record<string, string>)[method] ?? method;
+}
 
 function beep() {
   try {
@@ -193,7 +252,7 @@ export default function App() {
   const [blindRefundOpen, setBlindRefundOpen] = useState(false);
   const [pendingBlindRefund, setPendingBlindRefund] = useState<{ amountMinor: number; tender: TenderType; reason: string } | null>(null);
   const [tipOpen, setTipOpen] = useState(false);
-  const [tipContext, setTipContext] = useState<{ method: TenderType; loyalty: string | null } | null>(null);
+  const [tipContext, setTipContext] = useState<TipContext | null>(null);
   const [tipMinor, setTipMinor] = useState(0);
   const [pendingDiscount, setPendingDiscount] = useState<number | null>(null);
   const [notice, setNotice] = useState("");
@@ -215,9 +274,18 @@ export default function App() {
     "card",
   ]);
   const [splitPaid, setSplitPaid] = useState<boolean[]>([false, false]);
+  const [splitAmounts, setSplitAmounts] = useState<number[]>(() => equalSplit(0, 2));
   const [paying, setPaying] = useState(false);
+  const [busyLabel, setBusyLabel] = useState<string | null>(null);
+  const [handoff, setHandoff] = useState<Handoff | null>(null);
   const [loyaltyOpen, setLoyaltyOpen] = useState(false);
   const [loyaltyNumber, setLoyaltyNumber] = useState<string | null>(null);
+  const [loyaltyConfirm, setLoyaltyConfirm] = useState<LoyaltyConfirmation | null>(null);
+  const [giftCardOpen, setGiftCardOpen] = useState(false);
+  const [checkout, setCheckout] = useState<CheckoutContext | null>(null);
+  const checkoutRef = useRef<CheckoutContext | null>(null);
+  const pendingGiftCardRef = useRef<GiftCardSelection | null>(null);
+  const printedKitchenTickets = useRef(new Set<string>());
   const [receipt, setReceipt] = useState<SaleReceipt | null>(null);
   const [receiptSaved, setReceiptSaved] = useState<"saving" | "saved" | "queued">("saved");
   const [pendingSales, setPendingSales] = useState(countPendingSales);
@@ -274,6 +342,8 @@ export default function App() {
     );
   });
   const totals = computeLineTotals(cart, settings, discountMinor);
+  const redemptionMinor = checkout?.loyaltyRedeemMinor ?? 0;
+  const chargeBaseMinor = Math.max(0, totals.totalMinor - redemptionMinor);
   const activeTill = tills[0] ?? findTill();
   const branchId = activeTill.branchId || null;
   const product = normalizeTillProduct(activeTill.product);
@@ -464,16 +534,32 @@ export default function App() {
     };
   }, []);
 
-  const splitParts = useMemo(() => {
-    const n = Math.max(1, splitCount);
-    const base = Math.floor(totals.totalMinor / n);
-    const remainder = totals.totalMinor - base * n;
-    return Array.from({ length: n }, (_, i) => ({
-      tender: splitTenders[i] ?? "cash",
-      amountMinor: base + (i === 0 ? remainder : 0),
-      paid: splitPaid[i] ?? false,
-    }));
-  }, [splitCount, splitTenders, splitPaid, totals.totalMinor]);
+  useEffect(() => {
+    setSplitAmounts(equalSplit(chargeBaseMinor, splitCount));
+  }, [chargeBaseMinor, splitCount]);
+
+  const splitParts = useMemo(
+    () =>
+      Array.from({ length: Math.max(1, splitCount) }, (_, index) => ({
+        tender: splitTenders[index] ?? "cash",
+        amountMinor: splitAmounts[index] ?? 0,
+        paid: splitPaid[index] ?? false,
+      })),
+    [splitCount, splitTenders, splitAmounts, splitPaid],
+  );
+
+  function setCheckoutContext(next: CheckoutContext | null) {
+    checkoutRef.current = next;
+    setCheckout(next);
+  }
+
+  function patchCheckout(patch: Partial<CheckoutContext>) {
+    const current = checkoutRef.current;
+    if (!current) return;
+    const next = { ...current, ...patch };
+    checkoutRef.current = next;
+    setCheckout(next);
+  }
 
   function resetTill() {
     setCart([]);
@@ -485,11 +571,18 @@ export default function App() {
     setSplitCount(2);
     setSplitTenders(["cash", "card"]);
     setSplitPaid([false, false]);
+    setSplitAmounts(equalSplit(0, 2));
     setReceipt(null);
     setReceiptSaved("saved");
     setPaying(false);
+    setBusyLabel(null);
+    setHandoff(null);
     setLoyaltyOpen(false);
     setLoyaltyNumber(null);
+    setLoyaltyConfirm(null);
+    setGiftCardOpen(false);
+    pendingGiftCardRef.current = null;
+    setCheckoutContext(null);
     setScreen("home");
     setCategory("all");
     setQuery("");
@@ -570,7 +663,58 @@ export default function App() {
   function advanceTicket(id: string) {
     const ticket = tickets.find((row) => row.id === id);
     if (!ticket) return;
-    patchTicket(id, { status: TICKET_FLOW[ticket.status] });
+    const status = TICKET_FLOW[ticket.status];
+    patchTicket(id, { status });
+    if (status === "prep") {
+      void printKitchenTicket({
+        id: ticket.id,
+        label: `${channelLabel(ticket.channel)} · ${ticket.orderNo}`,
+        lines: ticket.lines,
+      });
+    }
+  }
+
+  async function printKitchenTicket(input: {
+    id: string;
+    label: string;
+    lines: CartLine[];
+    note?: string;
+  }) {
+    if (!settings.printKitchenOnSend) return;
+    const printer = loadPrinterConfig().kitchenPrinter;
+    if (!printer || printedKitchenTickets.current.has(input.id)) return;
+    printedKitchenTickets.current.add(input.id);
+    const layout: ReceiptRichLine[] = [
+      { t: "c", text: settings.storeName || "Kitchen", bold: true },
+      { t: "c", text: "KITCHEN TICKET", bold: true },
+      { t: "d" },
+      { t: "r", l: "Order", r: input.label, bold: true },
+      {
+        t: "r",
+        l: "Sent",
+        r: new Date().toLocaleTimeString("en-GB", { hour12: false }),
+        gray: true,
+      },
+      { t: "d" },
+      ...input.lines.map(
+        (line) =>
+          ({
+            t: "r",
+            l: `${line.quantity} × ${line.name}`,
+            r: "",
+          }) as ReceiptRichLine,
+      ),
+      ...(input.note ? ([{ t: "c", text: input.note }] as ReceiptRichLine[]) : []),
+      { t: "d" },
+    ];
+    try {
+      await sendReceiptLayout(printer, layout, 80);
+    } catch (error) {
+      printedKitchenTickets.current.delete(input.id);
+      toast.error(
+        `Kitchen ticket did not print: ${error instanceof Error ? error.message : "unknown error"}`,
+      );
+    }
   }
 
   function openTable(table: FloorTable, guests: number) {
@@ -1080,7 +1224,16 @@ export default function App() {
           }
         : current,
     );
-    void recordShiftSale(session.id, refund.totalMinor);
+    void recordShiftSale(session.id, refund.totalMinor, true);
+    setShift((current) =>
+      current
+        ? {
+            ...current,
+            refundCount: (current.refundCount ?? 0) + 1,
+            refundMinor: (current.refundMinor ?? 0) + Math.abs(refund.totalMinor),
+          }
+        : current,
+    );
   }
 
   function requestRefund(sale: SaleReceipt, lines: CartLine[], reason: string) {
@@ -1143,7 +1296,16 @@ export default function App() {
           }
         : current,
     );
-    void recordShiftSale(session.id, refund.totalMinor);
+    void recordShiftSale(session.id, refund.totalMinor, true);
+    setShift((current) =>
+      current
+        ? {
+            ...current,
+            refundCount: (current.refundCount ?? 0) + 1,
+            refundMinor: (current.refundMinor ?? 0) + Math.abs(refund.totalMinor),
+          }
+        : current,
+    );
   }
 
   function requestBlindRefund(input: {
@@ -1175,29 +1337,84 @@ export default function App() {
       while (next.length < count) next.push(false);
       return next.slice(0, count);
     });
+    setSplitAmounts(equalSplit(chargeBaseMinor, count));
   }
 
-  function completeSale(
-    method: TenderType,
-    loyalty = loyaltyNumber,
-    tip = tipMinor,
-  ) {
+  function blankCheckout(): CheckoutContext {
+    return {
+      ticketId: takeNextTicketId(settings),
+      baseMinor: totals.totalMinor,
+      loyaltyNumber: null,
+      loyaltyPointsRedeemed: 0,
+      loyaltyRedeemMinor: 0,
+      loyaltyBalanceBefore: null,
+      loyaltyBalanceAfter: null,
+      giftCardCode: null,
+      giftCardChargedMinor: null,
+      giftCardBalanceAfterMinor: null,
+      redeemedLoyalty: false,
+      redeemedGiftCard: false,
+      loyaltyRedemptionId: null,
+      giftRedemptionId: null,
+    };
+  }
+
+  async function reverseCheckout() {
+    const ctx = checkoutRef.current;
+    if (!ctx) return;
+    setCheckoutContext(null);
+    const reversals: Promise<unknown>[] = [];
+    if (ctx.loyaltyRedemptionId) {
+      reversals.push(reverseRedemption(ctx.loyaltyRedemptionId));
+    }
+    if (ctx.giftRedemptionId) {
+      reversals.push(reverseGiftCard(ctx.giftRedemptionId));
+    }
+    if (!reversals.length) return;
+    setBusyLabel("Reversing redemption…");
+    const results = await Promise.allSettled(reversals);
+    if (results.every((result) => result.status === "fulfilled")) {
+      toast.info("Redemption reversed — points and card balances restored.");
+    } else {
+      toast.error(
+        "A redemption could not be reversed automatically. Record the ticket id and contact support.",
+      );
+    }
+    setBusyLabel(null);
+  }
+
+  function completeSale(method: TenderType, ctx: CheckoutContext | null, tip: number) {
     if (!session) return;
+    const problem = checkoutProblem(method);
+    if (problem) {
+      setNotice(problem);
+      setPaying(false);
+      void reverseCheckout();
+      return;
+    }
+    const saleCtx = ctx ?? blankCheckout();
     const baseTotal = computeLineTotals(cart, settings, discountMinor).totalMinor;
     const tipAmount = Math.max(0, Math.round(tip));
     const totalMinor = baseTotal + tipAmount;
     const till = activeTill;
     const sale: SaleReceipt = {
-      ticketId: takeNextTicketId(settings),
+      ticketId: saleCtx.ticketId,
       paidAt: new Date().toISOString(),
       lines: cart,
       totalMinor,
       tender: method,
       cashierName: session.name,
-      loyaltyNumber: loyalty,
-      loyaltyPointsEarned: loyalty
-        ? loyaltyPointsEarned(totalMinor, settings)
+      loyaltyNumber: saleCtx.loyaltyNumber,
+      loyaltyPointsEarned: saleCtx.loyaltyNumber
+        ? loyaltyPointsEarned(Math.max(0, totalMinor - saleCtx.loyaltyRedeemMinor), settings)
         : null,
+      loyaltyPointsRedeemed: saleCtx.loyaltyPointsRedeemed || null,
+      loyaltyRedeemMinor: saleCtx.loyaltyRedeemMinor || null,
+      loyaltyBalanceBefore: saleCtx.loyaltyBalanceBefore,
+      loyaltyBalanceAfter: saleCtx.loyaltyBalanceAfter,
+      giftCardCode: saleCtx.giftCardCode,
+      giftCardChargedMinor: saleCtx.giftCardChargedMinor,
+      giftCardBalanceAfterMinor: saleCtx.giftCardBalanceAfterMinor,
       tillKey: till?.name ?? null,
       discountMinor,
       tipMinor: tipAmount > 0 ? tipAmount : null,
@@ -1248,9 +1465,25 @@ export default function App() {
     }
     if (activeTicketId) {
       patchTicket(activeTicketId, { status: "dispatched", lines: cart });
+      void printKitchenTicket({
+        id: activeTicketId,
+        label: activeTicket
+          ? `${channelLabel(activeTicket.channel)} · ${activeTicket.orderNo}`
+          : "Kitchen",
+        lines: cart,
+        note: saleDetails.notes?.trim(),
+      });
+    } else if (product === "restaurant" || product === "dark-kitchen") {
+      void printKitchenTicket({
+        id: saleCtx.ticketId,
+        label: activeTable ? `Table ${activeTable.name}` : "Counter",
+        lines: cart,
+        note: saleDetails.notes?.trim(),
+      });
     }
     setCart([]);
     setDiscountMinor(0);
+    setSplitAmounts(equalSplit(0, 2));
     setSaleDetails({});
     setTipMinor(0);
     setTipContext(null);
@@ -1261,35 +1494,313 @@ export default function App() {
     setSplitPaid([false, false]);
     setLoyaltyOpen(false);
     setLoyaltyNumber(null);
+    setLoyaltyConfirm(null);
+    setGiftCardOpen(false);
+    pendingGiftCardRef.current = null;
+    setBusyLabel(null);
+    setCheckoutContext(null);
     setPaying(false);
   }
 
-  function startCharge(method: TenderType) {
-    if (empty || paying || loyaltyOpen || screen === "paid" || shiftLocked) return;
-    setTender(method);
-    if (method === "split") {
-      setSplitPaid(Array.from({ length: splitCount }, () => false));
-      setScreen("split");
-      return;
+  async function beginCharge(
+    method: TenderType,
+    amountMinor: number,
+    options: { kind: "sale" | "split"; parts?: number; part?: number; splitIndex?: number } = {
+      kind: "sale",
+    },
+  ): Promise<ChargeOutcome> {
+    const problem = checkoutProblem(method);
+    if (problem) {
+      setNotice(problem);
+      return "failed";
     }
+    setPaying(true);
+    try {
+      const charge = await requestCharge({
+        tender: method,
+        amountMinor,
+        parts: options.parts,
+        reference: saleDetails.reference?.trim() || undefined,
+      });
+      if (charge.status === "paid") return "paid";
+      setHandoff({
+        method,
+        label: tenderLabel(method),
+        provider: charge.provider,
+        reference: charge.reference,
+        amountMinor: charge.amountMinor,
+        kind: options.kind,
+        part: options.part,
+        splitIndex: options.splitIndex,
+      });
+      return "handoff";
+    } catch (error) {
+      // Manual tenders stay usable when HQ is unreachable; electronic tenders
+      // must never be reported as paid without a provider hand-off.
+      if (method === "cash" || method === "split" || method === "gift-card") {
+        return "paid";
+      }
+      toast.error(error instanceof Error ? error.message : "Payment could not be started.");
+      return "failed";
+    } finally {
+      setPaying(false);
+    }
+  }
+
+  function openGiftCard() {
+    if (empty || shiftLocked || paying || handoff || screen === "paid") return;
+    setTender("gift-card");
+    setGiftCardOpen(true);
+  }
+
+  function chooseGiftCard(card: GiftCardSelection) {
+    setGiftCardOpen(false);
+    pendingGiftCardRef.current = card;
+    const ctx = blankCheckout();
+    setCheckoutContext(ctx);
     if (!settings.loyaltyEnabled) {
-      finishLoyalty(null, method);
+      void finishGiftCard(ctx);
       return;
     }
     setLoyaltyNumber(null);
     setLoyaltyOpen(true);
   }
 
-  function finishLoyalty(number: string | null, method: TenderType = tender) {
+  function cancelLoyalty() {
+    setLoyaltyOpen(false);
+    setLoyaltyConfirm(null);
+    void reverseCheckout();
+  }
+
+  async function startCharge(method: TenderType) {
+    if (empty || paying || loyaltyOpen || handoff || checkoutRef.current || screen === "paid" || shiftLocked) {
+      return;
+    }
+    if (method === "gift-card") {
+      openGiftCard();
+      return;
+    }
+    setTender(method);
+    const ctx = blankCheckout();
+    setCheckoutContext(ctx);
+    if (method === "split") {
+      setSplitPaid(Array.from({ length: splitCount }, () => false));
+      setSplitAmounts(equalSplit(ctx.baseMinor - ctx.loyaltyRedeemMinor, splitCount));
+      if (!settings.loyaltyEnabled) {
+        await proceedToPayment(method, ctx);
+        return;
+      }
+      setLoyaltyNumber(null);
+      setLoyaltyOpen(true);
+      return;
+    }
+    if (!settings.loyaltyEnabled) {
+      await proceedToPayment(method, ctx);
+      return;
+    }
+    setLoyaltyNumber(null);
+    setLoyaltyOpen(true);
+  }
+
+  async function applyLoyaltyRedemption(
+    member: LoyaltyMember,
+    points: number,
+    number: string | null,
+    ctx: CheckoutContext,
+  ) {
+    setBusyLabel("Redeeming loyalty points…");
+    try {
+      const redemptionId = `${ctx.ticketId}-LOYALTY`;
+      const result = await redeemLoyalty({
+        memberId: member.id,
+        identifier: number ?? member.phone,
+        points,
+        ticketId: redemptionId,
+      });
+      patchCheckout({
+        loyaltyNumber: number,
+        loyaltyPointsRedeemed: result.pointsRedeemed,
+        loyaltyRedeemMinor: result.valueMinor,
+        loyaltyBalanceBefore: result.balanceBefore,
+        loyaltyBalanceAfter: result.balanceAfter,
+        redeemedLoyalty: true,
+        loyaltyRedemptionId: redemptionId,
+      });
+      toast.success(`Used ${points} points — ${formatMoney(result.valueMinor, settings.currency)} off.`);
+    } catch (error) {
+      toast.error(
+        `Loyalty points were not redeemed: ${error instanceof Error ? error.message : "unknown error"}`,
+      );
+    } finally {
+      setBusyLabel(null);
+    }
+  }
+
+  async function finishLoyalty(number: string | null, method: TenderType = tender) {
+    const ctx = checkoutRef.current;
+    if (!ctx) return;
     setLoyaltyNumber(number);
     setLoyaltyOpen(false);
+    patchCheckout({ loyaltyNumber: number });
+    if (!number || !settings.loyaltyEnabled) {
+      await proceedToPayment(method, ctx);
+      return;
+    }
+    setBusyLabel("Checking loyalty…");
+    try {
+      const [members, cards] = await Promise.all([
+        listLoyaltyMembers(),
+        listLoyaltyCards(),
+      ]);
+      const clean = (value: string) => value.replace(/[\s-]/g, "").toLowerCase();
+      const key = clean(number);
+      const card = cards.find((row) => row.active && clean(row.cardNumber) === key);
+      const member =
+        members.find(
+          (row) =>
+            row.active &&
+            (clean(row.phone) === key ||
+              (row.cardNumber ? clean(row.cardNumber) === key : false) ||
+              (card ? row.id === card.memberId : false)),
+        ) ?? undefined;
+      setBusyLabel(null);
+      if (!member) {
+        toast.info("No active loyalty member matched that number. Sale continues without points.");
+        await proceedToPayment(method, ctx);
+        return;
+      }
+      const perPoint = Math.max(1, Math.round(settings.loyaltyRedeemMinor));
+      const points = Math.min(
+        member.points,
+        Math.floor(Math.max(0, ctx.baseMinor) / perPoint),
+      );
+      if (points <= 0) {
+        toast.info("No points can be redeemed on this ticket.");
+        await proceedToPayment(method, ctx);
+        return;
+      }
+      const valueMinor = points * perPoint;
+      if (settings.loyaltyAutoApply) {
+        await applyLoyaltyRedemption(member, points, number, ctx);
+        await proceedToPayment(method, ctx);
+        return;
+      }
+      setLoyaltyConfirm({ member, points, valueMinor, method });
+    } catch (error) {
+      setBusyLabel(null);
+      toast.error(
+        `Loyalty lookup unavailable: ${error instanceof Error ? error.message : "unknown error"}. Sale continues without points.`,
+      );
+      await proceedToPayment(method, ctx);
+    }
+  }
+
+  async function acceptLoyalty() {
+    const confirmation = loyaltyConfirm;
+    const ctx = checkoutRef.current;
+    setLoyaltyConfirm(null);
+    if (!confirmation || !ctx) return;
+    await applyLoyaltyRedemption(
+      confirmation.member,
+      confirmation.points,
+      checkoutRef.current?.loyaltyNumber ?? null,
+      ctx,
+    );
+    await proceedToPayment(confirmation.method, ctx);
+  }
+
+  async function skipLoyalty() {
+    const confirmation = loyaltyConfirm;
+    const ctx = checkoutRef.current;
+    setLoyaltyConfirm(null);
+    if (!confirmation || !ctx) return;
+    await proceedToPayment(confirmation.method, ctx);
+  }
+
+  async function finishGiftCard(ctx: CheckoutContext) {
+    const card = pendingGiftCardRef.current;
+    if (!card) {
+      toast.error("Gift card selection was lost. Start the payment again.");
+      await reverseCheckout();
+      return;
+    }
+    const amount = Math.max(0, ctx.baseMinor - ctx.loyaltyRedeemMinor);
+    if (card.balanceMinor < amount) {
+      toast.error(
+        `Gift card balance ${formatMoney(card.balanceMinor, settings.currency)} does not cover ${formatMoney(amount, settings.currency)}. Partial gift-card payments are not supported.`,
+      );
+      await reverseCheckout();
+      return;
+    }
+    setBusyLabel("Redeeming gift card…");
+    try {
+      const redemptionId = `${ctx.ticketId}-GIFT`;
+      const result = await redeemGiftCard({
+        code: card.code,
+        amountMinor: amount,
+        ticketId: redemptionId,
+      });
+      patchCheckout({
+        giftCardCode: result.card.code,
+        giftCardChargedMinor: amount,
+        giftCardBalanceAfterMinor: result.balanceAfterMinor,
+        redeemedGiftCard: true,
+        giftRedemptionId: redemptionId,
+      });
+    } catch (error) {
+      setBusyLabel(null);
+      toast.error(
+        `Gift card was not charged: ${error instanceof Error ? error.message : "unknown error"}`,
+      );
+      await reverseCheckout();
+      return;
+    }
+    setBusyLabel(null);
+    pendingGiftCardRef.current = null;
+    const outcome = await beginCharge("gift-card", amount);
+    if (outcome !== "paid") {
+      if (outcome === "failed") await reverseCheckout();
+      return;
+    }
+    // A gift card is charged for the exact ticket total, so no extra tip is
+    // added afterwards — that would leave the receipt and deducted amount out
+    // of step.
+    completeSale("gift-card", ctx, 0);
+  }
+
+  async function proceedToPayment(method: TenderType, ctx: CheckoutContext) {
+    if (pendingGiftCardRef.current) {
+      await finishGiftCard(ctx);
+      return;
+    }
+    if (method === "split") {
+      setSplitAmounts(equalSplit(Math.max(0, ctx.baseMinor - ctx.loyaltyRedeemMinor), splitCount));
+      setSplitPaid(Array.from({ length: splitCount }, () => false));
+      setScreen("split");
+      return;
+    }
+    const amount = Math.max(0, ctx.baseMinor - ctx.loyaltyRedeemMinor);
+    const outcome = await beginCharge(method, amount);
+    if (outcome !== "paid") {
+      if (outcome === "failed") await reverseCheckout();
+      return;
+    }
     if (settings.tipsEnabled) {
-      setTipContext({ method, loyalty: number });
+      setTipContext({ method, checkout: ctx });
       setTipOpen(true);
       return;
     }
-    setPaying(true);
-    window.setTimeout(() => completeSale(method, number, 0), 1600);
+    completeSale(method, ctx, 0);
+  }
+
+  function finishSplitIfComplete(nextPaid: boolean[], ctx: CheckoutContext) {
+    if (!nextPaid.every(Boolean)) return;
+    if (settings.tipsEnabled) {
+      setTipContext({ method: "split", checkout: ctx });
+      setTipOpen(true);
+      return;
+    }
+    completeSale("split", ctx, 0);
   }
 
   function confirmTip(amount: number) {
@@ -1298,43 +1809,80 @@ export default function App() {
     setTipOpen(false);
     setTipContext(null);
     setTipMinor(tipAmount);
-    setPaying(true);
-    window.setTimeout(
-      () =>
-        completeSale(
-          context?.method ?? tender,
-          context?.loyalty ?? loyaltyNumber,
-          tipAmount,
-        ),
-      1600,
-    );
+    completeSale(context?.method ?? tender, context?.checkout ?? null, tipAmount);
   }
 
   function cancelTip() {
     setTipOpen(false);
     setTipContext(null);
+    void reverseCheckout();
   }
 
-  function chargeSplitPart(index: number) {
-    if (paying || loyaltyOpen || splitPaid[index] || empty) return;
-    setPaying(true);
-    window.setTimeout(() => {
-      setSplitPaid((prev) => {
-        const next = prev.map((value, i) => (i === index ? true : value));
-        if (next.every(Boolean)) {
-          setPaying(false);
-          if (!settings.loyaltyEnabled) {
-            finishLoyalty(null);
-          } else {
-            setLoyaltyNumber(null);
-            setLoyaltyOpen(true);
-          }
-        } else {
-          setPaying(false);
-        }
-        return next;
-      });
-    }, 1600);
+  async function chargeSplitPart(index: number) {
+    const ctx = checkoutRef.current;
+    if (
+      paying ||
+      loyaltyOpen ||
+      handoff ||
+      !ctx ||
+      splitPaid[index] ||
+      empty
+    ) {
+      return;
+    }
+    const allocated = splitAmounts.reduce((sum, value) => sum + Math.max(0, value), 0);
+    const expected = Math.max(0, ctx.baseMinor - ctx.loyaltyRedeemMinor);
+    if (allocated !== expected) {
+      setNotice(
+        `Split amounts must add up to ${formatMoney(expected, settings.currency)}. They currently add up to ${formatMoney(allocated, settings.currency)}.`,
+      );
+      return;
+    }
+    const method = splitTenders[index] ?? "cash";
+    const share = Math.max(0, Math.round(splitAmounts[index] ?? 0));
+    if (share <= 0) {
+      setNotice("Enter a positive amount for this split part.");
+      return;
+    }
+    const outcome = await beginCharge(method, share, {
+      kind: "split",
+      parts: splitCount,
+      part: index + 1,
+      splitIndex: index,
+    });
+    if (outcome !== "paid") {
+      if (outcome === "failed") void reverseCheckout();
+      return;
+    }
+    const next = splitPaid.map((value, i) => (i === index ? true : value));
+    setSplitPaid(next);
+    finishSplitIfComplete(next, ctx);
+  }
+
+  function confirmHandoff() {
+    const ctx = checkoutRef.current;
+    if (!handoff || !ctx) return;
+    setHandoff(null);
+    if (handoff.kind === "split" && handoff.splitIndex !== undefined) {
+      const index = handoff.splitIndex;
+      const next = splitPaid.map((value, i) => (i === index ? true : value));
+      setSplitPaid(next);
+      finishSplitIfComplete(next, ctx);
+      return;
+    }
+    const method = handoff.method as TenderType;
+    if (settings.tipsEnabled) {
+      setTipContext({ method, checkout: ctx });
+      setTipOpen(true);
+      return;
+    }
+    completeSale(method, ctx, 0);
+  }
+
+  function cancelHandoff() {
+    setHandoff(null);
+    setPaying(false);
+    void reverseCheckout();
   }
 
   function newOrder() {
@@ -1371,10 +1919,17 @@ export default function App() {
     setSplitCount(2);
     setSplitTenders(["cash", "card"]);
     setSplitPaid([false, false]);
+    setSplitAmounts(equalSplit(0, 2));
     setReceipt(null);
     setPaying(false);
+    setBusyLabel(null);
+    setHandoff(null);
     setLoyaltyOpen(false);
     setLoyaltyNumber(null);
+    setLoyaltyConfirm(null);
+    setGiftCardOpen(false);
+    pendingGiftCardRef.current = null;
+    setCheckoutContext(null);
     setScreen("home");
   }
 
@@ -1405,6 +1960,22 @@ export default function App() {
     );
   }
 
+  function requiresPaymentReference(method: TenderType) {
+    const configured = settings.registerTenders.find((tender) => tender.id === method);
+    return configured?.requiresReference ?? (method === "transfer" || method === "wallet");
+  }
+
+  function checkoutProblem(method: TenderType) {
+    const missing = missingRequiredSaleFields();
+    if (missing.length) {
+      return `Required before checkout: ${missing.map((field) => field.label).join(", ")}`;
+    }
+    if (requiresPaymentReference(method) && !(saleDetails.reference ?? "").trim()) {
+      return "A payment reference is required for this payment method.";
+    }
+    return "";
+  }
+
   function continueAction() {
     if (shiftLocked) return;
     if (screen === "paid") {
@@ -1413,21 +1984,21 @@ export default function App() {
     }
     if (screen === "home" || screen === "items" || screen === "kds" || screen === "saved") {
       if (empty) return;
-      const missing = missingRequiredSaleFields();
-      if (missing.length) {
-        setNotice(`Required before checkout: ${missing.map((field) => field.label).join(", ")}`);
+      const problem = checkoutProblem(tender);
+      if (problem) {
+        setNotice(problem);
         return;
       }
       setScreen("payment");
       return;
     }
     if (screen === "payment") {
-      const missing = missingRequiredSaleFields();
-      if (missing.length) {
-        setNotice(`Required before checkout: ${missing.map((field) => field.label).join(", ")}`);
+      const problem = checkoutProblem(tender);
+      if (problem) {
+        setNotice(problem);
         return;
       }
-      startCharge(tender);
+      void startCharge(tender);
     }
   }
 
@@ -1459,24 +2030,41 @@ export default function App() {
     <div className={fullscreen ? "shell shell-full" : "shell"}>
       {!fullscreen && (
         <Sidebar
+          product={product}
           active={
-            screen === "home"
-              ? "home"
-              : screen === "kds"
-                ? "chat"
-                : screen === "items"
-                  ? "items"
+            screen === "kds"
+              ? "kds"
+              : screen === "items"
+                ? "items"
                 : screen === "saved"
                   ? "saved"
-                  : "orders"
+                  : screen === "payment" || screen === "split" || screen === "paid"
+                    ? "orders"
+                    : screen === "home"
+                      ? product === "supermarket"
+                        ? "home"
+                        : product === "restaurant"
+                          ? "tables"
+                          : product === "hotel"
+                            ? "rooms"
+                            : "kitchen"
+                      : "orders"
           }
           onSelect={(id) => {
             if (shiftLocked) return;
-            if (id === "home") setScreen("home");
+            const homeNav: NavId =
+              product === "supermarket"
+                ? "home"
+                : product === "restaurant"
+                  ? "tables"
+                  : product === "hotel"
+                    ? "rooms"
+                    : "kitchen";
+            if (id === homeNav) setScreen("home");
             if (id === "items") setScreen("items");
             if (id === "orders" && !empty) setScreen("payment");
             if (id === "saved") setScreen("saved");
-            if (id === "chat") setScreen("kds");
+            if (id === "kds") setScreen("kds");
           }}
           onSettings={requestSettings}
           onLogout={() => requestGate("logout")}
@@ -1565,14 +2153,45 @@ export default function App() {
           <PaymentMethodsScreen
             selected={tender}
             amountMinor={totals.totalMinor}
-            onSelect={startCharge}
+            reference={saleDetails.reference ?? ""}
+            blockedReason={missingRequiredSaleFields().length
+              ? `Required before checkout: ${missingRequiredSaleFields().map((field) => field.label).join(", ")}`
+              : ""}
+            onSelect={(method) => void startCharge(method)}
+            onReference={(value) =>
+              setSaleDetails((previous) => ({ ...previous, reference: value }))
+            }
             onBack={() => setScreen("home")}
           />
+        )}
+        {screen === "payment" && (
+          <div
+            className="pay-account"
+            style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}
+          >
+            <span>
+              <strong>Gift card</strong> — pay the full ticket from an issued card balance.
+            </span>
+            <button
+              className="charge"
+              type="button"
+              onClick={openGiftCard}
+              disabled={paying || Boolean(checkoutRef.current) || shiftLocked}
+              style={{ minWidth: 180 }}
+            >
+              Pay with gift card
+            </button>
+          </div>
         )}
         {screen === "split" && (
           <SplitPaymentScreen
             count={splitCount}
             parts={splitParts}
+            totalMinor={Math.max(
+              0,
+              (checkout?.baseMinor ?? totals.totalMinor) -
+                (checkout?.loyaltyRedeemMinor ?? 0),
+            )}
             onCount={(delta) =>
               resizeSplit(Math.min(6, Math.max(2, splitCount + delta)))
             }
@@ -1581,8 +2200,16 @@ export default function App() {
                 prev.map((value, i) => (i === index ? next : value)),
               )
             }
+            onAmount={(index, minor) =>
+              setSplitAmounts((prev) =>
+                prev.map((value, i) => (i === index ? Math.max(0, minor) : value)),
+              )
+            }
             onCharge={chargeSplitPart}
-            onBack={() => setScreen("payment")}
+            onBack={() => {
+              setScreen("payment");
+              void reverseCheckout();
+            }}
           />
         )}
         {screen === "paid" && receipt && (
@@ -1605,6 +2232,9 @@ export default function App() {
           <KitchenDisplay
             tickets={tickets}
             onAdvance={advanceTicket}
+            onClearDispatched={() =>
+              setTickets((current) => current.filter((ticket) => ticket.status !== "dispatched"))
+            }
           />
         )}
         {screen === "saved" && (
@@ -1739,8 +2369,42 @@ lines={cart}
       )}
       {loyaltyOpen && (
         <LoyaltyModal
-          onApply={(number) => finishLoyalty(number)}
-          onSkip={() => finishLoyalty(null)}
+          busy={busyLabel !== null}
+          onApply={(number) => void finishLoyalty(number)}
+          onSkip={() => void finishLoyalty(null)}
+          onCancel={cancelLoyalty}
+        />
+      )}
+      {loyaltyConfirm && (
+        <div className="dialog-scrim">
+          <div className="dialog" style={{ maxWidth: 420 }}>
+            <h3>Redeem loyalty points?</h3>
+            <p>
+              {loyaltyConfirm.member.name} has {loyaltyConfirm.member.points} points. Use{" "}
+              {loyaltyConfirm.points} points for{" "}
+              {formatMoney(loyaltyConfirm.valueMinor, settings.currency)} off this ticket?
+            </p>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button className="back" type="button" onClick={() => void skipLoyalty()}>
+                No, continue
+              </button>
+              <button className="continue" type="button" onClick={() => void acceptLoyalty()}>
+                Redeem points
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {giftCardOpen && (
+        <GiftCardModal
+          amountMinor={Math.max(
+            0,
+            (checkout?.baseMinor ?? totals.totalMinor) -
+              (checkout?.loyaltyRedeemMinor ?? 0),
+          )}
+          currency={settings.currency}
+          onConfirm={chooseGiftCard}
+          onCancel={() => setGiftCardOpen(false)}
         />
       )}
       {holdOpen && (
@@ -1799,9 +2463,17 @@ lines={cart}
           onCancel={cancelTip}
         />
       )}
+      {handoff && (
+        <PaymentHandoffModal
+          handoff={handoff}
+          currency={settings.currency}
+          onConfirm={confirmHandoff}
+          onCancel={cancelHandoff}
+        />
+      )}
       <PaymentOverlay
-        visible={paying}
-        label={TENDER_LABEL[tender]}
+        visible={paying || busyLabel !== null}
+        label={busyLabel ?? tenderLabel(tender)}
       />
     </div>
   );

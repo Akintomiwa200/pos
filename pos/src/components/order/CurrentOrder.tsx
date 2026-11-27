@@ -1,9 +1,11 @@
+import { useState } from "react";
 import type { CartLine } from "../../lib/types";
 import { computeLineTotals, formatMoney } from "../../lib/types";
 import { formatPricePer } from "../../lib/units";
 import { useStoreSettings } from "../../lib/use-store-settings";
 import type { StaffUser } from "../../lib/staff";
 import type { RegisterAction } from "../../lib/register-config";
+import { loadCustomers, upsertCustomer, type CustomerRecord } from "../../lib/customers";
 import { Bookmark, Minus, Percent, Plus, ShoppingBag, Trash2, Wallet } from "lucide-react";
 
 type Props = {
@@ -44,6 +46,9 @@ export function CurrentOrder({
   continueDisabled = false,
 }: Props) {
   const rates = useStoreSettings();
+  const [customers, setCustomers] = useState<CustomerRecord[]>(loadCustomers);
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [customerNote, setCustomerNote] = useState("");
   const totals = computeLineTotals(lines, rates, discountMinor);
   const actions = rates.registerQuickButtons.filter(
     (button) => button.active && button.kind === "action",
@@ -51,6 +56,39 @@ export function CurrentOrder({
   const saleFields = [...rates.registerSaleFields]
     .filter((field) => field.mode !== "hidden")
     .sort((a, b) => a.order - b.order);
+  const query = customerSearch.trim().toLowerCase();
+  const filteredCustomers = customers.filter((customer) =>
+    query
+      ? `${customer.name} ${customer.phone} ${customer.email}`.toLowerCase().includes(query)
+      : true,
+  );
+
+  function applyCustomer(id: string) {
+    const customer = customers.find((row) => row.id === id);
+    if (!customer) return;
+    const visible = new Set(saleFields.map((field) => field.key));
+    const values: Record<string, string> = {
+      customer: customer.name,
+      phone: customer.phone,
+      email: customer.email,
+    };
+    for (const [key, value] of Object.entries(values)) {
+      if (visible.has(key)) onSaleDetail(key, value);
+    }
+    setCustomerNote(`Loaded ${customer.name}.`);
+  }
+
+  function saveCurrentCustomer() {
+    const name = saleDetails.customer?.trim() ?? "";
+    const phone = saleDetails.phone?.trim() ?? "";
+    const email = saleDetails.email?.trim() ?? "";
+    if (!name && !phone) {
+      setCustomerNote("Enter a customer name or phone before saving.");
+      return;
+    }
+    setCustomers(upsertCustomer({ id: "", name, phone, email }));
+    setCustomerNote("Customer saved.");
+  }
 
   return (
     <aside className="order-wrap">
@@ -172,6 +210,58 @@ export function CurrentOrder({
             })}
           </div>
         ) : null}
+
+        <div className="sale-fields" style={{ marginTop: 12 }}>
+          <label className="sale-field">
+            <span>Saved customer</span>
+            <input
+              value={customerSearch}
+              onChange={(event) => {
+                setCustomerSearch(event.target.value);
+                setCustomerNote("");
+              }}
+              placeholder="Search name or phone"
+              aria-label="Search saved customers"
+            />
+          </label>
+          <label className="sale-field">
+            <select
+              value=""
+              onChange={(event) => applyCustomer(event.target.value)}
+              aria-label="Choose a saved customer"
+              style={{
+                border: "1px solid #ececf0",
+                borderRadius: 10,
+                padding: "8px 10px",
+                font: "inherit",
+                background: "#fafafa",
+              }}
+            >
+              <option value="">
+                {filteredCustomers.length
+                  ? `Choose a saved customer (${filteredCustomers.length})`
+                  : "No matching saved customer"}
+              </option>
+              {filteredCustomers.map((customer) => (
+                <option key={customer.id} value={customer.id}>
+                  {customer.name || customer.phone}
+                  {customer.phone ? ` · ${customer.phone}` : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <button
+              type="button"
+              className="order-action"
+              onClick={saveCurrentCustomer}
+              style={{ flex: "0 0 auto" }}
+            >
+              Save customer
+            </button>
+            {customerNote ? <span className="price">{customerNote}</span> : null}
+          </div>
+        </div>
 
         {saleFields.length > 0 ? (
           <div className="sale-fields">

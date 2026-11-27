@@ -345,7 +345,10 @@ export function enabledTenders(settings = loadStoreSettings()) {
 }
 
 export function normalizeBarcode(raw: string, settings = loadStoreSettings()) {
-  let code = raw.trim();
+  let code = raw;
+  if (settings.barcodeSuffix === "enter") code = code.replace(/[\r\n]+$/, "");
+  if (settings.barcodeSuffix === "tab") code = code.replace(/\t+$/, "");
+  code = code.trim();
   const prefix = settings.barcodePrefix.trim();
   if (prefix && code.toUpperCase().startsWith(prefix.toUpperCase())) {
     code = code.slice(prefix.length);

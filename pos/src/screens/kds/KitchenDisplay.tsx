@@ -1,4 +1,7 @@
+import { useMemo } from "react";
 import { Clock, Flame, CheckCircle2, Bike, ChefHat } from "lucide-react";
+import { useCatalog } from "../../lib/catalog";
+import { useStoreSettings } from "../../lib/use-store-settings";
 import { formatMoney } from "../../lib/types";
 import {
   channelLabel,
@@ -23,9 +26,16 @@ function minutesSince(iso: string | null) {
 type Props = {
   tickets: KitchenTicket[];
   onAdvance?: (id: string) => void;
+  onClearDispatched?: () => void;
 };
 
-export function KitchenDisplay({ tickets, onAdvance }: Props) {
+export function KitchenDisplay({ tickets, onAdvance, onClearDispatched }: Props) {
+  const settings = useStoreSettings();
+  const { items } = useCatalog();
+  const categoryByItemId = useMemo(
+    () => new Map(items.map((item) => [item.id, item.category.trim()] as const)),
+    [items],
+  );
   const open = tickets.filter((ticket) => ticket.status !== "dispatched");
   const done = tickets.filter((ticket) => ticket.status === "dispatched").slice(0, 8);
 
@@ -61,40 +71,60 @@ export function KitchenDisplay({ tickets, onAdvance }: Props) {
               <h2>
                 <Icon size={15} /> {meta.label}
                 <span className="kds-count">{lane.length}</span>
+                {status === "dispatched" && lane.length && onClearDispatched ? (
+                  <button type="button" className="kds-clear" onClick={onClearDispatched}>
+                    Clear
+                  </button>
+                ) : null}
               </h2>
               {lane.length === 0 ? (
                 <p className="kds-none">—</p>
               ) : (
-                lane.map((ticket) => (
-                  <button
-                    key={ticket.id}
-                    type="button"
-                    className={`kds-card${status === "ready" ? " kds-card-ready" : ""}`}
-                    onClick={() =>
-                      status === "dispatched"
-                        ? undefined
-                        : onAdvance?.(ticket.id)
-                    }
-                  >
-                    <span className="kds-card-top">
-                      <strong>{ticket.orderNo}</strong>
-                      <em>{channelLabel(ticket.channel)}</em>
-                    </span>
-                    {ticket.guestName ? (
-                      <span className="kds-guest">{ticket.guestName}</span>
-                    ) : null}
-                    <ul>
-                      {ticket.lines.map((line) => (
-                        <li key={line.id}>
-                          {line.quantity} × {line.name}
-                        </li>
-                      ))}
-                    </ul>
-                    <span className="kds-meta">
-                      {minutesSince(ticket.openedAt)} min · {formatMoney(ticketTotal(ticket))}
-                    </span>
-                  </button>
-                ))
+                lane.map((ticket) => {
+                  const card = (
+                    <>
+                      <span className="kds-card-top">
+                        <strong>{ticket.orderNo}</strong>
+                        <em>{channelLabel(ticket.channel)}</em>
+                      </span>
+                      {ticket.guestName ? (
+                        <span className="kds-guest">{ticket.guestName}</span>
+                      ) : null}
+                      <ul>
+                        {ticket.lines.map((line) => {
+                          const category = settings.showCategoryOnKitchen
+                            ? categoryByItemId.get(line.itemId)
+                            : undefined;
+                          return (
+                            <li key={line.id}>
+                              {line.quantity} × {line.name}
+                              {category ? (
+                                <span style={{ opacity: 0.65 }}> · {category}</span>
+                              ) : null}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                      <span className="kds-meta">
+                        {minutesSince(ticket.openedAt)} min · {formatMoney(ticketTotal(ticket))}
+                      </span>
+                    </>
+                  );
+                  return status === "dispatched" ? (
+                    <div key={ticket.id} className="kds-card kds-card-done">
+                      {card}
+                    </div>
+                  ) : (
+                    <button
+                      key={ticket.id}
+                      type="button"
+                      className={`kds-card${status === "ready" ? " kds-card-ready" : ""}`}
+                      onClick={() => onAdvance?.(ticket.id)}
+                    >
+                      {card}
+                    </button>
+                  );
+                })
               )}
             </div>
           );

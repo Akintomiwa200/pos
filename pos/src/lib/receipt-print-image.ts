@@ -21,6 +21,7 @@ const TENDER_LABEL: Record<TenderType, string> = {
   wallet: "Wallet",
   split: "Split",
   room_charge: "Room charge",
+  "gift-card": "Gift Card",
 };
 
 const PAD_MM = 0.065;
@@ -507,6 +508,22 @@ export function renderReceiptPrintImage(sale: SaleReceipt, settings: StoreSettin
           ctx.fillStyle = "rgba(17, 24, 39, 0.8)";
           ctx.textAlign = "center";
           ctx.fillText(settings.receiptFooter, (cx0 + cx1) / 2, y + Math.round(12 * scale) + baseFontSize);
+          ctx.textAlign = "left";
+        },
+      ),
+    );
+  }
+
+  if (showFooter && settings.storeHours?.trim()) {
+    const hours = `Hours: ${settings.storeHours.trim()}`;
+    blocks.push(
+      block(
+        Math.round(10 * scale) + baseLine,
+        (ctx, cx0, cx1, y) => {
+          ctx.font = mono(Math.round(10 * scale));
+          ctx.fillStyle = "rgba(17, 24, 39, 0.7)";
+          ctx.textAlign = "center";
+          ctx.fillText(hours, (cx0 + cx1) / 2, y + Math.round(10 * scale) + baseFontSize);
           ctx.textAlign = "left";
         },
       ),

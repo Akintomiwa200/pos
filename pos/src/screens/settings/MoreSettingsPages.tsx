@@ -47,7 +47,7 @@ export function GeneralSettings() {
         <SetRow label="TIN">
           <TextField value={settings.storeTin} onChange={(storeTin) => patch({ storeTin })} />
         </SetRow>
-        <SetRow label="Opening hours">
+        <SetRow label="Opening hours" hint="Printed in the receipt footer when set">
           <TextField value={settings.storeHours} onChange={(storeHours) => patch({ storeHours })} />
         </SetRow>
         <SetRow label="Currency">
@@ -109,7 +109,10 @@ export function CategoriesSettings() {
             onChange={(allowUncategorized) => patch({ allowUncategorized })}
           />
         </SetRow>
-        <SetRow label="Show category on kitchen tickets?" hint="Stored preference for kitchen layouts">
+        <SetRow
+          label="Show category on kitchen tickets?"
+          hint="Shows each line's catalogue category on kitchen tickets when the item is found"
+        >
           <Toggle
             on={settings.showCategoryOnKitchen}
             onChange={(showCategoryOnKitchen) => patch({ showCategoryOnKitchen })}
@@ -139,8 +142,9 @@ export function InvoiceSettings() {
   return (
     <>
       <p className="set-lede">
-        Ticket numbering and invoice behaviour on this till. The prefix and next
-        number are used by every completed sale.
+        Ticket numbering on this till. The prefix and next number are used by
+        every completed sale. Invoice output preferences below are stored for HQ
+        use and do not change this till's behaviour.
       </p>
       <LiveNote>
         Next ticket: {settings.invoicePrefix}-{String(settings.nextInvoiceNumber).padStart(4, "0")}
@@ -163,16 +167,22 @@ export function InvoiceSettings() {
             }
           />
         </SetRow>
+        <SetRow label="Show VAT breakdown?" hint="Receipt and tax settings use this value">
+          <Toggle
+            on={settings.includeVatBreakdown}
+            onChange={(includeVatBreakdown) => patch({ includeVatBreakdown })}
+          />
+        </SetRow>
+      </SetCard>
+      <SetCard title="Stored invoice preferences (HQ use)">
+        <p className="set-lede">
+          Saved on this terminal for HQ; they do not print, email, or mark sales
+          paid by themselves.
+        </p>
         <SetRow label="Print an invoice after a sale?">
           <Toggle
             on={settings.autoPrintInvoice}
             onChange={(autoPrintInvoice) => patch({ autoPrintInvoice })}
-          />
-        </SetRow>
-        <SetRow label="Show VAT breakdown?" hint="Shared with Tax and Receipt settings">
-          <Toggle
-            on={settings.includeVatBreakdown}
-            onChange={(includeVatBreakdown) => patch({ includeVatBreakdown })}
           />
         </SetRow>
         <SetRow label="Email a copy to the customer?">
@@ -217,12 +227,6 @@ export function NotificationsSettings() {
           <Toggle
             on={settings.soundOnHoldRecall}
             onChange={(soundOnHoldRecall) => patch({ soundOnHoldRecall })}
-          />
-        </SetRow>
-        <SetRow label="Email an invoice copy?" hint="Requires an email integration at HQ">
-          <Toggle
-            on={settings.emailInvoiceCopy}
-            onChange={(emailInvoiceCopy) => patch({ emailInvoiceCopy })}
           />
         </SetRow>
         <SetRow label="Notify the printer after a sale?">
@@ -331,91 +335,61 @@ export function DataSyncSettings() {
 }
 
 export function IntegrationsSettings() {
-  const [settings, patch] = useSettings();
+  const [settings] = useSettings();
+  const status = (on: boolean) => (on ? "On (from HQ)" : "Off (from HQ)");
   return (
     <>
       <p className="set-lede">
-        Accounting, storefront, and gateway preferences for this terminal. Enable
-        an integration here only when the matching account exists at HQ.
+        Accounting, storefront, and gateway status cached from HQ. These values
+        refresh automatically and are read-only here — this build does not run
+        an integration or submit e-invoices from the till.
       </p>
       <SetCard title="Accounting & tax">
         <SetRow label="QuickBooks">
-          <Toggle on={settings.quickbooks} onChange={(quickbooks) => patch({ quickbooks })} />
+          <span className="set-muted">{status(settings.quickbooks)}</span>
         </SetRow>
         <SetRow label="Sage">
-          <Toggle on={settings.sage} onChange={(sage) => patch({ sage })} />
+          <span className="set-muted">{status(settings.sage)}</span>
         </SetRow>
         <SetRow label="Zoho">
-          <Toggle on={settings.zoho} onChange={(zoho) => patch({ zoho })} />
+          <span className="set-muted">{status(settings.zoho)}</span>
         </SetRow>
-        <SetRow label="FIRS e-invoicing" hint="Adds tax identity details to receipts">
-          <Toggle on={settings.firs} onChange={(firs) => patch({ firs })} />
+        <SetRow
+          label="Tax identity fields (HQ)"
+          hint="Receipt display follows Show tax identity on receipt in Tax settings"
+        >
+          <span className="set-muted">{status(settings.firs)}</span>
         </SetRow>
         <SetRow label="Include service charge in exports?">
-          <Toggle
-            on={settings.includeServiceInExport}
-            onChange={(includeServiceInExport) => patch({ includeServiceInExport })}
-          />
+          <span className="set-muted">{status(settings.includeServiceInExport)}</span>
         </SetRow>
       </SetCard>
       <SetCard title="Storefront">
         <SetRow label="Storefront enabled?">
-          <Toggle
-            on={settings.storefrontEnabled}
-            onChange={(storefrontEnabled) => patch({ storefrontEnabled })}
-          />
+          <span className="set-muted">{status(settings.storefrontEnabled)}</span>
         </SetRow>
         <SetRow label="Storefront URL">
-          <TextField
-            width={280}
-            value={settings.storefrontUrl}
-            onChange={(storefrontUrl) => patch({ storefrontUrl })}
-          />
+          <span className="set-muted">{settings.storefrontUrl || "—"}</span>
         </SetRow>
         <SetRow label="Sync prices?">
-          <Toggle
-            on={settings.storefrontSyncPrices}
-            onChange={(storefrontSyncPrices) => patch({ storefrontSyncPrices })}
-          />
+          <span className="set-muted">{status(settings.storefrontSyncPrices)}</span>
         </SetRow>
         <SetRow label="Sync stock?">
-          <Toggle
-            on={settings.storefrontSyncStock}
-            onChange={(storefrontSyncStock) => patch({ storefrontSyncStock })}
-          />
+          <span className="set-muted">{status(settings.storefrontSyncStock)}</span>
         </SetRow>
       </SetCard>
       <SetCard title="Payment gateways">
         <SetRow label="Paystack">
-          <Toggle
-            on={settings.gatewayPaystack}
-            onChange={(gatewayPaystack) => patch({ gatewayPaystack })}
-          />
+          <span className="set-muted">{status(settings.gatewayPaystack)}</span>
         </SetRow>
         <SetRow label="Moniepoint">
-          <Toggle
-            on={settings.gatewayMoniepoint}
-            onChange={(gatewayMoniepoint) => patch({ gatewayMoniepoint })}
-          />
+          <span className="set-muted">{status(settings.gatewayMoniepoint)}</span>
         </SetRow>
         <SetRow label="Flutterwave">
-          <Toggle
-            on={settings.gatewayFlutterwave}
-            onChange={(gatewayFlutterwave) => patch({ gatewayFlutterwave })}
-          />
+          <span className="set-muted">{status(settings.gatewayFlutterwave)}</span>
         </SetRow>
         <SetRow label="Default gateway">
-          <SelectField
-            value={settings.gatewayDefault}
-            onChange={(value) =>
-              patch({ gatewayDefault: value as StoreSettings["gatewayDefault"] })
-            }
-            options={[
-              { value: "paystack", label: "Paystack" },
-              { value: "moniepoint", label: "Moniepoint" },
-              { value: "flutterwave", label: "Flutterwave" },
-            ]}
-          />
+          <span className="set-muted">{settings.gatewayDefault}</span>
         </SetRow>
       </SetCard>
     </>

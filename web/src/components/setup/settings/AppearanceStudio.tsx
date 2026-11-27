@@ -1,14 +1,14 @@
 "use client";
 
+import { useState } from "react";
 import { Monitor, Moon, Sun } from "lucide-react";
 import {
   ACCENT_OPTIONS,
   FONT_OPTIONS,
   type ThemePreference,
 } from "@/lib/appearance";
-import { toast } from "@/lib/toast";
 import { useAppearance } from "@/components/ThemeProvider";
-import { PrimaryButton, secondaryButtonClass } from "@/components/setup/SetupChrome";
+import { secondaryButtonClass } from "@/components/setup/SetupChrome";
 import { SettingRow, SettingsCard, Switch } from "./settings-ui";
 
 const THEME_OPTIONS: {
@@ -34,12 +34,16 @@ export function AppearanceStudio() {
     resetAppearance,
     hqSynced,
   } = useAppearance();
+  const [previewSwitches, setPreviewSwitches] = useState({
+    accent: true,
+    surfaces: false,
+  });
 
   return (
     <div className="space-y-5">
       <SettingsCard
         title="Theme"
-        copy="Light, dark, or follow the device. Applies instantly across HQ."
+        copy="Light, dark, or follow the device. Applies instantly and is saved to HQ when available."
       >
         <div className="grid gap-3 p-5 sm:grid-cols-3 sm:px-6">
           {THEME_OPTIONS.map(({ id, label, hint, icon: Icon }) => {
@@ -183,7 +187,7 @@ export function AppearanceStudio() {
 
       <SettingsCard
         title="Live sample"
-        copy="Appearance applies instantly and syncs to HQ settings over the live API."
+        copy="Preview only. The switches below change this sample, not saved HQ settings."
       >
         <div className="space-y-4 px-5 py-5 sm:px-6">
           <div className="flex flex-wrap gap-2">
@@ -207,7 +211,12 @@ export function AppearanceStudio() {
                   Active switches and nav use your accent colour.
                 </p>
               </div>
-              <Switch checked onChange={() => undefined} />
+              <Switch
+                checked={previewSwitches.accent}
+                onChange={(value) =>
+                  setPreviewSwitches((current) => ({ ...current, accent: value }))
+                }
+              />
             </div>
             <div className="flex items-center justify-between gap-4 px-4 py-3.5">
               <div className="min-w-0">
@@ -216,32 +225,25 @@ export function AppearanceStudio() {
                   Muted backgrounds follow light or dark theme.
                 </p>
               </div>
-              <Switch checked={false} onChange={() => undefined} />
+              <Switch
+                checked={previewSwitches.surfaces}
+                onChange={(value) =>
+                  setPreviewSwitches((current) => ({ ...current, surfaces: value }))
+                }
+              />
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <PrimaryButton
-              type="button"
-              onClick={() =>
-                toast.success(
-                  hqSynced
-                    ? "Appearance is saved on HQ and this device."
-                    : "Appearance saved on this device. Connect the API to sync HQ.",
-                )
-              }
-            >
-              Save changes
-            </PrimaryButton>
+            <span className="inline-flex items-center justify-center gap-2 rounded-full bg-pos-primary px-5 py-2.5 text-sm font-semibold text-white shadow-pos-primary">
+              Done
+            </span>
             <button
               type="button"
               className={secondaryButtonClass}
-              onClick={() => {
-                resetAppearance();
-                toast.success("Appearance reset to defaults.");
-              }}
+              onClick={() => setPreviewSwitches({ accent: true, surfaces: false })}
             >
-              Cancel
+              Reset sample
             </button>
           </div>
         </div>
@@ -249,8 +251,8 @@ export function AppearanceStudio() {
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-pos-ink-muted">
-          Theme, font, accent, density, and motion sync to HQ in real time
-          {hqSynced ? "." : " (API offline — local only for now)."}
+          Theme, font, accent, density, and motion are applied immediately and saved to HQ when
+          available{hqSynced ? "." : " (currently local to this device)."}
         </p>
         <button type="button" className={secondaryButtonClass} onClick={resetAppearance}>
           Reset appearance

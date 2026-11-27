@@ -24,6 +24,7 @@ export const TENDER_LABEL: Record<TenderType, string> = {
   wallet: "Wallet",
   split: "Split",
   room_charge: "Room charge",
+  "gift-card": "Gift Card",
 };
 
 export type SaleReceipt = {
@@ -111,6 +112,18 @@ export function formatReceiptText(
     ...(showAddress ? [settings.storeAddress] : []),
     ...(showEmail ? [settings.storeEmail] : []),
     ...(showPhone ? [settings.storePhone] : []),
+    ...(settings.showTinOnReceipt && settings.storeTin?.trim()
+      ? [`TIN: ${settings.storeTin.trim()}`]
+      : []),
+    ...(settings.showTinOnReceipt && settings.companyLegalName?.trim()
+      ? [settings.companyLegalName.trim()]
+      : []),
+    ...(settings.showTinOnReceipt && settings.companyRc?.trim()
+      ? [`RC: ${settings.companyRc.trim()}`]
+      : []),
+    ...(settings.showTinOnReceipt && settings.companyState?.trim()
+      ? [settings.companyState.trim()]
+      : []),
     ...(showHeader ? [settings.receiptHeader] : []),
     "--------------------------------",
     ...(showTicket ? [`Receipt # ${sale.ticketId}`] : []),
@@ -230,6 +243,9 @@ export function formatReceiptText(
       : []),
     "--------------------------------",
     ...(showFooter ? [settings.receiptFooter] : []),
+    ...(showFooter && settings.storeHours?.trim()
+      ? [`Hours: ${settings.storeHours.trim()}`]
+      : []),
     ...(settings.receiptShowBarcode ? [`*${sale.ticketId}*`] : []),
     ...(settings.receiptShowPoweredBy ? ["Powered by Herkintormiwer"] : []),
     "",
@@ -490,6 +506,12 @@ export function buildReceiptLayout(
   if (showPhone && settings.storePhone) {
     centered(settings.storePhone);
   }
+  if (settings.showTinOnReceipt) {
+    if (settings.storeTin?.trim()) centered(`TIN: ${settings.storeTin.trim()}`);
+    if (settings.companyLegalName?.trim()) centered(settings.companyLegalName.trim());
+    if (settings.companyRc?.trim()) centered(`RC: ${settings.companyRc.trim()}`);
+    if (settings.companyState?.trim()) centered(settings.companyState.trim());
+  }
   if (showHeader && settings.receiptHeader) {
     out.push({ t: "s", h: 2 });
     out.push({ t: "d" });
@@ -670,7 +692,7 @@ export function buildReceiptLayout(
       const wMm = Math.round(Math.max(24, Math.min(is58 ? 34 : 42, useWidthMm - 8)));
       const hMm = Math.round(wMm * 0.42);
       const targetPx = Math.round((wMm / 25.4) * dpi);
-      renderBarcode(canvas, sale.ticketId, targetPx, hMm, wMm);
+      renderBarcode(canvas, settings.receiptBarcodeValue?.trim() || sale.ticketId, targetPx, hMm, wMm);
       const b64 = canvas.toDataURL("image/png").split(",")[1] ?? "";
       if (b64 && canvas.width > 0 && canvas.height > 0) {
         out.push({ t: "s", h: 6 });
@@ -684,6 +706,10 @@ export function buildReceiptLayout(
   if (showFooter && settings.receiptFooter) {
     out.push({ t: "s", h: 6 });
     centered(settings.receiptFooter);
+  }
+  if (showFooter && settings.storeHours?.trim()) {
+    out.push({ t: "s", h: 2 });
+    centered(`Hours: ${settings.storeHours.trim()}`);
   }
   if (settings.receiptShowPoweredBy) {
     out.push({ t: "s", h: 4 });

@@ -26,6 +26,8 @@ export type ShiftRecord = {
   closedAt: string | null;
   salesCount: number;
   salesMinor: number;
+  refundCount?: number;
+  refundMinor?: number;
 };
 
 export function isSellOnly(user: StaffUser) {

@@ -44,7 +44,7 @@ export function SettingsManagement() {
       <PageHeader
         kicker="Settings"
         title="Settings"
-        copy="Everything that controls how your Simplebks account works — business, people, security, money, operations, notifications and data."
+        copy="Everything that controls how your account works — business, people, security, money, operations, notifications and data."
       />
 
       <div className="mb-6 flex flex-wrap gap-2">
@@ -82,7 +82,8 @@ export function SettingsManagement() {
             columns={openConfig.columns}
             fields={openConfig.fields}
             blank={openConfig.blank}
-            createLabel={`Add ${openConfig.label}`}
+            activeKey={openConfig.activeKey}
+            createLabel={openConfig.label}
           />
         </div>
       ) : (

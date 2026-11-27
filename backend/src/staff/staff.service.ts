@@ -584,6 +584,8 @@ export class StaffService {
       closedAt: null,
       salesCount: 0,
       salesMinor: 0,
+      refundCount: 0,
+      refundMinor: 0,
     };
     this.shifts.unshift(shift);
     this.dayClosedAt = null;
@@ -592,7 +594,7 @@ export class StaffService {
     return shift;
   }
 
-  async addSale(staffId: string, amountMinor: number) {
+  async addSale(staffId: string, amountMinor: number, isRefund = false) {
     await this.loadShifts();
     const shift = this.shifts.find(
       (record) => record.staffId === staffId && record.closedAt === null,
@@ -600,6 +602,10 @@ export class StaffService {
     if (!shift) return null;
     shift.salesCount += 1;
     shift.salesMinor += amountMinor;
+    if (isRefund) {
+      shift.refundCount = (shift.refundCount ?? 0) + 1;
+      shift.refundMinor = (shift.refundMinor ?? 0) + Math.abs(amountMinor);
+    }
     await this.persistShifts();
     return shift;
   }

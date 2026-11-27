@@ -6,9 +6,12 @@ import { CrmModule } from "../crm/crm.module";
 import { CustomersModule } from "../customers/customers.module";
 import { DirectoryModule } from "../directory/directory.module";
 import { ExpensesModule } from "../expenses/expenses.module";
+import { InventoryModule } from "../inventory/inventory.module";
 import { LedgerModule } from "../ledger/ledger.module";
 import { OrdersModule } from "../orders/orders.module";
 import { ProductionModule } from "../production/production.module";
+import { SalesModule } from "../sales/sales.module";
+import { StaffModule } from "../staff/staff.module";
 import { DataTransferController } from "./data-transfer.controller";
 import { DataTransferService } from "./data-transfer.service";
 
@@ -21,9 +24,12 @@ import { DataTransferService } from "./data-transfer.service";
     CustomersModule,
     DirectoryModule,
     ExpensesModule,
+    InventoryModule,
     LedgerModule,
     OrdersModule,
     ProductionModule,
+    SalesModule,
+    StaffModule,
   ],
   controllers: [DataTransferController],
   providers: [DataTransferService],

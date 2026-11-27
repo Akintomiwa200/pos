@@ -77,8 +77,8 @@ export class StaffController {
   }
 
   @Post("shift/sale")
-  sale(@Body() body: { staffId?: string; amountMinor?: number }) {
-    return this.staff.addSale(body.staffId ?? "", body.amountMinor ?? 0);
+  sale(@Body() body: { staffId?: string; amountMinor?: number; isRefund?: boolean }) {
+    return this.staff.addSale(body.staffId ?? "", body.amountMinor ?? 0, body.isRefund === true);
   }
 
   @Post("shift/print")

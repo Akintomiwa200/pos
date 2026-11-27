@@ -18,7 +18,21 @@ export type PolicyKind =
   | "bulkRuns"
   | "historicalSyncs"
   | "sharedDevices"
-  | "accountData";
+  | "accountData"
+  | "supportTickets"
+  | "supportRequests"
+  | "knowledgeArticles"
+  | "announcements"
+  | "systemSettings"
+  | "systemAlerts"
+  | "featureFlags"
+  | "backups"
+  | "apiKeys"
+  | "webhooks"
+  | "apps"
+  | "apiLogs"
+  | "adminActivity"
+  | "discountCodes";
 
 export type PolicyRecord = { id: string; [key: string]: unknown };
 

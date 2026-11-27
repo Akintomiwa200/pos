@@ -1,5 +1,8 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { CatalogService, type CatalogRow } from "../catalog/catalog.service";
+import { InventoryService } from "../inventory/inventory.service";
+import { SalesService } from "../sales/sales.service";
+import { StaffService } from "../staff/staff.service";
 import { ComboService } from "../combos/combo.service";
 import { SetupService } from "../console/setup.service";
 import { CrmService } from "../crm/crm.service";
@@ -101,6 +104,9 @@ export class DataTransferService {
     private readonly ledger: LedgerService,
     private readonly orders: OrdersService,
     private readonly production: ProductionService,
+    private readonly staff: StaffService,
+    private readonly sales: SalesService,
+    private readonly inventory: InventoryService,
   ) {
     this.handlers = {
       products: {
@@ -112,6 +118,7 @@ export class DataTransferService {
         ],
         list: () => this.catalog.list(),
         bulk: (rows) => this.catalog.upsertMany(rows as CatalogRow[]),
+        validate: (row) => (String(row.name ?? "").trim() ? undefined : "Name is required"),
       },
       "loyalty-members": {
         label: "name",
@@ -177,7 +184,12 @@ export class DataTransferService {
         label: "name",
         keys: ["id", "name", "description", "priceMinor", "components", "active"],
         list: () => this.combos.list(),
-        save: (row) => this.combos.create(row),
+        save: (row) => {
+          const id = String(row.id ?? "").trim();
+          return id
+            ? this.combos.update(id, row) ?? this.combos.create(row)
+            : this.combos.create(row);
+        },
         prepare: (row) => ({
           ...row,
           components: splitPacked(row.components)
@@ -250,6 +262,21 @@ export class DataTransferService {
         list: () => this.directory.list("customers" as DirectoryName),
         save: (row) => this.directory.save("customers" as DirectoryName, row),
       },
+      staff: {
+        label: "name",
+        keys: ["id", "name", "username", "email", "role", "roleName", "posLogin", "hasPin"],
+        list: () => this.staff.list(),
+      },
+      sales: {
+        label: "ticketId",
+        keys: ["id", "ticketId", "paidAt", "customerName", "totalMinor", "tender", "storeName"],
+        list: () => this.sales.list(),
+      },
+      inventory: {
+        label: "name",
+        keys: ["itemId", "name", "category", "sku", "barcode", "onHand", "reorderPoint", "unit", "unitLabel", "packSize"],
+        list: () => this.inventory.levels(),
+      },
     };
   }
 
@@ -286,8 +313,44 @@ export class DataTransferService {
     if (!rows.length) throw new BadRequestException("No usable rows found");
 
     if (handler.bulk) {
-      const result = await handler.bulk(rows);
-      return { created: result.created, updated: result.updated, skipped: 0, failed: 0, errors: [] };
+      const labelKey = handler.label ?? "name";
+      const accepted: Row[] = [];
+      const errors: TransferImportResult["errors"] = [];
+      let skipped = 0;
+      const known = new Set<string>();
+      if (mode === "skip") {
+        for (const row of await handler.list()) {
+          const stored = row as Row;
+          for (const key of [stored.id, stored.sku, stored.barcode]) {
+            const value = String(key ?? "").trim().toLowerCase();
+            if (value) known.add(value);
+          }
+        }
+      }
+      for (const [index, row] of rows.entries()) {
+        const label = String(row[labelKey] ?? `Row ${index + 2}`);
+        const problem = handler.validate?.(row);
+        if (problem) {
+          errors.push({ row: index + 2, label, message: problem });
+          continue;
+        }
+        if (mode === "skip") {
+          const keys = [row.id, row.sku, row.barcode]
+            .map((key) => String(key ?? "").trim().toLowerCase())
+            .filter(Boolean);
+          if (keys.some((key) => known.has(key))) {
+            skipped += 1;
+            continue;
+          }
+          keys.forEach((key) => known.add(key));
+        }
+        accepted.push(row);
+      }
+      if (!accepted.length) {
+        return { created: 0, updated: 0, skipped, failed: errors.length, errors };
+      }
+      const result = await handler.bulk(accepted);
+      return { created: result.created, updated: result.updated, skipped, failed: errors.length, errors };
     }
 
     const existing = await handler.list();

@@ -79,6 +79,47 @@ export type CustomerGroup = {
   active: boolean;
 };
 
+/** Persisted redemption ledger entries, keyed by the till ticket id. */
+export type LoyaltyRedemption = {
+  ticketId: string;
+  kind: "loyalty";
+  memberId: string;
+  identifier: string;
+  points: number;
+  valueMinor: number;
+  balanceBefore: number;
+  balanceAfter: number;
+  createdAt: string;
+  reversedAt?: string;
+};
+
+export type GiftCardRedemption = {
+  ticketId: string;
+  kind: "gift-card";
+  cardId: string;
+  code: string;
+  amountMinor: number;
+  balanceAfterMinor: number;
+  createdAt: string;
+  reversedAt?: string;
+};
+
+export type CustomerRedemption = LoyaltyRedemption | GiftCardRedemption;
+
+export type LoyaltyRedeemResult = {
+  member: LoyaltyMember;
+  pointsRedeemed: number;
+  valueMinor: number;
+  balanceBefore: number;
+  balanceAfter: number;
+};
+
+export type GiftCardRedeemResult = {
+  card: GiftCard;
+  amountMinor: number;
+  balanceAfterMinor: number;
+};
+
 export const SEED_CUSTOMER_GROUPS: CustomerGroup[] = [
   { id: "cg-trade", name: "Trade", note: "Wholesale & B2B", active: true },
   { id: "cg-walkin", name: "Walk-in", note: "Retail counter", active: true },

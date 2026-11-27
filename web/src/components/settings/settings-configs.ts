@@ -11,6 +11,7 @@ export type PolicyConfig = {
   columns: PolicyColumn[];
   fields: PolicyField[];
   blank: Record<string, string | boolean>;
+  activeKey?: string;
 };
 
 const activeBadge = (value: string) => (value.toLowerCase() === "yes" ? "emerald" : "slate");
@@ -23,6 +24,7 @@ export const POLICY_CONFIGS: PolicyConfig[] = [
     copy: "Additional businesses you operate beyond the default company profile.",
     kicker: "Settings · Business",
     title: "Add Business",
+    activeKey: "active",
     columns: [
       { key: "name", label: "Business" },
       { key: "type", label: "Type", badge: true },
@@ -30,7 +32,7 @@ export const POLICY_CONFIGS: PolicyConfig[] = [
       { key: "active", label: "Status", badge: true, render: (row) => (row.active === false ? "Paused" : "Active"), tone: activeBadge },
     ],
     fields: [
-      { key: "name", label: "Business name", placeholder: "e.g. Simplebks Wholesale" },
+      { key: "name", label: "Business name", placeholder: "e.g. Main Wholesale" },
       { key: "type", label: "Type", kind: "select", options: ["Store", "Wholesale", "Warehouse", "Kitchen", "Service"] },
       { key: "registrationNumber", label: "Registration number", placeholder: "e.g. RC 1234567" },
       { key: "address", label: "Address", placeholder: "Registered address" },
@@ -47,6 +49,7 @@ export const POLICY_CONFIGS: PolicyConfig[] = [
     copy: "Access roles your team members hold — each maps to a department and privilege level.",
     kicker: "Settings · People",
     title: "Roles",
+    activeKey: "active",
     columns: [
       { key: "name", label: "Role" },
       { key: "department", label: "Department", badge: true },
@@ -69,6 +72,7 @@ export const POLICY_CONFIGS: PolicyConfig[] = [
     copy: "Bank accounts money moves through — tenders, advances and reconciliations reference these.",
     kicker: "Settings · Money",
     title: "Bank Accounts",
+    activeKey: "active",
     columns: [
       { key: "name", label: "Account" },
       { key: "bank", label: "Bank", badge: true },
@@ -95,6 +99,7 @@ export const POLICY_CONFIGS: PolicyConfig[] = [
     copy: "Approval levels and limits for team spending — who can book what without a manager sign-off.",
     kicker: "Settings · Money",
     title: "Expense Controls",
+    activeKey: "active",
     columns: [
       { key: "name", label: "Rule" },
       { key: "approvalThresholdMinor", label: "Approval above", render: (row) => `₦${Number(row.approvalThresholdMinor ?? 0).toLocaleString()}` },
@@ -119,6 +124,7 @@ export const POLICY_CONFIGS: PolicyConfig[] = [
     copy: "Matching rules for cash and bank reconciliations — tolerance, VAT treatment and default mode.",
     kicker: "Settings · Money",
     title: "Reconciliation",
+    activeKey: "active",
     columns: [
       { key: "name", label: "Rule" },
       { key: "toleranceMinor", label: "Tolerance", render: (row) => `₦${Number(row.toleranceMinor ?? 0).toLocaleString()}` },
@@ -142,6 +148,7 @@ export const POLICY_CONFIGS: PolicyConfig[] = [
     copy: "Default asset categories and useful life assumptions that new fixed assets inherit.",
     kicker: "Settings · Money",
     title: "Fixed Assets",
+    activeKey: "active",
     columns: [
       { key: "name", label: "Category" },
       { key: "lifeYears", label: "Useful life", render: (row) => `${row.lifeYears ?? 5} yr` },
@@ -165,6 +172,7 @@ export const POLICY_CONFIGS: PolicyConfig[] = [
     copy: "How production runs are approved — budget tolerance, scrap reasons and batch approval style.",
     kicker: "Settings · Operations",
     title: "Production Policy",
+    activeKey: "active",
     columns: [
       { key: "name", label: "Policy" },
       { key: "approvalStyle", label: "Approval", badge: true },
@@ -188,6 +196,7 @@ export const POLICY_CONFIGS: PolicyConfig[] = [
     copy: "Default selling and stock rules — negative stock, low-stock thresholds and price overrides.",
     kicker: "Settings · Operations",
     title: "Sales & Stock Policies",
+    activeKey: "active",
     columns: [
       { key: "name", label: "Policy" },
       { key: "allowNegativeStock", label: "Negative stock", badge: true, render: (row) => (row.allowNegativeStock === false ? "Blocked" : "Allowed"), tone: (v) => (v === "Blocked" ? "rose" : "emerald") },
@@ -235,6 +244,7 @@ export const POLICY_CONFIGS: PolicyConfig[] = [
     copy: "External integrations and web sync hooks — toggle them and track the last successful sync.",
     kicker: "Settings · Operations",
     title: "Integrations & Web Sync",
+    activeKey: "enabled",
     columns: [
       { key: "name", label: "Integration" },
       { key: "provider", label: "Provider", badge: true },
@@ -257,6 +267,7 @@ export const POLICY_CONFIGS: PolicyConfig[] = [
     copy: "Where notifications are delivered — pick channels and the events each one receives.",
     kicker: "Settings · Notifications",
     title: "Notifications",
+    activeKey: "active",
     columns: [
       { key: "name", label: "Channel" },
       { key: "channel", label: "Type", badge: true },
@@ -266,7 +277,7 @@ export const POLICY_CONFIGS: PolicyConfig[] = [
     fields: [
       { key: "name", label: "Channel label", placeholder: "e.g. Owner phone" },
       { key: "channel", label: "Type", kind: "select", options: ["Email", "SMS", "Push", "In-app"] },
-      { key: "recipient", label: "Recipient", placeholder: "e.g. owner@simplebks.com" },
+      { key: "recipient", label: "Recipient", placeholder: "e.g. owner@company.com" },
       { key: "events", label: "Events", kind: "textarea", placeholder: "Comma-separated, e.g. Low stock, New sale, Shift close" },
       { key: "active", label: "Active", kind: "toggle" },
     ],
@@ -289,7 +300,7 @@ export const POLICY_CONFIGS: PolicyConfig[] = [
     fields: [
       { key: "subject", label: "Subject", placeholder: "e.g. Daily sales summary" },
       { key: "channel", label: "Channel", kind: "select", options: ["Email", "SMS", "Push", "In-app"] },
-      { key: "recipient", label: "Recipient", placeholder: "e.g. owner@simplebks.com" },
+      { key: "recipient", label: "Recipient", placeholder: "e.g. owner@company.com" },
       { key: "status", label: "Status", kind: "select", options: ["Sent", "Queued", "Failed"] },
       { key: "sentAt", label: "Sent at", kind: "date" },
     ],
@@ -388,6 +399,7 @@ export const POLICY_CONFIGS: PolicyConfig[] = [
     copy: "POS devices that are shared between operators — device security and PIN requirements.",
     kicker: "Settings · Administration & Data",
     title: "Shared Devices",
+    activeKey: "active",
     columns: [
       { key: "name", label: "Device" },
       { key: "store", label: "Store", badge: true },

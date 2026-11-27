@@ -175,9 +175,9 @@ export function TaxSettings() {
           : "VAT is off on this terminal — sales leave VAT-free."}{" "}
         Products with their own dashboard rate override the default; 0% items
         are VAT-exempt.{" "}
-        {settings.firs
-          ? "FIRS e-invoice fields (TIN, legal name) go on the slip."
-          : "FIRS e-invoicing is off."}
+        {settings.showTinOnReceipt
+          ? "Tax identity is included when Show tax identity on receipt is enabled."
+          : "Tax identity is hidden: Show tax identity on receipt is off."}
         {pinned.size
           ? " Changes you make here apply on this terminal at once and stay until the web dashboard changes that value."
           : " Changes made on the web dashboard flow here in real time."}
@@ -221,14 +221,14 @@ export function TaxSettings() {
             onChange={(includeVatBreakdown) => patchBreakdown(includeVatBreakdown)}
           />
         </SetRow>
-        <SetRow label="Show TIN on the receipt?">
+        <SetRow
+          label="Show tax identity on receipt?"
+          hint="Prints TIN, legal name, RC and state when set. No e-invoice is submitted."
+        >
           <Toggle
             on={settings.showTinOnReceipt}
             onChange={(showTinOnReceipt) => patch({ showTinOnReceipt })}
           />
-        </SetRow>
-        <SetRow label="Submit FIRS e-invoices for VAT?" hint="Uses company TIN and legal name">
-          <Toggle on={settings.firs} onChange={(firs) => patch({ firs })} />
         </SetRow>
       </SetCard>
       <SetCard title="Service charge">
@@ -375,7 +375,7 @@ export function LoyaltySettings() {
             }, min ${settings.loyaltyMinDigits} digits).`
           : "Loyalty prompt is off — payment goes straight through."}{" "}
         (1 point per ₦{settings.loyaltyEarnNaira}). Redeem value {formatMoney(settings.loyaltyRedeemMinor)}{" "}
-        per point.
+        per point. Redemption uses the HQ programme value.
       </LiveNote>
       <SetCard title="Prompt">
         <SetRow label="Ask for a loyalty card or phone at payment?">
@@ -533,11 +533,11 @@ export function ReceiptSettings() {
     }
     win.document.open();
     win.document.write(
-      `<!doctype html><html><head><meta charset="utf-8"><title>Receipt preview</title>` +
+      `<!doctype html><html><head><meta charset="utf-8"><title>Sample receipt preview</title>` +
         `<style>` +
         `body{margin:0;background:#e5e7eb;display:flex;justify-content:center;padding:24px 0}` +
         `pre{width:72mm;background:#fff;padding:16px 14px;margin:0;font:12px/1.45 'Courier New',Courier,monospace;white-space:pre-wrap;box-shadow:0 6px 24px rgba(0,0,0,.14)}` +
-        `</style></head><body><pre>${body}</pre></body></html>`,
+        `</style></head><body><pre>Sample receipt — not a sale\n${body}</pre></body></html>`,
     );
     win.document.close();
     win.focus();
@@ -557,6 +557,7 @@ export function ReceiptSettings() {
         {settings.receiptShowLogo ? " · logo on" : " · logo off"}
         {settings.receiptLocation ? ` · ${settings.receiptLocation}` : ""}
       </LiveNote>
+      <div className="set-live">Sample receipt — not a sale</div>
       <ReceiptVisual
         settings={settings}
         lines={sampleLines}
@@ -570,18 +571,18 @@ export function ReceiptSettings() {
         tenderedMinor={sale.amountTenderedMinor ?? undefined}
         changeMinor={sale.changeMinor ?? undefined}
       />
-      <SetCard title="Print preview">
+      <SetCard title="Sample preview">
         <SetRow
-          label="Print the current HQ layout on the receipt printer?"
-          hint="Same slip the till sends after a sale"
+          label="Print this sample on the receipt printer?"
+          hint="Sample lines and totals; the layout matches the till slip"
         >
           <button type="button" className="set-text-btn" onClick={sendPreviewToPrinter}>
-            Print preview
+            Print sample preview
           </button>
         </SetRow>
-        <SetRow label="See it on screen first?" hint="Opens a pop-up window with the slip">
+        <SetRow label="See the sample on screen first?" hint="Opens a pop-up window with the sample slip">
           <button type="button" className="set-text-btn" onClick={openPopupPreview}>
-            Open popup
+            Open sample preview
           </button>
         </SetRow>
       </SetCard>
@@ -608,6 +609,7 @@ export function ReceiptSettings() {
         <SetRow label="Address">{settings.storeAddress || "—"}</SetRow>
         <SetRow label="Phone">{settings.storePhone || "—"}</SetRow>
         <SetRow label="Email">{settings.storeEmail || "—"}</SetRow>
+        <SetRow label="Opening hours">{settings.storeHours || "—"}</SetRow>
         <SetRow label="Header note">{settings.receiptHeader || "—"}</SetRow>
         <SetRow label="Footer">{settings.receiptFooter || "—"}</SetRow>
         <SetRow label="Copies after payment">{String(settings.receiptCopies)}</SetRow>

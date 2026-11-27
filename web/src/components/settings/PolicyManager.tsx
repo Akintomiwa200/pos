@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "@/lib/toast";
 import {
   asBool,
@@ -67,6 +67,7 @@ export function PolicyManager({
   columns,
   fields,
   blank,
+  activeKey,
   createLabel = "Add",
 }: {
   kicker: string;
@@ -76,10 +77,12 @@ export function PolicyManager({
   columns: PolicyColumn[];
   fields: PolicyField[];
   blank: Record<string, string | boolean>;
+  activeKey?: string;
   createLabel?: string;
 }) {
   const [rows, setRows] = useState<PolicyRecord[] | null>(null);
   const [draft, setDraft] = useState<Record<string, string | boolean>>({ ...blank });
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function load() {
@@ -100,16 +103,33 @@ export function PolicyManager({
     setDraft((prev) => ({ ...prev, [field.key]: value }));
   }
 
+  function startEdit(row: PolicyRecord) {
+    const next: Record<string, string | boolean> = { ...blank };
+    for (const field of fields) {
+      const value = row[field.key];
+      if (field.kind === "toggle") next[field.key] = asBool(value);
+      else if (field.kind === "number") next[field.key] = asNum(value).toString();
+      else next[field.key] = asStr(value);
+    }
+    setDraft(next);
+    setEditingId(row.id);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setDraft({ ...blank });
+  }
+
   async function save() {
-    if (!draft.name || !asStr(draft.name).trim()) {
-      toast.error("A name is required");
+    const primary = fields[0];
+    if (!primary || !asStr(draft[primary.key]).trim()) {
+      toast.error(`${primary?.label ?? "A value"} is required`);
       return;
     }
     setBusy(true);
     try {
-      const body: Record<string, unknown> = { name: asStr(draft.name).trim() };
+      const body: Record<string, unknown> = {};
       for (const field of fields) {
-        if (field.key === "name") continue;
         if (field.kind === "toggle") {
           body[field.key] = asBool(draft[field.key]);
         } else if (field.kind === "number") {
@@ -118,9 +138,11 @@ export function PolicyManager({
           body[field.key] = asStr(draft[field.key]).trim();
         }
       }
+      if (editingId) body.id = editingId;
       const saved = await savePolicy(kind, body);
       setRows((prev) => [saved, ...(prev ?? []).filter((row) => row.id !== saved.id)]);
       setDraft({ ...blank });
+      setEditingId(null);
       toast.success("Saved");
     } catch (err) {
       toast.error(err, "Could not save");
@@ -133,6 +155,7 @@ export function PolicyManager({
     try {
       await deletePolicy(kind, id);
       setRows((prev) => (prev ?? []).filter((row) => row.id !== id));
+      if (editingId === id) cancelEdit();
       toast.success("Removed");
     } catch (err) {
       toast.error(err, "Could not remove");
@@ -150,9 +173,9 @@ export function PolicyManager({
           <p className="mt-2 text-[24px] font-semibold tabular-nums">{rows.length}</p>
         </div>
         <div className="rounded-[20px] bg-pos-surface p-4 shadow-pos-sm">
-          <p className="text-[13px] text-pos-ink-faint">Active</p>
+          <p className="text-[13px] text-pos-ink-faint">{activeKey ? "Active" : "Records"}</p>
           <p className="mt-2 text-[24px] font-semibold tabular-nums">
-            {rows.filter((row) => asBool(row.active) !== false).length}
+            {activeKey ? rows.filter((row) => asBool(row[activeKey])).length : rows.length}
           </p>
         </div>
         <div className="rounded-[20px] bg-pos-surface p-4 shadow-pos-sm">
@@ -163,11 +186,25 @@ export function PolicyManager({
         </div>
       </div>
 
-      <Card title={createLabel} subtitle="Add a new record to this settings section.">
+      <Card
+        title={editingId ? "Edit record" : createLabel}
+        subtitle={
+          editingId
+            ? "Update the selected record in this settings section."
+            : "Add a new record to this settings section."
+        }
+      >
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {fields.map((field) => (
             <label key={field.key} className={field.kind === "toggle" || field.key === "name" ? "sm:col-span-1" : ""}>
-              <span className={labelCls}>{field.label}</span>
+              <span className="block">
+                <span className={labelCls}>{field.label}</span>
+                {field.hint ? (
+                  <span className="mt-1 block text-[12px] font-normal normal-case tracking-normal text-pos-ink-faint">
+                    {field.hint}
+                  </span>
+                ) : null}
+              </span>
               {field.kind === "textarea" ? (
                 <textarea
                   className={`${inputCls} mt-1 min-h-[70px] resize-y`}
@@ -218,14 +255,25 @@ export function PolicyManager({
               )}
             </label>
           ))}
-          <div className="flex items-end">
+          <div className="flex items-end gap-2">
             <button
+              type="button"
               onClick={save}
               disabled={busy}
               className="flex items-center gap-2 rounded-xl bg-pos-primary px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
             >
-              <Plus size={14} /> {busy ? "Saving…" : "Save"}
+              {editingId ? <Pencil size={14} /> : <Plus size={14} />}{" "}
+              {busy ? "Saving…" : editingId ? "Save changes" : "Save"}
             </button>
+            {editingId ? (
+              <button
+                type="button"
+                onClick={cancelEdit}
+                className="rounded-xl border border-pos-border bg-pos-surface px-4 py-2 text-sm font-medium text-pos-ink-muted hover:text-pos-ink"
+              >
+                Cancel edit
+              </button>
+            ) : null}
           </div>
         </div>
       </Card>
@@ -236,7 +284,12 @@ export function PolicyManager({
             <EmptyRow colSpan={columns.length + 1} message="Nothing recorded yet." />
           ) : (
             rows.map((row) => (
-              <tr key={row.id} className="border-b border-pos-border/60">
+              <tr
+                key={row.id}
+                className={`border-b border-pos-border/60 ${
+                  editingId === row.id ? "bg-pos-primary/5" : ""
+                }`}
+              >
                 {columns.map((column) => {
                   const value = formatValue(row, column);
                   const tone = column.tone?.(value);
@@ -261,13 +314,26 @@ export function PolicyManager({
                   );
                 })}
                 <td className="px-4 py-3 text-right">
-                  <button
-                    onClick={() => remove(row.id)}
-                    className="text-pos-ink-faint hover:text-pos-danger"
-                    aria-label="Delete record"
-                  >
-                    <Trash2 size={15} />
-                  </button>
+                  <div className="flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => startEdit(row)}
+                      className="text-pos-ink-faint hover:text-pos-primary"
+                      aria-label="Edit record"
+                      title="Edit record"
+                    >
+                      <Pencil size={15} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => remove(row.id)}
+                      className="text-pos-ink-faint hover:text-pos-danger"
+                      aria-label="Delete record"
+                      title="Delete record"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))

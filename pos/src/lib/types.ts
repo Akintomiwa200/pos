@@ -6,6 +6,7 @@ export type TenderType =
   | "transfer"
   | "wallet"
   | "split"
+  | "gift-card"
   | "room_charge";
 
 export type CatalogItem = {

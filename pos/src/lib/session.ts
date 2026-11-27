@@ -87,9 +87,13 @@ export async function closeShift(staffId: string, pin?: string) {
   });
 }
 
-export async function recordShiftSale(staffId: string, amountMinor: number) {
+export async function recordShiftSale(
+  staffId: string,
+  amountMinor: number,
+  isRefund = false,
+) {
   try {
-    await post("/api/staff/shift/sale", { staffId, amountMinor });
+    await post("/api/staff/shift/sale", { staffId, amountMinor, isRefund });
   } catch {
     // local till copy keeps the total; next shift report reconciles
   }
@@ -104,7 +108,12 @@ export function formatShiftReport(
   shift: ShiftRecord | null,
   unlockedBy: StaffUser,
   kind: "shift" | "day",
-  extras?: { salesCount?: number; salesMinor?: number },
+  extras?: {
+    salesCount?: number;
+    salesMinor?: number;
+    refundCount?: number;
+    refundMinor?: number;
+  },
 ) {
   const when = new Date();
   const store = loadStoreSettings();
@@ -125,7 +134,9 @@ export function formatShiftReport(
     `Authorised by ${unlockedBy.name}`,
     "--------------------------------",
     `Tickets  ${shift?.salesCount ?? extras?.salesCount ?? 0}`,
-    `Sales    ${formatMoney(shift?.salesMinor ?? extras?.salesMinor ?? 0)}`,
+    `Gross    ${formatMoney((shift?.salesMinor ?? extras?.salesMinor ?? 0) + (shift?.refundMinor ?? extras?.refundMinor ?? 0))}`,
+    `Refunds  ${shift?.refundCount ?? extras?.refundCount ?? 0} · ${formatMoney(shift?.refundMinor ?? extras?.refundMinor ?? 0)}`,
+    `Net      ${formatMoney(shift?.salesMinor ?? extras?.salesMinor ?? 0)}`,
     "--------------------------------",
     "",
   ].filter((line) => line !== "");

@@ -1,5 +1,12 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHero } from "../../../components/site/PageHero";
+
+export const metadata: Metadata = {
+  title: "Build & release guide",
+  description:
+    "Build and release instructions for the till and price check apps. Native installers are not published yet.",
+};
 
 const downloads = [
   {
@@ -21,10 +28,10 @@ const downloads = [
     cta: "Windows EXE guide",
   },
   {
-    title: "GitHub Release zips",
-    copy: "pos-ui-web.zip, price-check-ui-web.zip, and pos-api-dist.zip on tag v0.1.0. HQ still runs with pnpm start.",
+    title: "Release tag",
+    copy: "The v0.1.0 tag tracks the compiled web UI and API dist zips. These are not native installers.",
     href: "https://github.com/Akintomiwa200/pos/releases/tag/v0.1.0",
-    cta: "Open v0.1.0",
+    cta: "Open v0.1.0 tag",
   },
 ];
 
@@ -32,10 +39,16 @@ export default function DownloadPage() {
   return (
     <>
       <PageHero
-        kicker="Download"
-        title="Till and price check installers."
-        copy="Native setup.exe and APK are built on a Windows/Android machine. Tagged GitHub Releases already carry the compiled web UI and API dist."
+        kicker="Build & release"
+        title="Build & release guide"
+        copy="Native setup.exe and APK installers are not published yet. This page keeps the build commands and release notes for producing them from source."
       />
+      <div className="mx-auto max-w-6xl px-4 pt-8 sm:px-6">
+        <p className="rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-600">
+          No installer downloads are available here. Use the guides below to build the apps
+          yourself; the tagged release only carries web UI and API dist files.
+        </p>
+      </div>
       <div className="mx-auto grid max-w-6xl gap-4 px-4 py-12 sm:px-6 md:grid-cols-2">
         {downloads.map((item) => (
           <div

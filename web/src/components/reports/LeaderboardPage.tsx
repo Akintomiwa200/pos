@@ -1,15 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import {
-  Axe,
-  ChevronDown,
-  Gem,
-  Gift,
-  MoreHorizontal,
-  Trophy,
-  Zap,
-} from "lucide-react";
+import { ChevronDown, Copy, Trophy } from "lucide-react";
+import { toast } from "@/lib/toast";
 import { listSales, type HqSale } from "@/lib/hq-api";
 import { listDirectory, type DirectoryRecord } from "@/lib/hq-directory";
 import { naira } from "@/lib/hq-ops";
@@ -23,15 +16,12 @@ type LeaderPeriod = "week" | "month" | "all";
 type LeaderEntry = {
   id: string;
   name: string;
-  handle: string;
+  handle?: string;
   email?: string;
   avatar?: string;
   sellMinor: number;
-  rating: number;
-  gifts: number;
-  gems: number;
-  streak: number;
-  repeats: number;
+  orders: number;
+  units: number;
 };
 
 const TABS: { id: LeaderTab; label: string }[] = [
@@ -48,26 +38,25 @@ const PERIODS: { id: LeaderPeriod; label: string }[] = [
 
 const EMPTY_LEADERBOARD: LeaderEntry[] = [];
 
-function hashCode(value: string) {
-  let hash = 0;
-  for (let i = 0; i < value.length; i += 1) {
-    hash = (hash << 5) - hash + value.charCodeAt(i);
-    hash |= 0;
+function storedText(value: unknown) {
+  if (typeof value === "string") {
+    const text = value.trim();
+    return text || undefined;
   }
-  return Math.abs(hash);
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return undefined;
 }
 
-function handleFor(name: string, id: string) {
-  const slug = name.trim().split(/\s+/)[0]?.toLowerCase().replace(/[^a-z0-9]/g, "") || "user";
-  return `@${slug}${1000 + (hashCode(id) % 9000)}`;
+function storedHandle(row?: DirectoryRecord) {
+  const raw = storedText(row?.extra?.handle) ?? storedText(row?.extra?.username);
+  if (!raw) return undefined;
+  return raw.startsWith("@") ? raw : `@${raw}`;
 }
 
-function avatarUrl(name: string, id: string) {
-  return `https://i.pravatar.cc/150?u=${encodeURIComponent(id || name)}`;
-}
-
-function formatRating(value: number) {
-  return value.toLocaleString("en-US").replace(/,/g, " ");
+function storedAvatar(row?: DirectoryRecord) {
+  const raw = storedText(row?.extra?.avatarUrl) ?? storedText(row?.extra?.avatar);
+  if (!raw) return undefined;
+  return /^(https?:\/\/|\/|data:image\/)/i.test(raw) ? raw : undefined;
 }
 
 function filterSalesByPeriod(sales: HqSale[], period: LeaderPeriod) {
@@ -81,6 +70,8 @@ type LeaderBucket = {
   key: string;
   name: string;
   email?: string;
+  handle?: string;
+  avatar?: string;
   sellMinor: number;
   orders: number;
   units: number;
@@ -118,6 +109,10 @@ function enrichFromDirectory(
   for (const bucket of buckets) {
     const row = byKey.get(bucket.key) ?? byName.get(bucket.name.toLowerCase());
     if (row?.email) bucket.email = row.email;
+    const handle = storedHandle(row);
+    if (handle) bucket.handle = handle;
+    const avatar = storedAvatar(row);
+    if (avatar) bucket.avatar = avatar;
     if (row?.name && row.name !== bucket.name) bucket.name = row.name;
   }
 }
@@ -126,17 +121,12 @@ function toEntry(bucket: LeaderBucket): LeaderEntry {
   return {
     id: bucket.key,
     name: bucket.name,
-    handle: handleFor(bucket.name, bucket.key),
+    handle: bucket.handle,
     email: bucket.email,
-    avatar: avatarUrl(bucket.name, bucket.key),
+    avatar: bucket.avatar,
     sellMinor: bucket.sellMinor,
-    rating: Math.round(
-      bucket.sellMinor / 100 + bucket.orders * 12_000 + bucket.units * 850,
-    ),
-    gifts: 0,
-    gems: 0,
-    streak: 0,
-    repeats: 0,
+    orders: bucket.orders,
+    units: bucket.units,
   };
 }
 
@@ -184,10 +174,7 @@ function resolveEntries(
       const byName = new Map(stores.map((row) => [row.name.toLowerCase(), row]));
       for (const bucket of buckets) {
         const store = byName.get(bucket.name.toLowerCase());
-        if (store) {
-          bucket.name = store.name;
-          bucket.email = `${store.name.toLowerCase().replace(/\s+/g, ".")}@shop.local`;
-        }
+        if (store) bucket.name = store.name;
       }
     }
 
@@ -251,35 +238,6 @@ function TableAvatar({ src, name }: { src?: string; name: string }) {
   );
 }
 
-function StatPill({
-  icon: Icon,
-  value,
-  tone,
-  featured = false,
-  compact = false,
-}: {
-  icon: typeof Gift;
-  value: number;
-  tone: string;
-  featured?: boolean;
-  compact?: boolean;
-}) {
-  return (
-    <span
-      className={`inline-flex items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold tabular-nums ${
-        compact ? "" : "min-w-0 flex-1"
-      } ${
-        featured
-          ? "bg-black/10 text-white dark:bg-white/10"
-          : "bg-pos-surface-muted text-pos-ink-muted"
-      }`}
-    >
-      <Icon size={12} className={tone} />
-      {value.toLocaleString()}
-    </span>
-  );
-}
-
 function PodiumCard({
   entry,
   rank,
@@ -311,9 +269,11 @@ function PodiumCard({
           <p className={`truncate text-[15px] font-semibold ${featured ? "text-white" : "text-pos-ink"}`}>
             {entry.name}
           </p>
-          <p className={`truncate text-[12px] ${featured ? "text-white/70" : "text-pos-ink-faint"}`}>
-            {entry.handle}
-          </p>
+          {entry.handle ? (
+            <p className={`truncate text-[12px] ${featured ? "text-white/70" : "text-pos-ink-faint"}`}>
+              {entry.handle}
+            </p>
+          ) : null}
         </div>
         <Trophy size={featured ? 20 : 17} className={`shrink-0 ${trophyClass}`} />
       </div>
@@ -331,36 +291,17 @@ function PodiumCard({
         </div>
         <div className="min-w-0 flex-1 text-right">
           <p className={`text-[11px] ${featured ? "text-white/65" : "text-pos-ink-faint"}`}>
-            Ranked Rating
+            Orders
           </p>
           <p className={`mt-0.5 truncate text-[14px] font-bold ${featured ? "text-white" : "text-pos-ink"}`}>
-            {formatRating(entry.rating)}
+            {entry.orders.toLocaleString()}
           </p>
         </div>
       </div>
 
-      <div className={`mt-4 ${featured ? "grid grid-cols-4 gap-2" : "flex justify-center gap-2"}`}>
-        <StatPill
-          icon={Gift}
-          value={entry.gifts}
-          tone={featured ? "text-emerald-200" : "text-pos-success"}
-          featured={featured}
-          compact={!featured}
-        />
-        <StatPill
-          icon={Gem}
-          value={entry.gems}
-          tone={featured ? "text-pink-200" : "text-pos-primary"}
-          featured={featured}
-          compact={!featured}
-        />
-        {featured ? (
-          <>
-            <StatPill icon={Zap} value={entry.streak} tone="text-amber-200" featured compact />
-            <StatPill icon={Axe} value={entry.repeats} tone="text-emerald-200" featured compact />
-          </>
-        ) : null}
-      </div>
+      <p className={`mt-3 text-[12px] ${featured ? "text-white/70" : "text-pos-ink-faint"}`}>
+        {entry.units.toLocaleString()} units sold
+      </p>
     </article>
   );
 }
@@ -398,6 +339,16 @@ export function LeaderboardPage() {
   const top3 = entries.slice(0, 3);
   const rest = entries.slice(3);
   const nameColumn = tab === "shop" ? "Shop" : tab === "worker" ? "Worker" : "Customer";
+
+  async function copyEntry(entry: LeaderEntry) {
+    const details = [entry.name, entry.handle, entry.email, entry.id].filter(Boolean).join(" · ");
+    try {
+      await navigator.clipboard.writeText(details);
+      toast.success("Leader details copied.");
+    } catch {
+      toast.error("Could not copy leader details.");
+    }
+  }
 
   if (!ready) return <ManagerSkeleton variant="table" />;
 
@@ -466,14 +417,15 @@ export function LeaderboardPage() {
                 <th className="px-5 py-3.5">{nameColumn}</th>
                 <th className="px-5 py-3.5">Email</th>
                 <th className="px-5 py-3.5">Sell</th>
-                <th className="px-5 py-3.5">Ranked Rating</th>
+                <th className="px-5 py-3.5">Orders</th>
+                <th className="px-5 py-3.5">Units</th>
                 <th className="px-5 py-3.5" aria-label="Actions" />
               </tr>
             </thead>
             <tbody className="divide-y divide-pos-border/45">
               {rest.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-5 py-10 text-center text-pos-ink-faint">
+                  <td colSpan={7} className="px-5 py-10 text-center text-pos-ink-faint">
                     No rankings yet for this period.
                   </td>
                 </tr>
@@ -505,15 +457,20 @@ export function LeaderboardPage() {
                         {naira(entry.sellMinor)}
                       </td>
                       <td className="px-5 py-4 tabular-nums text-pos-ink-muted">
-                        {formatRating(entry.rating)}
+                        {entry.orders.toLocaleString()}
+                      </td>
+                      <td className="px-5 py-4 tabular-nums text-pos-ink-muted">
+                        {entry.units.toLocaleString()}
                       </td>
                       <td className="px-5 py-4 text-right">
                         <button
                           type="button"
                           className="inline-grid h-8 w-8 place-items-center rounded-full text-pos-ink-faint hover:bg-pos-surface-muted hover:text-pos-ink"
-                          aria-label="Actions"
+                          aria-label="Copy leader details"
+                          title="Copy leader details"
+                          onClick={() => void copyEntry(entry)}
                         >
-                          <MoreHorizontal size={16} />
+                          <Copy size={16} />
                         </button>
                       </td>
                     </tr>

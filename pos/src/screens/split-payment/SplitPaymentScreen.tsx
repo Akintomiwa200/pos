@@ -20,8 +20,10 @@ const TENDERS: { id: TenderType; label: string }[] = [
 type Props = {
   count: number;
   parts: SplitPart[];
+  totalMinor: number;
   onCount: (delta: number) => void;
   onTender: (index: number, tender: TenderType) => void;
+  onAmount: (index: number, minor: number) => void;
   onCharge: (index: number) => void;
   onBack: () => void;
 };
@@ -29,12 +31,19 @@ type Props = {
 export function SplitPaymentScreen({
   count,
   parts,
+  totalMinor,
   onCount,
   onTender,
+  onAmount,
   onCharge,
   onBack,
 }: Props) {
   const settings = useStoreSettings();
+  const allocatedMinor = parts.reduce(
+    (sum, part) => sum + Math.max(0, part.amountMinor),
+    0,
+  );
+  const remainingMinor = totalMinor - allocatedMinor;
   return (
     <section className="pay">
       <button className="back" onClick={onBack}>
@@ -48,6 +57,27 @@ export function SplitPaymentScreen({
         <button onClick={() => onCount(-1)}>-</button>
         <strong>{count}</strong>
         <button onClick={() => onCount(1)}>+</button>
+      </div>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 12,
+          marginBottom: 14,
+        }}
+      >
+        <span>
+          Total to split <strong>{formatMoney(totalMinor)}</strong>
+        </span>
+        <span
+          className={remainingMinor === 0 ? "" : "pin-error"}
+          style={{ color: remainingMinor === 0 ? "#15803d" : undefined }}
+        >
+          {remainingMinor === 0
+            ? "Fully allocated"
+            : `${remainingMinor > 0 ? "Remaining" : "Over by"} ${formatMoney(Math.abs(remainingMinor))}`}
+        </span>
       </div>
       {parts.map((part, index) => (
         <div className="split-row" key={`split-${index}`}>
@@ -69,7 +99,33 @@ export function SplitPaymentScreen({
               ))}
             </select>
           </label>
-          <strong>{formatMoney(part.amountMinor)}</strong>
+          <label>
+            <div className="price">Amount (₦)</div>
+            <input
+              type="number"
+              min={0}
+              step="0.01"
+              value={Number((part.amountMinor / 100).toFixed(2))}
+              disabled={part.paid}
+              aria-label={`Amount for payment ${index + 1} in naira`}
+              onChange={(event) => {
+                const naira = Number(event.target.value);
+                onAmount(
+                  index,
+                  Number.isFinite(naira) ? Math.max(0, Math.round(naira * 100)) : 0,
+                );
+              }}
+              style={{
+                marginTop: 4,
+                width: "100%",
+                border: "1px solid #ececf0",
+                borderRadius: 10,
+                padding: "8px 10px",
+                font: "inherit",
+                background: "#fafafa",
+              }}
+            />
+          </label>
           <button
             className="charge"
             disabled={part.paid}

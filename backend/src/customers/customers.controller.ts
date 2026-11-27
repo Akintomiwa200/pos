@@ -25,6 +25,24 @@ export class CustomersController {
     return this.customers.saveLoyaltyProgram(body);
   }
 
+  @Post("loyalty/redeem")
+  redeemLoyalty(
+    @Body()
+    body: {
+      memberId?: string;
+      identifier?: string;
+      points?: number;
+      ticketId?: string;
+    },
+  ) {
+    return this.customers.redeemLoyalty(body);
+  }
+
+  @Post("loyalty/reverse")
+  reverseLoyalty(@Body() body: { ticketId?: string }) {
+    return this.customers.reverseRedemption(String(body.ticketId ?? ""));
+  }
+
   @Get("credits")
   listCredits() {
     return this.customers.listCredits();
@@ -93,6 +111,19 @@ export class CustomersController {
   @Post("gift-cards")
   saveGiftCard(@Body() body: Partial<GiftCard> & { id?: string }) {
     return this.customers.saveGiftCard(body);
+  }
+
+  @Post("gift-cards/redeem")
+  redeemGiftCard(
+    @Body()
+    body: { code?: string; amountMinor?: number; ticketId?: string },
+  ) {
+    return this.customers.redeemGiftCard(body);
+  }
+
+  @Post("gift-cards/reverse")
+  reverseGiftCard(@Body() body: { ticketId?: string }) {
+    return this.customers.reverseRedemption(String(body.ticketId ?? ""));
   }
 
   @Delete("gift-cards/:id")

@@ -32,6 +32,8 @@ import { PoliciesModule } from './policies/policies.module';
 
 import { DataTransferModule } from './data-transfer/data-transfer.module';
 
+import { SystemBackupModule } from './system-backup/system-backup.module';
+
 @Module({
   imports: [
     DbModule,
@@ -60,6 +62,7 @@ import { DataTransferModule } from './data-transfer/data-transfer.module';
     LedgerModule,
     PoliciesModule,
     DataTransferModule,
+    SystemBackupModule,
   ],
   controllers: [AppController],
   providers: [AppService],

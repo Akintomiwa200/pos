@@ -1,4 +1,10 @@
-import { BadRequestException, Injectable, NotFoundException, OnModuleInit } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+  OnModuleInit,
+} from "@nestjs/common";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -12,6 +18,11 @@ import {
   type LoyaltyProgram,
   type CustomerGroup,
   SEED_CUSTOMER_GROUPS,
+  type CustomerRedemption,
+  type GiftCardRedeemResult,
+  type GiftCardRedemption,
+  type LoyaltyRedeemResult,
+  type LoyaltyRedemption,
 } from "./customers.types";
 
 @Injectable()
@@ -25,6 +36,7 @@ export class CustomersService implements OnModuleInit {
   private giftCards: GiftCard[] = [];
   private giftBatches: GiftCardBatch[] = [];
   private customerGroups: CustomerGroup[] = [];
+  private redemptions: CustomerRedemption[] = [];
 
   private readonly loyaltyFile = join(this.dir, "hq-customer-loyalty.json");
   private readonly creditsFile = join(this.dir, "hq-customer-credits.json");
@@ -34,6 +46,7 @@ export class CustomersService implements OnModuleInit {
   private readonly giftCardsFile = join(this.dir, "hq-customer-gift-cards.json");
   private readonly giftBatchesFile = join(this.dir, "hq-customer-gift-batches.json");
   private readonly groupsFile = join(this.dir, "hq-customer-groups.json");
+  private readonly redemptionsFile = join(this.dir, "hq-customer-redemptions.json");
 
   async onModuleInit() {
     await mkdir(this.dir, { recursive: true });
@@ -45,6 +58,7 @@ export class CustomersService implements OnModuleInit {
     this.giftCards = await this.readJson(this.giftCardsFile, []);
     this.giftBatches = await this.readJson(this.giftBatchesFile, []);
     this.customerGroups = await this.readJson(this.groupsFile, SEED_CUSTOMER_GROUPS);
+    this.redemptions = await this.readJson(this.redemptionsFile, []);
     await this.persist();
   }
 
@@ -68,6 +82,7 @@ export class CustomersService implements OnModuleInit {
       writeFile(this.giftCardsFile, JSON.stringify(this.giftCards, null, 2), "utf8"),
       writeFile(this.giftBatchesFile, JSON.stringify(this.giftBatches, null, 2), "utf8"),
       writeFile(this.groupsFile, JSON.stringify(this.customerGroups, null, 2), "utf8"),
+      writeFile(this.redemptionsFile, JSON.stringify(this.redemptions, null, 2), "utf8"),
     ]);
   }
 
@@ -323,5 +338,190 @@ export class CustomersService implements OnModuleInit {
     this.customerGroups = this.customerGroups.filter((row) => row.id !== id);
     await this.persist();
     return { ok: true };
+  }
+
+  private normalizeLookup(value: string) {
+    return value.replace(/[\s-]/g, "").toLowerCase();
+  }
+
+  private resolveLoyaltyMember(
+    memberId: string | undefined,
+    identifier: string,
+  ): LoyaltyMember | undefined {
+    if (memberId) {
+      return this.loyaltyMembers.find((row) => row.id === memberId);
+    }
+    const key = this.normalizeLookup(identifier);
+    if (!key) return undefined;
+    const card = this.loyaltyCards.find(
+      (row) =>
+        row.active &&
+        this.normalizeLookup(row.cardNumber) === key,
+    );
+    return this.loyaltyMembers.find((row) => {
+      if (!row.active) return false;
+      return (
+        this.normalizeLookup(row.phone) === key ||
+        (row.cardNumber ? this.normalizeLookup(row.cardNumber) === key : false) ||
+        (card ? row.id === card.memberId : false)
+      );
+    });
+  }
+
+  /**
+   * Redeem loyalty points against a till ticket. The ledger entry is written
+   * in the same in-memory step as the deduction so a retried request with the
+   * same ticket id can never deduct twice.
+   */
+  async redeemLoyalty(input: {
+    memberId?: string;
+    identifier?: string;
+    points?: number;
+    ticketId?: string;
+  }): Promise<LoyaltyRedeemResult> {
+    const ticketId = String(input.ticketId ?? "").trim();
+    if (!ticketId) throw new BadRequestException("ticketId is required");
+    const points = Math.round(Number(input.points ?? 0));
+    if (!Number.isFinite(points) || points <= 0) {
+      throw new BadRequestException("A positive number of points is required");
+    }
+    const identifier = String(input.identifier ?? "").trim();
+    const member = this.resolveLoyaltyMember(input.memberId?.trim(), identifier);
+    if (!member) throw new NotFoundException("Loyalty member not found");
+    if (!member.active) throw new BadRequestException("Loyalty member is inactive");
+
+    const existing = this.redemptions.find((row) => row.ticketId === ticketId);
+    if (existing) {
+      if (
+        existing.kind !== "loyalty" ||
+        existing.memberId !== member.id ||
+        existing.points !== points ||
+        existing.reversedAt
+      ) {
+        throw new ConflictException("This ticket has already been redeemed");
+      }
+      return {
+        member,
+        pointsRedeemed: existing.points,
+        valueMinor: existing.valueMinor,
+        balanceBefore: existing.balanceBefore,
+        balanceAfter: existing.balanceAfter,
+      };
+    }
+
+    if (member.points < points) {
+      throw new BadRequestException("Insufficient loyalty points");
+    }
+    const balanceBefore = member.points;
+    const balanceAfter = balanceBefore - points;
+    const valueMinor =
+      points * Math.max(0, Math.round(this.loyaltyProgram.redeemValueMinor));
+    const entry: LoyaltyRedemption = {
+      ticketId,
+      kind: "loyalty",
+      memberId: member.id,
+      identifier: identifier || member.phone,
+      points,
+      valueMinor,
+      balanceBefore,
+      balanceAfter,
+      createdAt: new Date().toISOString(),
+    };
+    this.redemptions.push(entry);
+    member.points = balanceAfter;
+    await this.persist();
+    return { member, pointsRedeemed: points, valueMinor, balanceBefore, balanceAfter };
+  }
+
+  /** Deduct a gift card against a till ticket, idempotently by ticket id. */
+  async redeemGiftCard(input: {
+    code?: string;
+    amountMinor?: number;
+    ticketId?: string;
+  }): Promise<GiftCardRedeemResult> {
+    const ticketId = String(input.ticketId ?? "").trim();
+    if (!ticketId) throw new BadRequestException("ticketId is required");
+    const code = String(input.code ?? "").trim().toUpperCase();
+    if (!code) throw new BadRequestException("Gift card code is required");
+    const amountMinor = Math.round(Number(input.amountMinor ?? 0));
+    if (!Number.isFinite(amountMinor) || amountMinor <= 0) {
+      throw new BadRequestException("A positive amountMinor is required");
+    }
+    const card = this.giftCards.find(
+      (row) => row.code.trim().toUpperCase() === code,
+    );
+    if (!card) throw new NotFoundException("Gift card not found");
+    if (!card.active) throw new BadRequestException("Gift card is inactive");
+    if (card.expiresAt) {
+      const expires = Date.parse(card.expiresAt);
+      if (Number.isFinite(expires) && expires <= Date.now()) {
+        throw new BadRequestException("Gift card has expired");
+      }
+    }
+
+    const existing = this.redemptions.find((row) => row.ticketId === ticketId);
+    if (existing) {
+      if (
+        existing.kind !== "gift-card" ||
+        existing.code !== card.code ||
+        existing.amountMinor !== amountMinor ||
+        existing.reversedAt
+      ) {
+        throw new ConflictException("This ticket has already been redeemed");
+      }
+      return {
+        card,
+        amountMinor: existing.amountMinor,
+        balanceAfterMinor: existing.balanceAfterMinor,
+      };
+    }
+
+    if (card.balanceMinor < amountMinor) {
+      throw new BadRequestException("Gift card balance is too low");
+    }
+    const balanceAfterMinor = card.balanceMinor - amountMinor;
+    const entry: GiftCardRedemption = {
+      ticketId,
+      kind: "gift-card",
+      cardId: card.id,
+      code: card.code,
+      amountMinor,
+      balanceAfterMinor,
+      createdAt: new Date().toISOString(),
+    };
+    this.redemptions.push(entry);
+    card.balanceMinor = balanceAfterMinor;
+    await this.persist();
+    return { card, amountMinor, balanceAfterMinor };
+  }
+
+  /** Restore a redemption when the sale could not be completed. */
+  async reverseRedemption(ticketId: string) {
+    const id = String(ticketId ?? "").trim();
+    if (!id) throw new BadRequestException("ticketId is required");
+    const entry = this.redemptions.find((row) => row.ticketId === id);
+    if (!entry) throw new NotFoundException("Redemption not found");
+    if (entry.reversedAt) return { ok: true, reversed: true, ticketId: id };
+
+    if (entry.kind === "loyalty") {
+      const member = this.loyaltyMembers.find((row) => row.id === entry.memberId);
+      if (!member) {
+        throw new NotFoundException(
+          "Cannot reverse redemption: loyalty member no longer exists",
+        );
+      }
+      member.points += entry.points;
+    } else {
+      const card = this.giftCards.find((row) => row.id === entry.cardId);
+      if (!card) {
+        throw new NotFoundException(
+          "Cannot reverse redemption: gift card no longer exists",
+        );
+      }
+      card.balanceMinor += entry.amountMinor;
+    }
+    entry.reversedAt = new Date().toISOString();
+    await this.persist();
+    return { ok: true, reversed: true, ticketId: id };
   }
 }

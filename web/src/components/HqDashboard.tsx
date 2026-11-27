@@ -887,8 +887,7 @@ function SalesDynamicChart({
   const colors = useThemeColors();
   const data = points.map((row) => ({
     label: row.label,
-    a: row.value,
-    b: Math.round(row.value * 0.72),
+    value: row.value,
   }));
   const count = Math.max(points.length, 1);
   const markAt = (ratio: number) => Math.min(count - 1, Math.round((count - 1) * ratio));
@@ -914,15 +913,7 @@ function SalesDynamicChart({
             />
             <Line
               type="monotone"
-              dataKey="b"
-              stroke={colors.chartLineSoft}
-              strokeWidth={2}
-              dot={false}
-              isAnimationActive={false}
-            />
-            <Line
-              type="monotone"
-              dataKey="a"
+              dataKey="value"
               stroke={colors.primary}
               strokeWidth={2.6}
               isAnimationActive={false}
@@ -1270,9 +1261,9 @@ function TodayStrip({ sales }: { sales: HqSale[] }) {
   const today = sales.filter((row) => inRange(row, todayStart, todayEnd));
   const revenue = today.reduce((sum, row) => sum + row.totalMinor, 0);
   const prevRevenue = yesterday.reduce((sum, row) => sum + row.totalMinor, 0);
-  const pct = prevRevenue ? ((revenue - prevRevenue) / prevRevenue) * 100 : revenue ? 100 : 0;
+  const pct = prevRevenue > 0 ? ((revenue - prevRevenue) / prevRevenue) * 100 : null;
   const avg = today.length ? revenue / today.length : 0;
-  const positive = pct >= 0;
+  const positive = (pct ?? 0) >= 0;
   const DeltaIcon = positive ? ArrowUpRight : ArrowDownRight;
   return (
     <div className="overflow-hidden rounded-[28px] bg-pos-surface shadow-pos-sm">
@@ -1299,14 +1290,20 @@ function TodayStrip({ sales }: { sales: HqSale[] }) {
           <div className="mt-1.5">
             <FitMoney minor={revenue} kind="card" />
           </div>
-          <p
-            className={`mt-1.5 inline-flex items-center gap-1 text-[12px] font-semibold ${
-              positive ? "text-pos-success" : "text-red-600 dark:text-red-400"
-            }`}
-          >
-            <DeltaIcon size={13} strokeWidth={2.6} />
-            {Math.abs(pct).toFixed(1)}% vs yesterday
-          </p>
+          {pct !== null ? (
+            <p
+              className={`mt-1.5 inline-flex items-center gap-1 text-[12px] font-semibold ${
+                positive ? "text-pos-success" : "text-red-600 dark:text-red-400"
+              }`}
+            >
+              <DeltaIcon size={13} strokeWidth={2.6} />
+              {Math.abs(pct).toFixed(1)}% vs yesterday
+            </p>
+          ) : (
+            <p className="mt-1.5 text-[12px] text-pos-ink-faint" title="No prior-period data">
+              — No prior-period data
+            </p>
+          )}
         </div>
         <div className="border-b border-pos-border/50 px-5 py-4 sm:border-b-0">
           <p className="text-[12px] text-pos-ink-faint">Tickets</p>
@@ -1718,8 +1715,9 @@ export function HqDashboard() {
     );
     const revenue = current.reduce((sum, row) => sum + row.totalMinor, 0);
     const prevRevenue = previous.reduce((sum, row) => sum + row.totalMinor, 0);
-    const delta = revenue - prevRevenue;
-    const pct = prevRevenue ? (delta / prevRevenue) * 100 : current.length ? 100 : 0;
+    const hasBaseline = prevRevenue > 0;
+    const delta = hasBaseline ? revenue - prevRevenue : null;
+    const pct = hasBaseline && delta !== null ? (delta / prevRevenue) * 100 : null;
     const cashiers = sumBy(team, (row) => row.cashierName || "Till", (row) => row.totalMinor);
     const tenders = sumBy(current, (row) => row.tender || "Other", (row) => row.totalMinor);
     const ticketsByTender = sumBy(current, (row) => row.tender || "Other", () => 1);
@@ -1866,7 +1864,7 @@ export function HqDashboard() {
       (row) => !hiddenNames.has(row.name.trim().toLowerCase().replace(/\s+/g, "")),
     ),
   );
-  const positive = report.pct >= 0;
+  const positive = (report.pct ?? 0) >= 0;
   const DeltaIcon = positive ? ArrowUpRight : ArrowDownRight;
   const tenderRows = [...TENDERS]
     .map((row) => {
@@ -2033,21 +2031,36 @@ export function HqDashboard() {
           <p className="text-[13px] text-pos-ink-faint">Revenue</p>
           <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
             <FitMoney minor={report.revenue} kind="hero" />
-            <span
-              className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[12px] font-semibold text-white ${
-                positive ? "bg-pos-success" : "bg-pos-primary"
-              }`}
-            >
-              <DeltaIcon size={13} strokeWidth={2.6} />
-              {Math.abs(report.pct).toFixed(1)}%
-            </span>
-            <span className="min-w-0 max-w-[9rem] truncate rounded-full bg-red-500/10 px-2.5 py-0.5 text-[12px] font-medium text-red-600 dark:text-red-400" title={naira(Math.abs(report.delta))}>
-              {displayMoney(Math.abs(report.delta))}
-            </span>
+            {report.pct !== null && report.delta !== null ? (
+              <>
+                <span
+                  className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[12px] font-semibold text-white ${
+                    positive ? "bg-pos-success" : "bg-pos-primary"
+                  }`}
+                >
+                  <DeltaIcon size={13} strokeWidth={2.6} />
+                  {Math.abs(report.pct).toFixed(1)}%
+                </span>
+                <span className="min-w-0 max-w-[9rem] truncate rounded-full bg-red-500/10 px-2.5 py-0.5 text-[12px] font-medium text-red-600 dark:text-red-400" title={naira(Math.abs(report.delta))}>
+                  {displayMoney(Math.abs(report.delta))}
+                </span>
+              </>
+            ) : (
+              <span
+                className="inline-flex items-center rounded-full bg-pos-surface-muted px-2 py-0.5 text-[12px] font-medium text-pos-ink-faint"
+                title="No prior-period data"
+              >
+                —
+              </span>
+            )}
           </div>
-          <p className="mt-2 min-w-0 truncate text-[13px] text-pos-ink-faint" title={`vs prev. ${naira(report.prevRevenue)}`}>
-            vs prev. {displayMoney(report.prevRevenue)} {rangeLabel(report.prevFrom, report.prevTo)}
-          </p>
+          {report.prevRevenue > 0 ? (
+            <p className="mt-2 min-w-0 truncate text-[13px] text-pos-ink-faint" title={`vs prev. ${naira(report.prevRevenue)}`}>
+              vs prev. {displayMoney(report.prevRevenue)} {rangeLabel(report.prevFrom, report.prevTo)}
+            </p>
+          ) : (
+            <p className="mt-2 text-[13px] text-pos-ink-faint">No prior-period data</p>
+          )}
         </div>
 
         <div className="grid min-w-0 flex-1 grid-cols-2 gap-2.5 sm:grid-cols-[minmax(0,0.85fr)_minmax(0,0.85fr)_minmax(0,1.35fr)]">
@@ -2098,26 +2111,48 @@ export function HqDashboard() {
           </Link>
 
           <div className="col-span-2 grid min-h-[118px] grid-cols-3 rounded-[20px] bg-pos-surface p-2 shadow-pos-sm sm:col-span-1">
-            {[
+            {([
               {
                 label: "Tickets",
                 value: String(report.tickets),
-                hint: `${report.tickets - report.prevTickets >= 0 ? "+" : ""}${report.tickets - report.prevTickets}`,
+                hint:
+                  report.prevTickets > 0
+                    ? `${report.tickets - report.prevTickets >= 0 ? "+" : ""}${report.tickets - report.prevTickets} vs prev.`
+                    : "—",
+                trend:
+                  report.prevTickets > 0
+                    ? report.tickets >= report.prevTickets
+                      ? ("up" as const)
+                      : ("down" as const)
+                    : ("none" as const),
                 key: "tickets" as const,
               },
               {
                 label: "Value",
                 value: compact(report.revenue),
-                hint: `${report.pct >= 0 ? "+" : ""}${report.pct.toFixed(1)}%`,
+                hint: report.pct !== null ? `${report.pct >= 0 ? "+" : ""}${report.pct.toFixed(1)}% vs prev.` : "—",
+                trend:
+                  report.pct !== null
+                    ? report.pct >= 0
+                      ? ("up" as const)
+                      : ("down" as const)
+                    : ("none" as const),
                 key: "revenue" as const,
               },
               {
                 label: "Card mix",
                 value: `${report.cardMix}%`,
-                hint: `${report.cardMix >= 0 ? "+" : ""}${report.cardMix.toFixed(1)}%`,
+                hint: "of tickets",
+                trend: "none" as const,
                 key: "mix" as const,
               },
-            ].map((row) => (
+            ] satisfies {
+              label: string;
+              value: string;
+              hint: string;
+              trend: "up" | "down" | "none";
+              key: "tickets" | "revenue" | "mix";
+            }[]).map((row) => (
               <button
                 key={row.label}
                 type="button"
@@ -2133,9 +2168,16 @@ export function HqDashboard() {
                   </span>
                 </p>
                 <p
-                  className="mt-1.5 inline-flex items-center gap-0.5 text-[11px] font-medium text-pos-primary"
+                  className={`mt-1.5 inline-flex items-center gap-0.5 text-[11px] font-medium ${
+                    row.trend === "none" ? "text-pos-ink-faint" : "text-pos-primary"
+                  }`}
+                  title={row.trend === "none" ? "No prior-period data" : undefined}
                 >
-                  <ArrowUpRight size={11} strokeWidth={2.6} />
+                  {row.trend === "up" ? (
+                    <ArrowUpRight size={11} strokeWidth={2.6} />
+                  ) : row.trend === "down" ? (
+                    <ArrowDownRight size={11} strokeWidth={2.6} />
+                  ) : null}
                   {row.hint}
                 </p>
               </button>
